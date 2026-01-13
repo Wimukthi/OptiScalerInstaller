@@ -9,10 +9,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Install from stable, nightly, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
-- Always-visible log output and detailed tooltips.
 - Configurable URLs for lists and releases.
-- Dark theme toggle with persistent preference.
-- Window size/position persistence and DPI-aware scaling.
 
 ## Requirements
 
