@@ -15,6 +15,50 @@ Public Class IniFile
         File.WriteAllLines(path, lines)
     End Sub
 
+    Public Shared Function ReadValues(path As String) As List(Of IniUpdate)
+        Dim results As New Dictionary(Of String, IniUpdate)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then
+            Return New List(Of IniUpdate)(results.Values)
+        End If
+
+        Dim currentSection As String = ""
+        For Each rawLine As String In File.ReadAllLines(path)
+            Dim line As String = rawLine.Trim()
+            If line.Length = 0 OrElse line.StartsWith(";"c) OrElse line.StartsWith("#"c) Then
+                Continue For
+            End If
+
+            If line.StartsWith("[") AndAlso line.EndsWith("]") Then
+                currentSection = line.Substring(1, line.Length - 2).Trim()
+                Continue For
+            End If
+
+            Dim index As Integer = line.IndexOf("="c)
+            If index <= 0 Then
+                Continue For
+            End If
+
+            If String.IsNullOrWhiteSpace(currentSection) Then
+                Continue For
+            End If
+
+            Dim key As String = line.Substring(0, index).Trim()
+            Dim value As String = line.Substring(index + 1).Trim()
+            If String.IsNullOrWhiteSpace(key) Then
+                Continue For
+            End If
+
+            Dim dictKey As String = currentSection & "|" & key
+            results(dictKey) = New IniUpdate With {
+                .Section = currentSection,
+                .Key = key,
+                .Value = value
+            }
+        Next
+
+        Return New List(Of IniUpdate)(results.Values)
+    End Function
+
     Private Shared Sub SetValue(lines As List(Of String), section As String, key As String, value As String)
         Dim sectionIndex As Integer = -1
         Dim insertIndex As Integer = lines.Count

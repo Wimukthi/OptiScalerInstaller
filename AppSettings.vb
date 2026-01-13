@@ -103,6 +103,9 @@ Friend Class AppSettingsModel
     Public Property WikiBaseUrl As String
     Public Property StableReleaseUrl As String
     Public Property NightlyReleaseUrl As String
+    Public Property InstallerReleaseUrl As String
+    Public Property DefaultIniMode As String
+    Public Property DefaultIniPath As String
 
     Public Function ApplyDefaults(defaults As AppSettingsModel) As Boolean
         If defaults Is Nothing Then
@@ -128,6 +131,18 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(NightlyReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.NightlyReleaseUrl) Then
             NightlyReleaseUrl = defaults.NightlyReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(InstallerReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.InstallerReleaseUrl) Then
+            InstallerReleaseUrl = defaults.InstallerReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultIniMode) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniMode) Then
+            DefaultIniMode = defaults.DefaultIniMode
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultIniPath) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniPath) Then
+            DefaultIniPath = defaults.DefaultIniPath
             changed = True
         End If
 

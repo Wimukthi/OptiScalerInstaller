@@ -1,11 +1,17 @@
 Imports System.IO
 Imports System.Net.Http
 Imports System.Text.Json
+Imports System.Diagnostics
 Imports SharpCompress.Common
 Imports SharpCompress.Readers
 
 Public Class InstallerService
     Private Shared ReadOnly ManifestName As String = "OptiScalerInstaller.manifest.json"
+
+    Private Class ArchiveResult
+        Public Property ArchivePath As String
+        Public Property Release As ReleaseInfo
+    End Class
 
     Public Shared Async Function InstallAsync(config As InstallerConfig, log As Action(Of String), progress As Action(Of Integer)) As Task(Of InstallManifest)
         ValidateConfig(config)
@@ -26,7 +32,12 @@ Public Class InstallerService
 
         Try
             progress?.Invoke(0)
-            archivePath = Await ResolveArchiveAsync(config, tempRoot, log, progress)
+            Dim archiveResult As ArchiveResult = Await ResolveArchiveAsync(config, tempRoot, log, progress)
+            archivePath = archiveResult.ArchivePath
+            manifest.OptiScalerSource = config.Source.ToString()
+            If archiveResult.Release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(archiveResult.Release.TagName) Then
+                manifest.OptiScalerVersion = archiveResult.Release.TagName
+            End If
             progress?.Invoke(25)
 
             extractRoot = Path.Combine(tempRoot, "extract_" & Guid.NewGuid().ToString("N"))
@@ -43,6 +54,7 @@ Public Class InstallerService
                                RenameOptiScalerDll(config, manifest, log)
                                UpdateIni(config, log)
                                CopyAddOns(config, manifest, log)
+                               UpdateManifestVersion(config, manifest, log)
                                SaveManifest(config.GameFolder, manifest)
                            End Sub)
 
@@ -147,10 +159,13 @@ Public Class InstallerService
         Return version.ToString()
     End Function
 
-    Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer)) As Task(Of String)
+    Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer)) As Task(Of ArchiveResult)
         If config.Source = ReleaseSource.LocalArchive Then
             log?.Invoke("Using local archive: " & config.LocalArchivePath)
-            Return config.LocalArchivePath
+            Return New ArchiveResult With {
+                .ArchivePath = config.LocalArchivePath,
+                .Release = Nothing
+            }
         End If
 
         Dim release As ReleaseInfo = Nothing
@@ -174,7 +189,10 @@ Public Class InstallerService
         Dim destination As String = Path.Combine(tempRoot, safeName)
         log?.Invoke("Downloading " & release.TagName & "...")
         Await DownloadFileAsync(release.DownloadUrl, destination, log, progress)
-        Return destination
+        Return New ArchiveResult With {
+            .ArchivePath = destination,
+            .Release = release
+        }
     End Function
 
     Private Shared Async Function DownloadFileAsync(url As String, destination As String, log As Action(Of String), progress As Action(Of Integer)) As Task
@@ -321,6 +339,8 @@ Public Class InstallerService
 
     Private Shared Sub UpdateIni(config As InstallerConfig, log As Action(Of String))
         Dim iniPath As String = Path.Combine(config.GameFolder, "OptiScaler.ini")
+        ApplyDefaultIni(config, iniPath, log)
+
         If Not File.Exists(iniPath) Then
             log?.Invoke("OptiScaler.ini not found. Skipping INI updates.")
             Return
@@ -426,6 +446,93 @@ Public Class InstallerService
             End If
         End If
     End Sub
+
+    Private Shared Sub ApplyDefaultIni(config As InstallerConfig, iniPath As String, log As Action(Of String))
+        If config Is Nothing Then
+            Return
+        End If
+
+        If config.DefaultIniMode = DefaultIniMode.Off Then
+            Return
+        End If
+
+        Dim sourcePath As String = config.DefaultIniPath
+        If String.IsNullOrWhiteSpace(sourcePath) Then
+            log?.Invoke("Default OptiScaler.ini path not set. Skipping defaults.")
+            Return
+        End If
+
+        If Not File.Exists(sourcePath) Then
+            log?.Invoke("Default OptiScaler.ini not found. Skipping defaults: " & sourcePath)
+            Return
+        End If
+
+        If config.DefaultIniMode = DefaultIniMode.Replace Then
+            File.Copy(sourcePath, iniPath, True)
+            log?.Invoke("Applied default OptiScaler.ini (replace).")
+            Return
+        End If
+
+        If Not File.Exists(iniPath) Then
+            File.Copy(sourcePath, iniPath, True)
+            log?.Invoke("Applied default OptiScaler.ini (merge base created).")
+            Return
+        End If
+
+        Dim updates As List(Of IniUpdate) = IniFile.ReadValues(sourcePath)
+        If updates.Count = 0 Then
+            log?.Invoke("Default OptiScaler.ini had no settings to merge.")
+            Return
+        End If
+
+        IniFile.SetValues(iniPath, updates)
+        log?.Invoke("Merged default OptiScaler.ini settings.")
+    End Sub
+
+    Private Shared Sub UpdateManifestVersion(config As InstallerConfig, manifest As InstallManifest, log As Action(Of String))
+        If config Is Nothing OrElse manifest Is Nothing Then
+            Return
+        End If
+
+        Dim version As String = TryGetInstalledFileVersion(config)
+        If String.IsNullOrWhiteSpace(version) Then
+            Return
+        End If
+
+        manifest.OptiScalerVersion = version
+        log?.Invoke("Detected OptiScaler version: " & version)
+    End Sub
+
+    Private Shared Function TryGetInstalledFileVersion(config As InstallerConfig) As String
+        Dim hookPath As String = ""
+        If Not String.IsNullOrWhiteSpace(config.HookName) Then
+            hookPath = Path.Combine(config.GameFolder, config.HookName)
+        End If
+
+        Dim version As String = TryGetFileVersion(hookPath)
+        If String.IsNullOrWhiteSpace(version) Then
+            version = TryGetFileVersion(Path.Combine(config.GameFolder, "OptiScaler.dll"))
+        End If
+
+        Return version
+    End Function
+
+    Private Shared Function TryGetFileVersion(path As String) As String
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then
+            Return ""
+        End If
+
+        Try
+            Dim info As FileVersionInfo = FileVersionInfo.GetVersionInfo(path)
+            Dim version As String = info.FileVersion
+            If String.IsNullOrWhiteSpace(version) Then
+                version = info.ProductVersion
+            End If
+            Return If(version, "")
+        Catch
+            Return ""
+        End Try
+    End Function
 
     Private Shared Sub SaveManifest(gameFolder As String, manifest As InstallManifest)
         Dim manifestPath As String = Path.Combine(gameFolder, ManifestName)

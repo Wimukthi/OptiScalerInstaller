@@ -20,4 +20,6 @@ Public Class InstallerConfig
     Public Property CreateSpecialKMarker As Boolean
     Public Property LoadAsiPlugins As Boolean
     Public Property PluginsPath As String
+    Public Property DefaultIniMode As DefaultIniMode
+    Public Property DefaultIniPath As String
 End Class

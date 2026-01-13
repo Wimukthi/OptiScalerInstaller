@@ -2,6 +2,8 @@ Imports System.Text.Json.Serialization
 
 Public Class InstallManifest
     Public Property InstallerVersion As String
+    Public Property OptiScalerVersion As String
+    Public Property OptiScalerSource As String
     Public Property InstallTimeUtc As DateTime
     Public Property GameFolder As String
     Public Property HookName As String

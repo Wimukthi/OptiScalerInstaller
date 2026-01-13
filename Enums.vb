@@ -22,3 +22,9 @@ Public Enum FgTypeSelection
     OptiFg
     Nukem
 End Enum
+
+Public Enum DefaultIniMode
+    Off
+    Merge
+    Replace
+End Enum

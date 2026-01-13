@@ -153,8 +153,8 @@ Friend Class ThemedListView
 
     Protected Overrides Sub OnDrawItem(e As DrawListViewItemEventArgs)
         If View <> View.Details Then
-            Dim backColor As Color = If(e.Item.Selected, _selectedBackColor, _rowBackColor)
-            Dim foreColor As Color = If(e.Item.Selected, _selectedForeColor, _rowForeColor)
+            Dim backColor As Color = If(e.Item.Selected, _selectedBackColor, ResolveItemBackColor(e.Item, e.ItemIndex))
+            Dim foreColor As Color = If(e.Item.Selected, _selectedForeColor, ResolveItemForeColor(e.Item))
             Using backBrush As New SolidBrush(backColor)
                 e.Graphics.FillRectangle(backBrush, e.Bounds)
             End Using
@@ -171,8 +171,8 @@ Friend Class ThemedListView
     Protected Overrides Sub OnDrawSubItem(e As DrawListViewSubItemEventArgs)
         Dim rowIndex As Integer = e.ItemIndex
         Dim isSelected As Boolean = e.Item.Selected
-        Dim backColor As Color = If(isSelected, _selectedBackColor, If(rowIndex Mod 2 = 0, _rowBackColor, _rowAltBackColor))
-        Dim foreColor As Color = If(isSelected, _selectedForeColor, _rowForeColor)
+        Dim backColor As Color = If(isSelected, _selectedBackColor, ResolveItemBackColor(e.Item, rowIndex))
+        Dim foreColor As Color = If(isSelected, _selectedForeColor, ResolveItemForeColor(e.Item))
 
         Using backBrush As New SolidBrush(backColor)
             e.Graphics.FillRectangle(backBrush, e.Bounds)
@@ -189,4 +189,18 @@ Friend Class ThemedListView
             End Using
         End If
     End Sub
+
+    Private Function ResolveItemBackColor(item As ListViewItem, rowIndex As Integer) As Color
+        If item IsNot Nothing AndAlso Not item.BackColor.IsEmpty AndAlso item.BackColor <> Color.Transparent Then
+            Return item.BackColor
+        End If
+        Return If(rowIndex Mod 2 = 0, _rowBackColor, _rowAltBackColor)
+    End Function
+
+    Private Function ResolveItemForeColor(item As ListViewItem) As Color
+        If item IsNot Nothing AndAlso Not item.ForeColor.IsEmpty AndAlso item.ForeColor <> Color.Transparent Then
+            Return item.ForeColor
+        End If
+        Return _rowForeColor
+    End Function
 End Class

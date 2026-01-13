@@ -25,6 +25,9 @@
     <Compile Update="MainForm.Designer.vb">
       <DependentUpon>MainForm.vb</DependentUpon>
     </Compile>
+    <Compile Update="frmUpdate.Designer.vb">
+      <DependentUpon>frmUpdate.vb</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
@@ -40,6 +43,9 @@
     </Content>
     <Content Include="Icons\com_94698.ico" />
     <None Include="BuildVersion.txt" />
+    <EmbeddedResource Update="frmUpdate.resx">
+      <DependentUpon>frmUpdate.vb</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
 
   <Target Name="EnsureBuildVersionFile" BeforeTargets="ComputeBuildVersion">

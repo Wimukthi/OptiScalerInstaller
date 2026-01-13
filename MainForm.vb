@@ -9,15 +9,18 @@ Public Class MainForm
     Private _settingThemeState As Boolean
     Private detectedGames As List(Of DetectedGame) = New List(Of DetectedGame)()
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
+    Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
     Private fsr4Normalized As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private lastNormalBounds As Rectangle?
     Private windowSettingsApplied As Boolean
     Private windowSaveTimer As Timer
     Private windowSavePending As Boolean
+    Private lastInstallStatusKey As String
 
     Private Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         UpdateWindowTitle()
         InitializeDefaults()
+        UpdateInstallStatus()
         LoadCompatibility()
         _settingThemeState = True
         Dim preferredMode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
@@ -75,6 +78,7 @@ Public Class MainForm
         cmbHookName.SelectedIndex = 0
         cmbConflictMode.SelectedIndex = 0
         cmbFgType.SelectedIndex = 0
+        cmbDefaultIniMode.SelectedIndex = 0
         ToggleLocalArchive()
         UpdateGpuControls()
         chkEnableReshade_CheckedChanged(Me, EventArgs.Empty)
@@ -105,12 +109,19 @@ Public Class MainForm
                 Dim isDetected As Boolean = detected IsNot Nothing
                 Dim isFsr4 As Boolean = fsr4Normalized.Contains(normalizedKey)
 
+                Dim installInfo As OptiScalerInstallInfo = Nothing
+                If isDetected Then
+                    detectedInstallLookup.TryGetValue(normalizedKey, installInfo)
+                End If
+
                 Dim item As New ListViewItem(entry.Name)
                 item.SubItems.Add(If(isDetected, "Yes", ""))
+                item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
                 item.SubItems.Add(If(isFsr4, "Yes", ""))
-                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .IsFsr4 = isFsr4}
+                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .IsFsr4 = isFsr4}
+                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count)
                 lvCompatibility.Items.Add(item)
             End If
         Next
@@ -139,11 +150,14 @@ Public Class MainForm
         If File.Exists(txtGameExe.Text) Then
             Dim folder = Path.GetDirectoryName(txtGameExe.Text)
             txtGameFolder.Text = folder
-            UpdateEngineWarningByFolder(folder)
         Else
             txtGameFolder.Text = ""
-            UpdateEngineWarningByFolder("")
         End If
+    End Sub
+
+    Private Sub txtGameFolder_TextChanged(sender As Object, e As EventArgs) Handles txtGameFolder.TextChanged
+        UpdateEngineWarningByFolder(txtGameFolder.Text)
+        UpdateInstallStatus()
     End Sub
 
     Private Sub btnOpenGameFolder_Click(sender As Object, e As EventArgs) Handles btnOpenGameFolder.Click
@@ -163,6 +177,18 @@ Public Class MainForm
             If dialog.ShowDialog(Me) = DialogResult.OK Then
                 txtLocalArchive.Text = dialog.FileName
                 AppendLog("Selected OptiScaler archive: " & dialog.FileName)
+            End If
+        End Using
+    End Sub
+
+    Private Sub btnBrowseDefaultIni_Click(sender As Object, e As EventArgs) Handles btnBrowseDefaultIni.Click
+        AppendLog("Browsing for default OptiScaler.ini.")
+        Using dialog As New OpenFileDialog()
+            dialog.Filter = "INI files (*.ini)|*.ini|All files (*.*)|*.*"
+            dialog.Title = "Select Default OptiScaler.ini"
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                txtDefaultIniPath.Text = dialog.FileName
+                AppendLog("Selected default OptiScaler.ini: " & dialog.FileName)
             End If
         End Using
     End Sub
@@ -249,6 +275,32 @@ Public Class MainForm
             AppendLog("Starting install...")
 
             Dim config As InstallerConfig = BuildConfig()
+            Dim installInfo As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(config.GameFolder)
+            Dim action As InstallAction = If(installInfo IsNot Nothing AndAlso installInfo.IsInstalled,
+                                             PromptInstallAction(installInfo),
+                                             InstallAction.Install)
+
+            If action = InstallAction.Cancel Then
+                AppendLog("Install canceled.")
+                Return
+            End If
+
+            If action = InstallAction.Uninstall Then
+                Await TryUninstallAsync(config.GameFolder, True)
+                Return
+            End If
+
+            If action = InstallAction.Reinstall Then
+                Dim removed As Boolean = Await TryUninstallAsync(config.GameFolder, False)
+                If removed Then
+                    AppendLog("Reinstalling OptiScaler...")
+                Else
+                    AppendLog("Reinstall: manifest not found, proceeding with overwrite.")
+                End If
+            ElseIf action = InstallAction.Update Then
+                AppendLog("Updating existing OptiScaler install...")
+            End If
+
             Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
 
             MessageBox.Show(Me, "OptiScaler installed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -259,6 +311,7 @@ Public Class MainForm
         Finally
             btnInstall.Enabled = True
             UpdateProgress(0)
+            UpdateInstallStatus()
         End Try
     End Sub
 
@@ -266,27 +319,36 @@ Public Class MainForm
         Try
             btnUninstall.Enabled = False
             AppendLog("Starting uninstall...")
-
-            Dim gameFolder As String = txtGameFolder.Text
-            If String.IsNullOrWhiteSpace(gameFolder) Then
-                AppendLog("Uninstall skipped: no game folder selected.")
-                MessageBox.Show(Me, "Select a game executable first.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Warning)
-                Return
-            End If
-
-            Dim removed As Boolean = Await InstallerService.UninstallAsync(gameFolder, AddressOf AppendLog)
-            If removed Then
-                MessageBox.Show(Me, "OptiScaler removed from this folder.", "Uninstall Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Else
-                MessageBox.Show(Me, "No manifest found for this folder.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
+            Await TryUninstallAsync(txtGameFolder.Text, True)
         Catch ex As Exception
             AppendLog("Uninstall failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Uninstall Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             btnUninstall.Enabled = True
+            UpdateInstallStatus()
         End Try
     End Sub
+
+    Private Async Function TryUninstallAsync(gameFolder As String, showDialogs As Boolean) As Task(Of Boolean)
+        If String.IsNullOrWhiteSpace(gameFolder) Then
+            AppendLog("Uninstall skipped: no game folder selected.")
+            If showDialogs Then
+                MessageBox.Show(Me, "Select a game executable first.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
+            Return False
+        End If
+
+        Dim removed As Boolean = Await InstallerService.UninstallAsync(gameFolder, AddressOf AppendLog)
+        If showDialogs Then
+            If removed Then
+                MessageBox.Show(Me, "OptiScaler removed from this folder.", "Uninstall Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Else
+                MessageBox.Show(Me, "No manifest found for this folder.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+        End If
+
+        Return removed
+    End Function
 
     Private Sub btnOpenWiki_Click(sender As Object, e As EventArgs) Handles btnOpenWiki.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
@@ -392,6 +454,26 @@ Public Class MainForm
         Return map
     End Function
 
+    Private Function BuildInstallStatusLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, OptiScalerInstallInfo)
+        Dim map As New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
+        For Each game As DetectedGame In results
+            If game Is Nothing Then
+                Continue For
+            End If
+
+            Dim key As String = NameNormalization.NormalizeRelaxedName(game.DisplayName)
+            If String.IsNullOrWhiteSpace(key) Then
+                Continue For
+            End If
+
+            If Not map.ContainsKey(key) Then
+                map(key) = OptiScalerInstallDetector.Detect(game.InstallDir)
+            End If
+        Next
+
+        Return map
+    End Function
+
     Private Sub UpdateDetectedStatus()
         If detectedLookup Is Nothing OrElse detectedLookup.Count = 0 Then
             toolDetectedLabel.Text = "Detected: none"
@@ -399,6 +481,50 @@ Public Class MainForm
             toolDetectedLabel.Text = "Detected: " & detectedLookup.Count
         End If
     End Sub
+
+    Private Function GetInstallStatusText(isDetected As Boolean, info As OptiScalerInstallInfo) As String
+        If Not isDetected Then
+            Return ""
+        End If
+
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return "No"
+        End If
+
+        If String.IsNullOrWhiteSpace(info.Version) Then
+            Return "Unknown"
+        End If
+
+        Return "Yes (" & info.Version & ")"
+    End Function
+
+    Private Sub ApplyInstallRowColors(item As ListViewItem, info As OptiScalerInstallInfo, isDetected As Boolean, rowIndex As Integer)
+        If item Is Nothing OrElse Not isDetected Then
+            Return
+        End If
+
+        Dim baseColor As Color = If(rowIndex Mod 2 = 0, lvCompatibility.RowBackColor, lvCompatibility.RowAltBackColor)
+        Dim mode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
+        Dim tintAlpha As Integer = If(mode = SystemColorMode.Dark, 60, 35)
+
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Dim missingTint As Color = Color.FromArgb(160, 70, 70)
+            item.BackColor = BlendColors(baseColor, missingTint, tintAlpha)
+            Return
+        End If
+
+        Dim installedTint As Color = Color.FromArgb(70, 140, 90)
+        item.BackColor = BlendColors(baseColor, installedTint, tintAlpha)
+    End Sub
+
+    Private Function BlendColors(baseColor As Color, overlay As Color, alpha As Integer) As Color
+        Dim clamped As Integer = Math.Max(0, Math.Min(255, alpha))
+        Dim factor As Double = clamped / 255.0R
+        Dim r As Integer = CInt(baseColor.R + (overlay.R - baseColor.R) * factor)
+        Dim g As Integer = CInt(baseColor.G + (overlay.G - baseColor.G) * factor)
+        Dim b As Integer = CInt(baseColor.B + (overlay.B - baseColor.B) * factor)
+        Return Color.FromArgb(baseColor.A, r, g, b)
+    End Function
 
     Private Sub UseDetectedGame(game As DetectedGame)
         If game Is Nothing Then
@@ -441,6 +567,103 @@ Public Class MainForm
         Dim enginePath As String = Path.Combine(folder, "Engine")
         lblEngineWarning.Visible = Directory.Exists(enginePath)
     End Sub
+
+    Private Sub UpdateInstallStatus()
+        If lblInstalledStatus Is Nothing Then
+            Return
+        End If
+
+        If InvokeRequired Then
+            BeginInvoke(New Action(AddressOf UpdateInstallStatus))
+            Return
+        End If
+
+        Dim info As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(txtGameFolder.Text)
+        Dim statusText As String = BuildInstallStatusText(info)
+        lblInstalledStatus.Text = statusText
+
+        btnInstall.Text = If(info IsNot Nothing AndAlso info.IsInstalled, "Update", "Install")
+
+        Dim key As String = If(info Is Nothing, "none", $"{info.IsInstalled}|{info.Version}|{info.Source}")
+        If key <> lastInstallStatusKey Then
+            lastInstallStatusKey = key
+            AppendLog("Install status: " & statusText)
+        End If
+    End Sub
+
+    Private Function BuildInstallStatusText(info As OptiScalerInstallInfo) As String
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return "Installed: none"
+        End If
+
+        Dim versionText As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version)
+        Dim sourceText As String = If(String.IsNullOrWhiteSpace(info.Source), "", " (" & info.Source & ")")
+        Return "Installed: " & versionText & sourceText
+    End Function
+
+    Private Enum InstallAction
+        Install
+        Update
+        Reinstall
+        Uninstall
+        Cancel
+    End Enum
+
+    Private Function PromptInstallAction(info As OptiScalerInstallInfo) As InstallAction
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return InstallAction.Install
+        End If
+
+        Dim versionText As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version)
+        Dim sourceText As String = If(String.IsNullOrWhiteSpace(info.Source), "unknown", info.Source)
+        Dim message As String = "OptiScaler appears to be installed in this folder." & Environment.NewLine &
+            "Version: " & versionText & Environment.NewLine &
+            "Source: " & sourceText & Environment.NewLine &
+            "Choose how to proceed."
+
+        Try
+            Dim page As New TaskDialogPage()
+            page.Caption = "Existing Install Detected"
+            page.Heading = "OptiScaler is already installed"
+            page.Text = message
+            page.Icon = TaskDialogIcon.Information
+
+            Dim updateButton As New TaskDialogButton("Update")
+            Dim reinstallButton As New TaskDialogButton("Reinstall")
+            Dim uninstallButton As New TaskDialogButton("Uninstall")
+            Dim cancelButton As New TaskDialogButton("Cancel")
+
+            page.Buttons.Add(updateButton)
+            page.Buttons.Add(reinstallButton)
+            page.Buttons.Add(uninstallButton)
+            page.Buttons.Add(cancelButton)
+            page.DefaultButton = updateButton
+            page.AllowCancel = True
+
+            Dim result As TaskDialogButton = TaskDialog.ShowDialog(Me, page)
+            If result Is updateButton Then
+                Return InstallAction.Update
+            End If
+            If result Is reinstallButton Then
+                Return InstallAction.Reinstall
+            End If
+            If result Is uninstallButton Then
+                Return InstallAction.Uninstall
+            End If
+        Catch
+            Dim fallbackText As String = "OptiScaler already installed." & Environment.NewLine &
+                "Yes = Update, No = Reinstall, Cancel = Stop (use Uninstall button to remove)."
+            Dim result As DialogResult = MessageBox.Show(Me, fallbackText, "Existing Install Detected", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question)
+            If result = DialogResult.Yes Then
+                Return InstallAction.Update
+            End If
+            If result = DialogResult.No Then
+                Return InstallAction.Reinstall
+            End If
+        End Try
+
+        Return InstallAction.Cancel
+    End Function
 
     Private Function FindPreferredExecutable(installDir As String, displayName As String) As String
         If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
@@ -663,6 +886,9 @@ Public Class MainForm
 
         Dim gpu As GpuVendor = If(rbGpuAmdIntel.Checked, GpuVendor.AmdIntel, GpuVendor.Nvidia)
 
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim defaultIniMode As DefaultIniMode = ParseDefaultIniMode(settings.DefaultIniMode)
+
         Return New InstallerConfig With {
             .GameExePath = txtGameExe.Text,
             .GameFolder = txtGameFolder.Text,
@@ -684,8 +910,40 @@ Public Class MainForm
             .SpecialKDllPath = txtSpecialKDll.Text,
             .CreateSpecialKMarker = chkCreateSpecialKMarker.Checked,
             .LoadAsiPlugins = chkLoadAsiPlugins.Checked,
-            .PluginsPath = txtPluginsPath.Text
+            .PluginsPath = txtPluginsPath.Text,
+            .DefaultIniMode = defaultIniMode,
+            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath)
         }
+    End Function
+
+    Private Function ParseDefaultIniMode(value As String) As DefaultIniMode
+        Dim mode As DefaultIniMode = DefaultIniMode.Off
+        If Not String.IsNullOrWhiteSpace(value) AndAlso [Enum].TryParse(value, True, mode) Then
+            Return mode
+        End If
+        Return DefaultIniMode.Off
+    End Function
+
+    Private Function GetDefaultIniModeIndex(mode As DefaultIniMode) As Integer
+        Select Case mode
+            Case DefaultIniMode.Merge
+                Return 1
+            Case DefaultIniMode.Replace
+                Return 2
+            Case Else
+                Return 0
+        End Select
+    End Function
+
+    Private Function GetDefaultIniModeFromIndex(index As Integer) As DefaultIniMode
+        Select Case index
+            Case 1
+                Return DefaultIniMode.Merge
+            Case 2
+                Return DefaultIniMode.Replace
+            Case Else
+                Return DefaultIniMode.Off
+        End Select
     End Function
 
     Private Sub AppendLog(message As String)
@@ -720,6 +978,9 @@ Public Class MainForm
         settings.WikiBaseUrl = txtWikiBaseUrl.Text.Trim()
         settings.StableReleaseUrl = txtStableReleaseUrl.Text.Trim()
         settings.NightlyReleaseUrl = txtNightlyReleaseUrl.Text.Trim()
+        settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
+        settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
+        settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
         AppSettings.Save(settings)
         lblSettingsPath.Text = "Settings file: " & AppSettings.GetSettingsPath()
         AppendLog("Settings saved.")
@@ -752,6 +1013,54 @@ Public Class MainForm
         Process.Start(New ProcessStartInfo(path) With {.UseShellExecute = True})
         AppendLog("Opened settings file: " & path)
     End Sub
+
+    Private Async Sub btnCheckForUpdates_Click(sender As Object, e As EventArgs) Handles btnCheckForUpdates.Click
+        Await CheckForUpdatesAsync(True)
+    End Sub
+
+    Private Async Function CheckForUpdatesAsync(showUpToDateDialog As Boolean) As Task
+        Try
+            btnCheckForUpdates.Enabled = False
+            AppendLog("Checking for installer updates...")
+            SetStatus("Checking for updates...")
+
+            Dim release As UpdateReleaseInfo = Await UpdateService.GetLatestReleaseAsync()
+            If release Is Nothing Then
+                AppendLog("Update check failed: no release data.")
+                SetStatus("Update check failed.")
+                If showUpToDateDialog Then
+                    MessageBox.Show(Me, "Unable to check for updates right now.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                End If
+                Return
+            End If
+
+            Dim currentVersion As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+            If currentVersion Is Nothing Then
+                currentVersion = New Version(0, 0)
+            End If
+
+            If Not UpdateService.IsUpdateAvailable(currentVersion, release.Version) Then
+                AppendLog("Installer is up to date.")
+                SetStatus("Installer up to date.")
+                If showUpToDateDialog Then
+                    MessageBox.Show(Me, "You're already up to date.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                End If
+                Return
+            End If
+
+            Using dlg As New frmUpdate(release, currentVersion)
+                dlg.ShowDialog(Me)
+            End Using
+        Catch ex As Exception
+            AppendLog("Update check failed: " & ex.Message)
+            SetStatus("Update check failed.")
+            If showUpToDateDialog Then
+                MessageBox.Show(Me, "Update check failed: " & ex.Message, "Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
+        Finally
+            btnCheckForUpdates.Enabled = True
+        End Try
+    End Function
 
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then
@@ -836,10 +1145,16 @@ Public Class MainForm
         toolTip.SetToolTip(txtWikiBaseUrl, "Base URL for wiki pages (used when opening a selected game's page).")
         toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API URL for the latest stable release.")
         toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the nightly release.")
+        toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
+        toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
+        toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for a default OptiScaler.ini template.")
+        toolTip.SetToolTip(cmbDefaultIniMode, "Choose how to apply the default OptiScaler.ini.")
         toolTip.SetToolTip(btnSaveSettings, "Save settings to disk.")
         toolTip.SetToolTip(btnReloadSettings, "Reload settings from disk and discard edits.")
         toolTip.SetToolTip(btnLoadDefaults, "Load defaults from the bundled settings file.")
         toolTip.SetToolTip(btnOpenSettingsFile, "Open the settings file in your default editor.")
+        toolTip.SetToolTip(btnCheckForUpdates, "Check for OptiScaler Installer updates.")
+        toolTip.SetToolTip(lblInstalledStatus, "Shows detected OptiScaler installation status for the selected game folder.")
     End Sub
 
     Private Sub LoadSettingsUi()
@@ -1039,8 +1354,16 @@ Public Class MainForm
             Dim results As List(Of DetectedGame) = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog))
             detectedGames = results
             detectedLookup = BuildDetectedLookup(results)
+            detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
             ApplyCompatibilityFilter()
             UpdateDetectedStatus()
+            Dim installedCount As Integer = 0
+            For Each info As OptiScalerInstallInfo In detectedInstallLookup.Values
+                If info IsNot Nothing AndAlso info.IsInstalled Then
+                    installedCount += 1
+                End If
+            Next
+            AppendLog("OptiScaler installed in " & installedCount & " detected game(s).")
             AppendLog(label & " finished: " & detectedLookup.Count & " supported game(s) detected.")
         Catch ex As Exception
             AppendLog(label & " failed: " & ex.Message)
@@ -1060,6 +1383,9 @@ Public Class MainForm
         txtWikiBaseUrl.Text = settings.WikiBaseUrl
         txtStableReleaseUrl.Text = settings.StableReleaseUrl
         txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
+        txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
+        txtDefaultIniPath.Text = settings.DefaultIniPath
+        cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
     End Sub
 
     Private Function BuildWikiUrl(slug As String) As String
@@ -1080,6 +1406,7 @@ Public Class MainForm
     Private Class CompatibilityRow
         Public Property Entry As CompatibilityEntry
         Public Property Detected As DetectedGame
+        Public Property InstallInfo As OptiScalerInstallInfo
         Public Property IsFsr4 As Boolean
     End Class
 End Class

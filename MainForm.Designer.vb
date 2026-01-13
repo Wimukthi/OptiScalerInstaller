@@ -36,6 +36,7 @@ Partial Class MainForm
         colCompatDetected = New ColumnHeader()
         colCompatPlatform = New ColumnHeader()
         colCompatPath = New ColumnHeader()
+        colCompatInstalled = New ColumnHeader()
         colCompatFsr4 = New ColumnHeader()
         tabInstall = New TabPage()
         installLayout = New TableLayoutPanel()
@@ -76,6 +77,7 @@ Partial Class MainForm
         btnInstall = New Button()
         btnUninstall = New Button()
         btnOpenGameFolder = New Button()
+        lblInstalledStatus = New Label()
         lblOnlineWarning = New Label()
         lblActionNote = New Label()
         tabAddons = New TabPage()
@@ -126,10 +128,18 @@ Partial Class MainForm
         txtStableReleaseUrl = New ThemedTextBox()
         lblNightlyReleaseUrl = New Label()
         txtNightlyReleaseUrl = New ThemedTextBox()
+        lblInstallerReleaseUrl = New Label()
+        txtInstallerReleaseUrl = New ThemedTextBox()
+        lblDefaultIniPath = New Label()
+        txtDefaultIniPath = New ThemedTextBox()
+        btnBrowseDefaultIni = New Button()
+        lblDefaultIniMode = New Label()
+        cmbDefaultIniMode = New ComboBox()
         btnSaveSettings = New Button()
         btnReloadSettings = New Button()
         btnLoadDefaults = New Button()
         btnOpenSettingsFile = New Button()
+        btnCheckForUpdates = New Button()
         lblSettingsPath = New Label()
         grpLog = New ThemedGroupBox()
         txtLog = New ThemedTextBox()
@@ -299,7 +309,7 @@ Partial Class MainForm
         ' lvCompatibility
         ' 
         lvCompatibility.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
-        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatPlatform, colCompatPath, colCompatFsr4})
+        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath, colCompatFsr4})
         lvCompatibility.FullRowSelect = True
         lvCompatibility.Location = New Point(12, 48)
         lvCompatibility.MultiSelect = False
@@ -320,6 +330,11 @@ Partial Class MainForm
         colCompatDetected.Text = "Detected"
         colCompatDetected.Width = 80
         ' 
+        ' colCompatInstalled
+        ' 
+        colCompatInstalled.Text = "OptiScaler"
+        colCompatInstalled.Width = 150
+        ' 
         ' colCompatPlatform
         ' 
         colCompatPlatform.Text = "Platform"
@@ -328,11 +343,12 @@ Partial Class MainForm
         ' colCompatPath
         ' 
         colCompatPath.Text = "Install Path"
-        colCompatPath.Width = 520
+        colCompatPath.Width = 420
         ' 
         ' colCompatFsr4
         ' 
         colCompatFsr4.Text = "FSR4"
+        colCompatFsr4.Width = 60
         ' 
         ' tabInstall
         ' 
@@ -742,6 +758,7 @@ Partial Class MainForm
         grpActions.Controls.Add(btnInstall)
         grpActions.Controls.Add(btnUninstall)
         grpActions.Controls.Add(btnOpenGameFolder)
+        grpActions.Controls.Add(lblInstalledStatus)
         grpActions.Controls.Add(lblOnlineWarning)
         grpActions.Controls.Add(lblActionNote)
         grpActions.Dock = DockStyle.Fill
@@ -780,6 +797,15 @@ Partial Class MainForm
         btnOpenGameFolder.Text = "Open game folder"
         btnOpenGameFolder.UseVisualStyleBackColor = True
         ' 
+        ' lblInstalledStatus
+        ' 
+        lblInstalledStatus.AutoSize = True
+        lblInstalledStatus.Location = New Point(12, 74)
+        lblInstalledStatus.Name = "lblInstalledStatus"
+        lblInstalledStatus.Size = New Size(89, 15)
+        lblInstalledStatus.TabIndex = 3
+        lblInstalledStatus.Text = "Installed: none"
+        ' 
         ' lblOnlineWarning
         ' 
         lblOnlineWarning.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
@@ -788,7 +814,7 @@ Partial Class MainForm
         lblOnlineWarning.Location = New Point(12, 94)
         lblOnlineWarning.Name = "lblOnlineWarning"
         lblOnlineWarning.Size = New Size(438, 15)
-        lblOnlineWarning.TabIndex = 3
+        lblOnlineWarning.TabIndex = 4
         lblOnlineWarning.Text = "Warning: Do not use OptiScaler with online games (anti-cheat risk, possible bans)."
         ' 
         ' lblActionNote
@@ -798,7 +824,7 @@ Partial Class MainForm
         lblActionNote.Location = New Point(12, 120)
         lblActionNote.Name = "lblActionNote"
         lblActionNote.Size = New Size(503, 15)
-        lblActionNote.TabIndex = 4
+        lblActionNote.TabIndex = 5
         lblActionNote.Text = "Tip: Press Insert in-game to open the OptiScaler overlay. Try Alt+Insert if it closes immediately."
         ' 
         ' tabAddons
@@ -1231,10 +1257,18 @@ Partial Class MainForm
         grpSettings.Controls.Add(txtStableReleaseUrl)
         grpSettings.Controls.Add(lblNightlyReleaseUrl)
         grpSettings.Controls.Add(txtNightlyReleaseUrl)
+        grpSettings.Controls.Add(lblInstallerReleaseUrl)
+        grpSettings.Controls.Add(txtInstallerReleaseUrl)
+        grpSettings.Controls.Add(lblDefaultIniPath)
+        grpSettings.Controls.Add(txtDefaultIniPath)
+        grpSettings.Controls.Add(btnBrowseDefaultIni)
+        grpSettings.Controls.Add(lblDefaultIniMode)
+        grpSettings.Controls.Add(cmbDefaultIniMode)
         grpSettings.Controls.Add(btnSaveSettings)
         grpSettings.Controls.Add(btnReloadSettings)
         grpSettings.Controls.Add(btnLoadDefaults)
         grpSettings.Controls.Add(btnOpenSettingsFile)
+        grpSettings.Controls.Add(btnCheckForUpdates)
         grpSettings.Controls.Add(lblSettingsPath)
         grpSettings.Dock = DockStyle.Fill
         grpSettings.Location = New Point(8, 8)
@@ -1350,13 +1384,84 @@ Partial Class MainForm
         txtNightlyReleaseUrl.Size = New Size(920, 24)
         txtNightlyReleaseUrl.TabIndex = 11
         ' 
+        ' lblInstallerReleaseUrl
+        ' 
+        lblInstallerReleaseUrl.AutoSize = True
+        lblInstallerReleaseUrl.Location = New Point(12, 192)
+        lblInstallerReleaseUrl.Name = "lblInstallerReleaseUrl"
+        lblInstallerReleaseUrl.Size = New Size(114, 15)
+        lblInstallerReleaseUrl.TabIndex = 12
+        lblInstallerReleaseUrl.Text = "Installer release URL"
+        ' 
+        ' txtInstallerReleaseUrl
+        ' 
+        txtInstallerReleaseUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtInstallerReleaseUrl.BackColor = SystemColors.Window
+        txtInstallerReleaseUrl.ForeColor = SystemColors.WindowText
+        txtInstallerReleaseUrl.Location = New Point(180, 188)
+        txtInstallerReleaseUrl.MinimumSize = New Size(0, 24)
+        txtInstallerReleaseUrl.Name = "txtInstallerReleaseUrl"
+        txtInstallerReleaseUrl.Padding = New Padding(6, 3, 6, 3)
+        txtInstallerReleaseUrl.Size = New Size(920, 24)
+        txtInstallerReleaseUrl.TabIndex = 13
+        ' 
+        ' lblDefaultIniPath
+        ' 
+        lblDefaultIniPath.AutoSize = True
+        lblDefaultIniPath.Location = New Point(12, 224)
+        lblDefaultIniPath.Name = "lblDefaultIniPath"
+        lblDefaultIniPath.Size = New Size(104, 15)
+        lblDefaultIniPath.TabIndex = 14
+        lblDefaultIniPath.Text = "Default INI template"
+        ' 
+        ' txtDefaultIniPath
+        ' 
+        txtDefaultIniPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtDefaultIniPath.BackColor = SystemColors.Window
+        txtDefaultIniPath.ForeColor = SystemColors.WindowText
+        txtDefaultIniPath.Location = New Point(180, 220)
+        txtDefaultIniPath.MinimumSize = New Size(0, 24)
+        txtDefaultIniPath.Name = "txtDefaultIniPath"
+        txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
+        txtDefaultIniPath.Size = New Size(812, 24)
+        txtDefaultIniPath.TabIndex = 15
+        ' 
+        ' btnBrowseDefaultIni
+        ' 
+        btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnBrowseDefaultIni.Location = New Point(1000, 220)
+        btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
+        btnBrowseDefaultIni.Size = New Size(100, 24)
+        btnBrowseDefaultIni.TabIndex = 16
+        btnBrowseDefaultIni.Text = "Browse"
+        btnBrowseDefaultIni.UseVisualStyleBackColor = True
+        ' 
+        ' lblDefaultIniMode
+        ' 
+        lblDefaultIniMode.AutoSize = True
+        lblDefaultIniMode.Location = New Point(12, 256)
+        lblDefaultIniMode.Name = "lblDefaultIniMode"
+        lblDefaultIniMode.Size = New Size(106, 15)
+        lblDefaultIniMode.TabIndex = 17
+        lblDefaultIniMode.Text = "Default INI behavior"
+        ' 
+        ' cmbDefaultIniMode
+        ' 
+        cmbDefaultIniMode.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultIniMode.FormattingEnabled = True
+        cmbDefaultIniMode.Items.AddRange(New Object() {"Off", "Merge", "Replace"})
+        cmbDefaultIniMode.Location = New Point(180, 252)
+        cmbDefaultIniMode.Name = "cmbDefaultIniMode"
+        cmbDefaultIniMode.Size = New Size(220, 23)
+        cmbDefaultIniMode.TabIndex = 18
+        ' 
         ' btnSaveSettings
         ' 
         btnSaveSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         btnSaveSettings.Location = New Point(12, 592)
         btnSaveSettings.Name = "btnSaveSettings"
         btnSaveSettings.Size = New Size(120, 30)
-        btnSaveSettings.TabIndex = 12
+        btnSaveSettings.TabIndex = 19
         btnSaveSettings.Text = "Save settings"
         btnSaveSettings.UseVisualStyleBackColor = True
         ' 
@@ -1366,7 +1471,7 @@ Partial Class MainForm
         btnReloadSettings.Location = New Point(140, 592)
         btnReloadSettings.Name = "btnReloadSettings"
         btnReloadSettings.Size = New Size(120, 30)
-        btnReloadSettings.TabIndex = 13
+        btnReloadSettings.TabIndex = 20
         btnReloadSettings.Text = "Reload"
         btnReloadSettings.UseVisualStyleBackColor = True
         ' 
@@ -1376,7 +1481,7 @@ Partial Class MainForm
         btnLoadDefaults.Location = New Point(268, 592)
         btnLoadDefaults.Name = "btnLoadDefaults"
         btnLoadDefaults.Size = New Size(120, 30)
-        btnLoadDefaults.TabIndex = 14
+        btnLoadDefaults.TabIndex = 21
         btnLoadDefaults.Text = "Load defaults"
         btnLoadDefaults.UseVisualStyleBackColor = True
         ' 
@@ -1386,9 +1491,19 @@ Partial Class MainForm
         btnOpenSettingsFile.Location = New Point(396, 592)
         btnOpenSettingsFile.Name = "btnOpenSettingsFile"
         btnOpenSettingsFile.Size = New Size(160, 30)
-        btnOpenSettingsFile.TabIndex = 15
+        btnOpenSettingsFile.TabIndex = 22
         btnOpenSettingsFile.Text = "Open settings file"
         btnOpenSettingsFile.UseVisualStyleBackColor = True
+        ' 
+        ' btnCheckForUpdates
+        ' 
+        btnCheckForUpdates.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
+        btnCheckForUpdates.Location = New Point(564, 592)
+        btnCheckForUpdates.Name = "btnCheckForUpdates"
+        btnCheckForUpdates.Size = New Size(160, 30)
+        btnCheckForUpdates.TabIndex = 23
+        btnCheckForUpdates.Text = "Check for updates"
+        btnCheckForUpdates.UseVisualStyleBackColor = True
         ' 
         ' lblSettingsPath
         ' 
@@ -1397,7 +1512,7 @@ Partial Class MainForm
         lblSettingsPath.Location = New Point(12, 632)
         lblSettingsPath.Name = "lblSettingsPath"
         lblSettingsPath.Size = New Size(139, 15)
-        lblSettingsPath.TabIndex = 16
+        lblSettingsPath.TabIndex = 24
         lblSettingsPath.Text = "Settings file: (not loaded)"
         ' 
         ' grpLog
@@ -1545,10 +1660,18 @@ Partial Class MainForm
     Friend WithEvents txtStableReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblNightlyReleaseUrl As System.Windows.Forms.Label
     Friend WithEvents txtNightlyReleaseUrl As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents lblInstallerReleaseUrl As System.Windows.Forms.Label
+    Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents lblDefaultIniPath As System.Windows.Forms.Label
+    Friend WithEvents txtDefaultIniPath As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents btnBrowseDefaultIni As System.Windows.Forms.Button
+    Friend WithEvents lblDefaultIniMode As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultIniMode As System.Windows.Forms.ComboBox
     Friend WithEvents btnSaveSettings As System.Windows.Forms.Button
     Friend WithEvents btnReloadSettings As System.Windows.Forms.Button
     Friend WithEvents btnLoadDefaults As System.Windows.Forms.Button
     Friend WithEvents btnOpenSettingsFile As System.Windows.Forms.Button
+    Friend WithEvents btnCheckForUpdates As System.Windows.Forms.Button
     Friend WithEvents lblSettingsPath As System.Windows.Forms.Label
     Friend WithEvents grpGame As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblEngineWarning As System.Windows.Forms.Label
@@ -1590,6 +1713,7 @@ Partial Class MainForm
     Friend WithEvents btnOpenGameFolder As System.Windows.Forms.Button
     Friend WithEvents btnUninstall As System.Windows.Forms.Button
     Friend WithEvents btnInstall As System.Windows.Forms.Button
+    Friend WithEvents lblInstalledStatus As System.Windows.Forms.Label
     Friend WithEvents grpFakenvapi As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblFakenvapiHint As System.Windows.Forms.Label
     Friend WithEvents btnBrowseFakenvapiFolder As System.Windows.Forms.Button
@@ -1632,6 +1756,7 @@ Partial Class MainForm
     Friend WithEvents colCompatDetected As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPlatform As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPath As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colCompatInstalled As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatFsr4 As System.Windows.Forms.ColumnHeader
     Friend WithEvents txtGameSearch As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblSearch As System.Windows.Forms.Label
