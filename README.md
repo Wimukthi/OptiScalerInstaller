@@ -100,7 +100,7 @@ Settings:
 
 ## Version History
 
-- v0.0.3 - First public release: detection list install status, default INI support, installer updater, and install action prompts.
+- v1.0.0.6 - First public release: detection list install status, default INI support, installer updater, and install action prompts.
 
 ## Notes
 

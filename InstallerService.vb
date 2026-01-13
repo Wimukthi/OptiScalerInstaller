@@ -3,7 +3,8 @@ Imports System.Net.Http
 Imports System.Text.Json
 Imports System.Diagnostics
 Imports SharpCompress.Common
-Imports SharpCompress.Readers
+Imports SharpCompress.Archives
+Imports SharpCompress.Archives.SevenZip
 
 Public Class InstallerService
     Private Shared ReadOnly ManifestName As String = "OptiScalerInstaller.manifest.json"
@@ -232,21 +233,83 @@ Public Class InstallerService
 
     Private Shared Sub ExtractArchive(archivePath As String, outputDir As String, log As Action(Of String))
         log?.Invoke("Extracting archive...")
-        Using stream As Stream = File.OpenRead(archivePath)
-            Using reader As IReader = ReaderFactory.Open(stream)
-                Dim options As New ExtractionOptions With {
-                    .ExtractFullPath = True,
-                    .Overwrite = True
-                }
+        Dim options As New ExtractionOptions With {
+            .ExtractFullPath = True,
+            .Overwrite = True
+        }
 
-                While reader.MoveToNextEntry()
-                    If Not reader.Entry.IsDirectory Then
-                        reader.WriteEntryToDirectory(outputDir, options)
-                    End If
-                End While
+        Dim extension As String = Path.GetExtension(archivePath).ToLowerInvariant()
+        If extension = ".7z" Then
+            Using archive As SevenZipArchive = SevenZipArchive.Open(archivePath)
+                ExtractEntries(archive.Entries, outputDir, options, log)
             End Using
-        End Using
+        Else
+            Using archive As IArchive = ArchiveFactory.Open(archivePath)
+                ExtractEntries(archive.Entries, outputDir, options, log)
+            End Using
+        End If
         log?.Invoke("Extraction complete.")
+    End Sub
+
+    Private Shared Sub ExtractEntries(entries As IEnumerable(Of IArchiveEntry), outputDir As String, options As ExtractionOptions, log As Action(Of String))
+        For Each entry As IArchiveEntry In entries
+            If entry.IsDirectory Then
+                Continue For
+            End If
+
+            Dim hasStream As Boolean = EntryHasStream(entry)
+            If Not hasStream Then
+                If entry.Size = 0 Then
+                    CreateEmptyEntry(outputDir, entry.Key, log)
+                Else
+                    log?.Invoke("Skipping entry without stream: " & entry.Key)
+                End If
+                Continue For
+            End If
+
+            Try
+                entry.WriteToDirectory(outputDir, options)
+            Catch ex As Exception
+                log?.Invoke("Failed to extract " & entry.Key & ": " & ex.Message)
+            End Try
+        Next
+    End Sub
+
+    Private Shared Function EntryHasStream(entry As IArchiveEntry) As Boolean
+        If entry Is Nothing Then
+            Return False
+        End If
+
+        Dim prop As System.Reflection.PropertyInfo = entry.GetType().GetProperty("HasStream")
+        If prop IsNot Nothing Then
+            Try
+                Dim value As Object = prop.GetValue(entry)
+                If TypeOf value Is Boolean Then
+                    Return CBool(value)
+                End If
+            Catch
+            End Try
+        End If
+
+        Return True
+    End Function
+
+    Private Shared Sub CreateEmptyEntry(outputDir As String, key As String, log As Action(Of String))
+        If String.IsNullOrWhiteSpace(key) Then
+            Return
+        End If
+
+        Dim safeKey As String = key.Replace("/"c, Path.DirectorySeparatorChar)
+        Dim destination As String = Path.Combine(outputDir, safeKey)
+        Dim folder As String = Path.GetDirectoryName(destination)
+        If Not String.IsNullOrWhiteSpace(folder) Then
+            Directory.CreateDirectory(folder)
+        End If
+
+        If Not File.Exists(destination) Then
+            File.WriteAllText(destination, "")
+            log?.Invoke("Created empty file: " & safeKey)
+        End If
     End Sub
 
     Private Shared Function ResolvePackageRoot(extractRoot As String) As String
