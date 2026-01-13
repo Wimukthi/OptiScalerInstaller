@@ -27,7 +27,16 @@ Friend Class ThemedGroupBox
     End Property
 
     Protected Overrides Sub OnPaint(e As PaintEventArgs)
-        e.Graphics.Clear(BackColor)
+        Dim fillColor As Color = BackColor
+        If fillColor.A = 0 Then
+            If Parent IsNot Nothing AndAlso Parent.BackColor.A <> 0 Then
+                fillColor = Parent.BackColor
+            Else
+                fillColor = SystemColors.Control
+            End If
+        End If
+
+        e.Graphics.Clear(fillColor)
 
         Dim textSize As Size = TextRenderer.MeasureText(Text, Font)
         Dim textRect As New Rectangle(8, 0, textSize.Width, textSize.Height)
