@@ -1,6 +1,6 @@
 # OptiScaler Installer
 
-WinForms installer and manager for OptiScaler that supports automatic game detection, per-game configuration, and add-on integration. Built in VB.NET with a dark theme and a DPI-aware layout.
+WinForms installer and manager for OptiScaler that supports automatic game detection, per-game configuration, and add-on integration.
 
 ## Features
 
