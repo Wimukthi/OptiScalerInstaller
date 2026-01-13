@@ -55,6 +55,7 @@ Public Class InstallerService
                                RenameOptiScalerDll(config, manifest, log)
                                UpdateIni(config, log)
                                CopyAddOns(config, manifest, log)
+                               CleanupPackageArtifacts(config.GameFolder, log)
                                UpdateManifestVersion(config, manifest, log)
                                SaveManifest(config.GameFolder, manifest)
                            End Sub)
@@ -75,7 +76,7 @@ Public Class InstallerService
     Public Shared Async Function UninstallAsync(gameFolder As String, log As Action(Of String)) As Task(Of Boolean)
         Dim manifestPath As String = Path.Combine(gameFolder, ManifestName)
         If Not File.Exists(manifestPath) Then
-            Return False
+            Return TryUninstallLegacy(gameFolder, log)
         End If
 
         Dim manifest As InstallManifest = Nothing
@@ -126,6 +127,113 @@ Public Class InstallerService
 
         log?.Invoke("Uninstall complete.")
         Return True
+    End Function
+
+    Private Shared Function TryUninstallLegacy(gameFolder As String, log As Action(Of String)) As Boolean
+        If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Return False
+        End If
+
+        Dim removedAny As Boolean = False
+
+        removedAny = DeleteIfExists(Path.Combine(gameFolder, "OptiScaler.log"), log) OrElse removedAny
+        removedAny = DeleteIfExists(Path.Combine(gameFolder, "OptiScaler.ini"), log) OrElse removedAny
+
+        Dim hookFromBat As String = GetHookNameFromUninstallBat(gameFolder)
+        If Not String.IsNullOrWhiteSpace(hookFromBat) Then
+            removedAny = DeleteIfExists(Path.Combine(gameFolder, hookFromBat), log) OrElse removedAny
+        Else
+            For Each hook As String In GetKnownHookNames()
+                Dim hookPath As String = Path.Combine(gameFolder, hook)
+                If File.Exists(hookPath) Then
+                    removedAny = DeleteIfExists(hookPath, log) OrElse removedAny
+                End If
+            Next
+        End If
+
+        removedAny = DeleteDirectoryIfExists(Path.Combine(gameFolder, "D3D12_Optiscaler"), log) OrElse removedAny
+        removedAny = DeleteDirectoryIfExists(Path.Combine(gameFolder, "DlssOverrides"), log) OrElse removedAny
+        removedAny = DeleteDirectoryIfExists(Path.Combine(gameFolder, "Licenses"), log) OrElse removedAny
+
+        If removedAny Then
+            log?.Invoke("Legacy uninstall complete.")
+        End If
+
+        Return removedAny
+    End Function
+
+    Private Shared Function GetHookNameFromUninstallBat(gameFolder As String) As String
+        Dim batPath As String = Path.Combine(gameFolder, "Remove OptiScaler.bat")
+        If Not File.Exists(batPath) Then
+            Return ""
+        End If
+
+        Try
+            For Each line As String In File.ReadAllLines(batPath)
+                Dim trimmed As String = line.Trim()
+                If Not trimmed.StartsWith("del ", StringComparison.OrdinalIgnoreCase) Then
+                    Continue For
+                End If
+
+                Dim target As String = trimmed.Substring(4).Trim()
+                target = target.Trim(""""c)
+                Dim fileName As String = Path.GetFileName(target)
+                If String.IsNullOrWhiteSpace(fileName) Then
+                    Continue For
+                End If
+
+                If fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) OrElse fileName.EndsWith(".asi", StringComparison.OrdinalIgnoreCase) Then
+                    Return fileName
+                End If
+            Next
+        Catch
+        End Try
+
+        Return ""
+    End Function
+
+    Private Shared Function GetKnownHookNames() As String()
+        Return New String() {
+            "OptiScaler.dll",
+            "dxgi.dll",
+            "winmm.dll",
+            "version.dll",
+            "dbghelp.dll",
+            "d3d12.dll",
+            "wininet.dll",
+            "winhttp.dll",
+            "OptiScaler.asi"
+        }
+    End Function
+
+    Private Shared Function DeleteIfExists(filePath As String, log As Action(Of String)) As Boolean
+        If String.IsNullOrWhiteSpace(filePath) OrElse Not File.Exists(filePath) Then
+            Return False
+        End If
+
+        Try
+            File.Delete(filePath)
+            log?.Invoke("Removed file: " & Path.GetFileName(filePath))
+            Return True
+        Catch ex As Exception
+            log?.Invoke("Failed to remove " & filePath & ": " & ex.Message)
+            Return False
+        End Try
+    End Function
+
+    Private Shared Function DeleteDirectoryIfExists(folderPath As String, log As Action(Of String)) As Boolean
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return False
+        End If
+
+        Try
+            Directory.Delete(folderPath, True)
+            log?.Invoke("Removed folder: " & Path.GetFileName(folderPath))
+            Return True
+        Catch ex As Exception
+            log?.Invoke("Failed to remove folder " & folderPath & ": " & ex.Message)
+            Return False
+        End Try
     End Function
 
     Private Shared Sub ValidateConfig(config As InstallerConfig)
@@ -318,15 +426,43 @@ Public Class InstallerService
             Return extractRoot
         End If
 
-        Dim dirs As String() = Directory.GetDirectories(extractRoot)
-        If dirs.Length = 1 Then
-            Dim candidate As String = Path.Combine(dirs(0), "OptiScaler.dll")
-            If File.Exists(candidate) Then
-                Return dirs(0)
-            End If
+        Dim matches As String() = Directory.GetFiles(extractRoot, "OptiScaler.dll", SearchOption.AllDirectories)
+        If matches.Length = 0 Then
+            Return extractRoot
         End If
 
-        Return extractRoot
+        If matches.Length = 1 Then
+            Return Path.GetDirectoryName(matches(0))
+        End If
+
+        Dim bestMatch As String = matches(0)
+        Dim bestDepth As Integer = GetPathDepth(extractRoot, bestMatch)
+        Dim bestHasIni As Boolean = File.Exists(Path.Combine(Path.GetDirectoryName(bestMatch), "OptiScaler.ini"))
+
+        For Each match As String In matches
+            Dim depth As Integer = GetPathDepth(extractRoot, match)
+            Dim hasIni As Boolean = File.Exists(Path.Combine(Path.GetDirectoryName(match), "OptiScaler.ini"))
+
+            If hasIni AndAlso Not bestHasIni Then
+                bestMatch = match
+                bestDepth = depth
+                bestHasIni = True
+                Continue For
+            End If
+
+            If hasIni = bestHasIni AndAlso depth < bestDepth Then
+                bestMatch = match
+                bestDepth = depth
+            End If
+        Next
+
+        Return Path.GetDirectoryName(bestMatch)
+    End Function
+
+    Private Shared Function GetPathDepth(root As String, fullPath As String) As Integer
+        Dim relative As String = Path.GetRelativePath(root, fullPath)
+        Dim parts As String() = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        Return parts.Length
     End Function
 
     Private Shared Sub CopyDirectory(sourceDir As String, targetDir As String, conflictMode As ConflictMode, manifest As InstallManifest, log As Action(Of String))
@@ -508,6 +644,27 @@ Public Class InstallerService
                 log?.Invoke("SpecialK DLL path not found.")
             End If
         End If
+    End Sub
+
+    Private Shared Sub CleanupPackageArtifacts(gameFolder As String, log As Action(Of String))
+        Dim names As String() = {
+            "!! EXTRACT ALL FILES TO GAME FOLDER !!",
+            "setup_windows.bat",
+            "setup.bat",
+            "setup_linux.sh"
+        }
+
+        For Each name As String In names
+            Dim artifactPath As String = Path.Combine(gameFolder, name)
+            If File.Exists(artifactPath) Then
+                Try
+                    File.Delete(artifactPath)
+                    log?.Invoke("Removed setup artifact: " & name)
+                Catch ex As Exception
+                    log?.Invoke("Failed to remove setup artifact " & name & ": " & ex.Message)
+                End Try
+            End If
+        Next
     End Sub
 
     Private Shared Sub ApplyDefaultIni(config As InstallerConfig, iniPath As String, log As Action(Of String))

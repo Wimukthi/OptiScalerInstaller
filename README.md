@@ -100,6 +100,7 @@ Settings:
 
 ## Version History
 
+- v1.0.0.9 - Fix install root detection, add legacy uninstall fallback, and normalize detected paths.
 - v1.0.0.6 - First public release: detection list install status, default INI support, installer updater, and install action prompts.
 
 ## Notes

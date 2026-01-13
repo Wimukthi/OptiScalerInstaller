@@ -159,7 +159,14 @@ Public Class DetectionService
         End If
 
         Dim trimmed As String = value.Trim()
-        Return trimmed.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        Dim normalized As String = trimmed.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+        Try
+            normalized = Path.GetFullPath(normalized)
+        Catch
+            normalized = trimmed
+        End Try
+
+        Return normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
     End Function
 
     Private Shared Function GetSteamPath() As String
