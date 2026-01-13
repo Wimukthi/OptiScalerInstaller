@@ -1,6 +1,7 @@
 Imports System.IO
 Imports System.Diagnostics
 Imports System.Threading.Tasks
+Imports System.Runtime.InteropServices
 
 Public Class MainForm
     Private allCompatibilityEntries As List(Of CompatibilityEntry) = New List(Of CompatibilityEntry)()
@@ -16,6 +17,24 @@ Public Class MainForm
     Private windowSaveTimer As Timer
     Private windowSavePending As Boolean
     Private lastInstallStatusKey As String
+
+    <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
+    Private Structure DISPLAY_DEVICE
+        Public cb As Integer
+        <MarshalAs(UnmanagedType.ByValTStr, SizeConst:=32)>
+        Public DeviceName As String
+        <MarshalAs(UnmanagedType.ByValTStr, SizeConst:=128)>
+        Public DeviceString As String
+        Public StateFlags As Integer
+        <MarshalAs(UnmanagedType.ByValTStr, SizeConst:=128)>
+        Public DeviceID As String
+        <MarshalAs(UnmanagedType.ByValTStr, SizeConst:=128)>
+        Public DeviceKey As String
+    End Structure
+
+    <DllImport("user32.dll", CharSet:=CharSet.Unicode)>
+    Private Shared Function EnumDisplayDevices(lpDevice As String, iDevNum As Integer, ByRef lpDisplayDevice As DISPLAY_DEVICE, dwFlags As Integer) As Boolean
+    End Function
 
     Private Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         UpdateWindowTitle()
@@ -87,12 +106,73 @@ Public Class MainForm
         cmbFgType.SelectedIndex = 0
         cmbDefaultIniMode.SelectedIndex = 0
         ToggleLocalArchive()
+        ApplyDetectedGpuVendor()
         UpdateGpuControls()
         chkEnableReshade_CheckedChanged(Me, EventArgs.Empty)
         chkEnableSpecialK_CheckedChanged(Me, EventArgs.Empty)
         chkLoadAsiPlugins_CheckedChanged(Me, EventArgs.Empty)
         btnUseDetected.Enabled = False
     End Sub
+
+    Private Sub ApplyDetectedGpuVendor()
+        If rbGpuNvidia Is Nothing OrElse rbGpuAmdIntel Is Nothing Then
+            Return
+        End If
+
+        Dim vendor As GpuVendor = DetectGpuVendor()
+        Select Case vendor
+            Case GpuVendor.Nvidia
+                rbGpuNvidia.Checked = True
+                AppendLog("Detected GPU vendor: NVIDIA.")
+            Case GpuVendor.AmdIntel
+                rbGpuAmdIntel.Checked = True
+                AppendLog("Detected GPU vendor: AMD/Intel.")
+            Case Else
+                rbGpuNvidia.Checked = True
+                AppendLog("GPU vendor detection failed; defaulting to NVIDIA.")
+        End Select
+    End Sub
+
+    Private Function DetectGpuVendor() As GpuVendor
+        Try
+            Dim hasNvidia As Boolean = False
+            Dim hasAmd As Boolean = False
+            Dim hasIntel As Boolean = False
+            Dim index As Integer = 0
+            Dim device As DISPLAY_DEVICE = New DISPLAY_DEVICE()
+            device.cb = Marshal.SizeOf(device)
+
+            While EnumDisplayDevices(Nothing, index, device, 0)
+                Dim name As String = device.DeviceString
+                If Not String.IsNullOrWhiteSpace(name) Then
+                    Dim upper As String = name.ToUpperInvariant()
+                    If upper.Contains("NVIDIA") Then
+                        hasNvidia = True
+                    End If
+                    If upper.Contains("AMD") OrElse upper.Contains("RADEON") Then
+                        hasAmd = True
+                    End If
+                    If upper.Contains("INTEL") Then
+                        hasIntel = True
+                    End If
+                End If
+
+                index += 1
+                device = New DISPLAY_DEVICE()
+                device.cb = Marshal.SizeOf(device)
+            End While
+
+            If hasNvidia Then
+                Return GpuVendor.Nvidia
+            End If
+            If hasAmd OrElse hasIntel Then
+                Return GpuVendor.AmdIntel
+            End If
+        Catch
+        End Try
+
+        Return GpuVendor.Unknown
+    End Function
 
     Private Sub LoadCompatibility()
         allCompatibilityEntries = CompatibilityService.LoadCompatibilityList()

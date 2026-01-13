@@ -64,12 +64,25 @@ Public Class Fsr4Service
         Dim lines As String() = content.Split({ControlChars.CrLf, ControlChars.Lf}, StringSplitOptions.None)
         Dim inTable As Boolean = False
         Dim sawHeader As Boolean = False
+        Dim inComment As Boolean = False
 
         For Each rawLine As String In lines
             Dim line As String = rawLine.Trim()
+            If line.Contains("<!--") Then
+                inComment = True
+            End If
+
+            If inComment Then
+                If line.Contains("-->") Then
+                    inComment = False
+                End If
+                Continue For
+            End If
+
             If Not line.StartsWith("|", StringComparison.Ordinal) Then
                 If inTable AndAlso sawHeader Then
-                    Exit For
+                    inTable = False
+                    sawHeader = False
                 End If
                 Continue For
             End If
@@ -84,7 +97,8 @@ Public Class Fsr4Service
                 Continue For
             End If
 
-            If firstCell.IndexOf("GAME NAME", StringComparison.OrdinalIgnoreCase) >= 0 Then
+            Dim headerKey As String = NormalizeHeader(firstCell)
+            If headerKey = "GAME" OrElse headerKey = "GAMENAME" Then
                 inTable = True
                 sawHeader = True
                 Continue For
@@ -94,7 +108,7 @@ Public Class Fsr4Service
                 Continue For
             End If
 
-            If Regex.IsMatch(firstCell, "^-+$") Then
+            If IsSeparatorRow(firstCell) Then
                 Continue For
             End If
 
@@ -107,6 +121,15 @@ Public Class Fsr4Service
         Next
 
         Return names
+    End Function
+
+    Private Shared Function NormalizeHeader(value As String) As String
+        Dim lettersOnly As String = Regex.Replace(value, "[^A-Za-z]", "")
+        Return lettersOnly.ToUpperInvariant()
+    End Function
+
+    Private Shared Function IsSeparatorRow(value As String) As Boolean
+        Return Regex.IsMatch(value, "^[\s:\-]+$")
     End Function
 
     Private Shared Function ExtractMarkdownLabel(value As String) As String
