@@ -72,13 +72,12 @@ You can edit this file manually or use the Settings tab.
 
 ## Versioning
 
-Build version auto-increments on each build using `BuildVersion.txt`:
+Build version auto-increments on each build using `BuildVersion.txt` and is emitted as `v1.0.0.Build`:
 
 - Build increments every build
-- Minor increments every 100 builds
-- Major increments every 10 minor increments
+- Version is fixed at `1.0.0` with the build number as the revision
 
-The window title shows the current version as `vMajor.Minor.Build`.
+The window title shows the current version as `v1.0.0.Build`.
 
 ## Screenshots
 
@@ -100,6 +99,7 @@ Settings:
 
 ## Version History
 
+- v1.0.0.11 - Fix updater version comparison to respect build revision.
 - v1.0.0.9 - Fix install root detection, add legacy uninstall fallback, and normalize detected paths.
 - v1.0.0.6 - First public release: detection list install status, default INI support, installer updater, and install action prompts.
 

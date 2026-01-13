@@ -52,7 +52,7 @@
     <WriteLinesToFile Condition="!Exists('$(VersionFile)')" File="$(VersionFile)" Lines="0" Overwrite="true" />
   </Target>
 
-  <Target Name="ComputeBuildVersion" BeforeTargets="GenerateAssemblyInfo">
+  <Target Name="ComputeBuildVersion" BeforeTargets="GetAssemblyVersion">
     <ReadLinesFromFile File="$(VersionFile)">
       <Output TaskParameter="Lines" ItemName="BuildVersionLines" />
     </ReadLinesFromFile>
@@ -60,13 +60,12 @@
       <BuildNumber Condition="'@(BuildVersionLines)' != ''">$([System.Int32]::Parse('%(BuildVersionLines.Identity)'))</BuildNumber>
       <BuildNumber Condition="'@(BuildVersionLines)' == ''">0</BuildNumber>
       <BuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</BuildNumber>
-      <MinorNumber>$([MSBuild]::Divide($(BuildNumber), 100))</MinorNumber>
-      <MajorNumber>$([MSBuild]::Divide($(MinorNumber), 10))</MajorNumber>
-      <MinorNumber>$([MSBuild]::Modulo($(MinorNumber), 10))</MinorNumber>
-      <BuildComponent>$([MSBuild]::Modulo($(BuildNumber), 100))</BuildComponent>
-      <Version>$(MajorNumber).$(MinorNumber).$(BuildComponent)</Version>
-      <AssemblyVersion>$(Version).0</AssemblyVersion>
-      <FileVersion>$(Version).0</FileVersion>
+      <MajorNumber>1</MajorNumber>
+      <MinorNumber>0</MinorNumber>
+      <PatchNumber>0</PatchNumber>
+      <Version>$(MajorNumber).$(MinorNumber).$(PatchNumber).$(BuildNumber)</Version>
+      <AssemblyVersion>$(Version)</AssemblyVersion>
+      <FileVersion>$(Version)</FileVersion>
       <InformationalVersion>$(Version)</InformationalVersion>
     </PropertyGroup>
   </Target>

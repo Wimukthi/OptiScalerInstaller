@@ -42,7 +42,14 @@ Public Class MainForm
             Return
         End If
 
-        Text = String.Format("OptiScaler Installer v{0}.{1}.{2}", version.Major, version.Minor, version.Build)
+        Dim build As Integer = If(version.Build >= 0, version.Build, 0)
+        Dim revision As Integer = If(version.Revision >= 0, version.Revision, 0)
+        Dim versionText As String = $"{version.Major}.{version.Minor}.{build}"
+        If revision > 0 Then
+            versionText &= "." & revision
+        End If
+
+        Text = "OptiScaler Installer v" & versionText
     End Sub
 
     Private Sub MainForm_FormClosing(sender As Object, e As FormClosingEventArgs) Handles MyBase.FormClosing
