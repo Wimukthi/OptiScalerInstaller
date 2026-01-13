@@ -1,0 +1,8 @@
+{
+  "Theme": "system",
+  "CompatibilityListUrl": "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md",
+  "Fsr4ListUrl": "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/FSR4-Compatibility-List.md",
+  "WikiBaseUrl": "https://github.com/optiscaler/OptiScaler/wiki/",
+  "StableReleaseUrl": "https://api.github.com/repos/optiscaler/OptiScaler/releases/latest",
+  "NightlyReleaseUrl": "https://api.github.com/repos/optiscaler/OptiScaler/releases/tags/nightly"
+}

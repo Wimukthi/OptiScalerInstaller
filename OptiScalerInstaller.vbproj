@@ -1,0 +1,72 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>OptiScalerInstaller</RootNamespace>
+    <StartupObject>Sub Main</StartupObject>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Icons\com_94698.ico</ApplicationIcon>
+    <Win32Icon>Icons\com_94698.ico</Win32Icon>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <VersionFile>$(MSBuildProjectDirectory)\BuildVersion.txt</VersionFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Import Include="System.Data" />
+    <Import Include="System.Drawing" />
+    <Import Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="MainForm.vb" />
+    <Compile Update="MainForm.Designer.vb">
+      <DependentUpon>MainForm.vb</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.38.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Data\Compatibility-List.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Data\DefaultSettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Icons\com_94698.ico" />
+    <None Include="BuildVersion.txt" />
+  </ItemGroup>
+
+  <Target Name="EnsureBuildVersionFile" BeforeTargets="ComputeBuildVersion">
+    <WriteLinesToFile Condition="!Exists('$(VersionFile)')" File="$(VersionFile)" Lines="0" Overwrite="true" />
+  </Target>
+
+  <Target Name="ComputeBuildVersion" BeforeTargets="GenerateAssemblyInfo">
+    <ReadLinesFromFile File="$(VersionFile)">
+      <Output TaskParameter="Lines" ItemName="BuildVersionLines" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <BuildNumber Condition="'@(BuildVersionLines)' != ''">$([System.Int32]::Parse('%(BuildVersionLines.Identity)'))</BuildNumber>
+      <BuildNumber Condition="'@(BuildVersionLines)' == ''">0</BuildNumber>
+      <BuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</BuildNumber>
+      <MinorNumber>$([MSBuild]::Divide($(BuildNumber), 100))</MinorNumber>
+      <MajorNumber>$([MSBuild]::Divide($(MinorNumber), 10))</MajorNumber>
+      <MinorNumber>$([MSBuild]::Modulo($(MinorNumber), 10))</MinorNumber>
+      <BuildComponent>$([MSBuild]::Modulo($(BuildNumber), 100))</BuildComponent>
+      <Version>$(MajorNumber).$(MinorNumber).$(BuildComponent)</Version>
+      <AssemblyVersion>$(Version).0</AssemblyVersion>
+      <FileVersion>$(Version).0</FileVersion>
+      <InformationalVersion>$(Version)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="SaveBuildVersion" AfterTargets="AfterBuild">
+    <WriteLinesToFile File="$(VersionFile)" Lines="$(BuildNumber)" Overwrite="true" />
+  </Target>
+
+</Project>

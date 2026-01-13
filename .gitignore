@@ -1,0 +1,22 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Local settings
+OptiScalerInstaller.settings.json
