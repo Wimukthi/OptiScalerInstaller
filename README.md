@@ -101,6 +101,7 @@ Settings:
 
 ## Version History
 
+- v1.0.2.8 - Fix Game Detection layout spacing, dock the header/footer, and persist dark theme by default.
 - v1.0.1.7 - Versioning now auto-bumps patch/minor/major every 10/100/1000 builds.
 - v1.0.0.16 - Silent release refresh/update check, error logging, and comment pass cleanup.
 - v1.0.0.15 - Remove FSR4 compatibility detection and related settings/UI.

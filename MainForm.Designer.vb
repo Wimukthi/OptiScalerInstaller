@@ -21,9 +21,10 @@ Partial Class MainForm
         components = New ComponentModel.Container()
         Dim resources As System.ComponentModel.ComponentResourceManager = New System.ComponentModel.ComponentResourceManager(GetType(MainForm))
         mainLayout = New TableLayoutPanel()
-        panelHeader = New Panel()
         tabMain = New TabControl()
         tabCompatibility = New TabPage()
+        compatFooterPanel = New Panel()
+        compatHeaderPanel = New Panel()
         lblCompatibilityNote = New Label()
         btnOpenWiki = New Button()
         btnRefreshCompatibility = New Button()
@@ -34,9 +35,9 @@ Partial Class MainForm
         lvCompatibility = New ThemedListView()
         colCompatName = New ColumnHeader()
         colCompatDetected = New ColumnHeader()
+        colCompatInstalled = New ColumnHeader()
         colCompatPlatform = New ColumnHeader()
         colCompatPath = New ColumnHeader()
-        colCompatInstalled = New ColumnHeader()
         tabInstall = New TabPage()
         installLayout = New TableLayoutPanel()
         grpGame = New ThemedGroupBox()
@@ -139,16 +140,15 @@ Partial Class MainForm
         btnCheckForUpdates = New Button()
         lblUpdateNotice = New Label()
         lblSettingsPath = New Label()
+        DarkThemeCheckBox = New CheckBox()
         grpLog = New ThemedGroupBox()
         txtLog = New ThemedTextBox()
-        DarkThemeCheckBox = New CheckBox()
         statusStrip = New StatusStrip()
         toolStatusLabel = New ToolStripStatusLabel()
         toolDetectedLabel = New ToolStripStatusLabel()
         toolProgressBar = New ToolStripProgressBar()
         toolTip = New ToolTip(components)
         mainLayout.SuspendLayout()
-        panelHeader.SuspendLayout()
         tabMain.SuspendLayout()
         tabCompatibility.SuspendLayout()
         tabInstall.SuspendLayout()
@@ -178,29 +178,17 @@ Partial Class MainForm
         ' 
         mainLayout.ColumnCount = 1
         mainLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100F))
-        mainLayout.Controls.Add(panelHeader, 0, 0)
-        mainLayout.Controls.Add(tabMain, 0, 1)
-        mainLayout.Controls.Add(grpLog, 0, 2)
+        mainLayout.Controls.Add(tabMain, 0, 0)
+        mainLayout.Controls.Add(grpLog, 0, 1)
         mainLayout.Dock = DockStyle.Fill
         mainLayout.Location = New Point(0, 0)
         mainLayout.Name = "mainLayout"
-        mainLayout.Padding = New Padding(8)
-        mainLayout.RowCount = 3
-        mainLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 32F))
+        mainLayout.Padding = New Padding(8, 0, 8, 8)
+        mainLayout.RowCount = 2
         mainLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100F))
         mainLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 160F))
         mainLayout.Size = New Size(1270, 875)
         mainLayout.TabIndex = 0
-        ' 
-        ' panelHeader
-        ' 
-        panelHeader.Controls.Add(DarkThemeCheckBox)
-        panelHeader.Dock = DockStyle.Fill
-        panelHeader.Location = New Point(8, 8)
-        panelHeader.Margin = New Padding(0)
-        panelHeader.Name = "panelHeader"
-        panelHeader.Size = New Size(1254, 32)
-        panelHeader.TabIndex = 0
         ' 
         ' tabMain
         ' 
@@ -209,45 +197,62 @@ Partial Class MainForm
         tabMain.Controls.Add(tabAddons)
         tabMain.Controls.Add(tabSettings)
         tabMain.Dock = DockStyle.Fill
-        tabMain.Location = New Point(8, 40)
+        tabMain.Location = New Point(8, 8)
         tabMain.Margin = New Padding(0)
         tabMain.Name = "tabMain"
         tabMain.SelectedIndex = 0
-        tabMain.Size = New Size(1254, 667)
+        tabMain.Size = New Size(1254, 699)
         tabMain.TabIndex = 1
         ' 
         ' tabCompatibility
         ' 
-        tabCompatibility.Controls.Add(lblCompatibilityNote)
-        tabCompatibility.Controls.Add(btnOpenWiki)
-        tabCompatibility.Controls.Add(btnRefreshCompatibility)
-        tabCompatibility.Controls.Add(btnUseDetected)
-        tabCompatibility.Controls.Add(btnScanDetected)
-        tabCompatibility.Controls.Add(lblSearch)
-        tabCompatibility.Controls.Add(txtGameSearch)
         tabCompatibility.Controls.Add(lvCompatibility)
+        tabCompatibility.Controls.Add(compatHeaderPanel)
+        tabCompatibility.Controls.Add(compatFooterPanel)
         tabCompatibility.Location = New Point(4, 24)
         tabCompatibility.Name = "tabCompatibility"
         tabCompatibility.Padding = New Padding(3)
-        tabCompatibility.Size = New Size(1148, 674)
+        tabCompatibility.Size = New Size(1246, 671)
         tabCompatibility.TabIndex = 0
         tabCompatibility.Text = "Game Detection"
         tabCompatibility.UseVisualStyleBackColor = True
         ' 
+        ' compatFooterPanel
+        ' 
+        compatFooterPanel.Controls.Add(lblCompatibilityNote)
+        compatFooterPanel.Dock = DockStyle.Bottom
+        compatFooterPanel.Location = New Point(3, 644)
+        compatFooterPanel.Name = "compatFooterPanel"
+        compatFooterPanel.Size = New Size(1240, 24)
+        compatFooterPanel.TabIndex = 2
+        ' 
+        ' compatHeaderPanel
+        ' 
+        compatHeaderPanel.Controls.Add(btnOpenWiki)
+        compatHeaderPanel.Controls.Add(btnRefreshCompatibility)
+        compatHeaderPanel.Controls.Add(btnUseDetected)
+        compatHeaderPanel.Controls.Add(btnScanDetected)
+        compatHeaderPanel.Controls.Add(lblSearch)
+        compatHeaderPanel.Controls.Add(txtGameSearch)
+        compatHeaderPanel.Dock = DockStyle.Top
+        compatHeaderPanel.Location = New Point(3, 3)
+        compatHeaderPanel.Name = "compatHeaderPanel"
+        compatHeaderPanel.Size = New Size(1240, 40)
+        compatHeaderPanel.TabIndex = 0
+        ' 
         ' lblCompatibilityNote
         ' 
-        lblCompatibilityNote.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblCompatibilityNote.AutoSize = True
-        lblCompatibilityNote.Location = New Point(12, 600)
+        lblCompatibilityNote.Location = New Point(12, 4)
         lblCompatibilityNote.Name = "lblCompatibilityNote"
-        lblCompatibilityNote.Size = New Size(501, 15)
+        lblCompatibilityNote.Size = New Size(458, 15)
         lblCompatibilityNote.TabIndex = 8
         lblCompatibilityNote.Text = "List shows tested games only. Detected column is best-effort and may be incomplete."
         ' 
         ' btnOpenWiki
         ' 
         btnOpenWiki.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnOpenWiki.Location = New Point(1000, 12)
+        btnOpenWiki.Location = New Point(1100, 14)
         btnOpenWiki.Name = "btnOpenWiki"
         btnOpenWiki.Size = New Size(140, 27)
         btnOpenWiki.TabIndex = 5
@@ -257,7 +262,7 @@ Partial Class MainForm
         ' btnRefreshCompatibility
         ' 
         btnRefreshCompatibility.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnRefreshCompatibility.Location = New Point(860, 12)
+        btnRefreshCompatibility.Location = New Point(960, 14)
         btnRefreshCompatibility.Name = "btnRefreshCompatibility"
         btnRefreshCompatibility.Size = New Size(130, 27)
         btnRefreshCompatibility.TabIndex = 4
@@ -295,6 +300,7 @@ Partial Class MainForm
         ' 
         ' txtGameSearch
         ' 
+        txtGameSearch.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtGameSearch.BackColor = SystemColors.Window
         txtGameSearch.ForeColor = SystemColors.WindowText
         txtGameSearch.Location = New Point(96, 14)
@@ -306,14 +312,14 @@ Partial Class MainForm
         ' 
         ' lvCompatibility
         ' 
-        lvCompatibility.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
+        lvCompatibility.Dock = DockStyle.Fill
         lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath})
         lvCompatibility.FullRowSelect = True
-        lvCompatibility.Location = New Point(12, 48)
+        lvCompatibility.Location = New Point(3, 43)
         lvCompatibility.MultiSelect = False
         lvCompatibility.Name = "lvCompatibility"
         lvCompatibility.OwnerDraw = True
-        lvCompatibility.Size = New Size(1128, 540)
+        lvCompatibility.Size = New Size(1240, 601)
         lvCompatibility.TabIndex = 6
         lvCompatibility.UseCompatibleStateImageBehavior = False
         lvCompatibility.View = View.Details
@@ -343,7 +349,6 @@ Partial Class MainForm
         colCompatPath.Text = "Install Path"
         colCompatPath.Width = 420
         ' 
-        ' 
         ' tabInstall
         ' 
         tabInstall.AutoScroll = True
@@ -351,7 +356,7 @@ Partial Class MainForm
         tabInstall.Location = New Point(4, 24)
         tabInstall.Name = "tabInstall"
         tabInstall.Padding = New Padding(3)
-        tabInstall.Size = New Size(1148, 674)
+        tabInstall.Size = New Size(1246, 671)
         tabInstall.TabIndex = 1
         tabInstall.Text = "Install"
         tabInstall.UseVisualStyleBackColor = True
@@ -376,7 +381,7 @@ Partial Class MainForm
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
-        installLayout.Size = New Size(1142, 668)
+        installLayout.Size = New Size(1240, 665)
         installLayout.TabIndex = 0
         ' 
         ' grpGame
@@ -391,7 +396,7 @@ Partial Class MainForm
         grpGame.Location = New Point(8, 8)
         grpGame.Margin = New Padding(8)
         grpGame.Name = "grpGame"
-        grpGame.Size = New Size(555, 150)
+        grpGame.Size = New Size(604, 150)
         grpGame.TabIndex = 0
         grpGame.TabStop = False
         grpGame.Text = "Game"
@@ -414,13 +419,13 @@ Partial Class MainForm
         txtGameExe.MinimumSize = New Size(0, 24)
         txtGameExe.Name = "txtGameExe"
         txtGameExe.Padding = New Padding(6, 3, 6, 3)
-        txtGameExe.Size = New Size(340, 24)
+        txtGameExe.Size = New Size(389, 24)
         txtGameExe.TabIndex = 1
         ' 
         ' btnBrowseGameExe
         ' 
         btnBrowseGameExe.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseGameExe.Location = New Point(475, 22)
+        btnBrowseGameExe.Location = New Point(524, 22)
         btnBrowseGameExe.Name = "btnBrowseGameExe"
         btnBrowseGameExe.Size = New Size(60, 23)
         btnBrowseGameExe.TabIndex = 2
@@ -445,7 +450,7 @@ Partial Class MainForm
         txtGameFolder.MinimumSize = New Size(0, 24)
         txtGameFolder.Name = "txtGameFolder"
         txtGameFolder.Padding = New Padding(6, 3, 6, 3)
-        txtGameFolder.Size = New Size(340, 24)
+        txtGameFolder.Size = New Size(389, 24)
         txtGameFolder.TabIndex = 4
         ' 
         ' lblEngineWarning
@@ -471,10 +476,10 @@ Partial Class MainForm
         grpSource.Controls.Add(btnBrowseArchive)
         grpSource.Controls.Add(btnRefreshReleases)
         grpSource.Dock = DockStyle.Fill
-        grpSource.Location = New Point(533, 8)
+        grpSource.Location = New Point(628, 8)
         grpSource.Margin = New Padding(8)
         grpSource.Name = "grpSource"
-        grpSource.Size = New Size(555, 150)
+        grpSource.Size = New Size(604, 150)
         grpSource.TabIndex = 1
         grpSource.TabStop = False
         grpSource.Text = "OptiScaler Source"
@@ -539,13 +544,13 @@ Partial Class MainForm
         txtLocalArchive.MinimumSize = New Size(0, 24)
         txtLocalArchive.Name = "txtLocalArchive"
         txtLocalArchive.Padding = New Padding(6, 3, 6, 3)
-        txtLocalArchive.Size = New Size(350, 24)
+        txtLocalArchive.Size = New Size(399, 24)
         txtLocalArchive.TabIndex = 5
         ' 
         ' btnBrowseArchive
         ' 
         btnBrowseArchive.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseArchive.Location = New Point(465, 72)
+        btnBrowseArchive.Location = New Point(514, 72)
         btnBrowseArchive.Name = "btnBrowseArchive"
         btnBrowseArchive.Size = New Size(70, 23)
         btnBrowseArchive.TabIndex = 6
@@ -567,10 +572,10 @@ Partial Class MainForm
         grpHook.Controls.Add(cmbHookName)
         grpHook.Controls.Add(lblHookHint)
         grpHook.Dock = DockStyle.Fill
-        grpHook.Location = New Point(8, 120)
+        grpHook.Location = New Point(8, 174)
         grpHook.Margin = New Padding(8)
         grpHook.Name = "grpHook"
-        grpHook.Size = New Size(555, 150)
+        grpHook.Size = New Size(604, 150)
         grpHook.TabIndex = 2
         grpHook.TabStop = False
         grpHook.Text = "Hook Filename"
@@ -592,7 +597,7 @@ Partial Class MainForm
         cmbHookName.Items.AddRange(New Object() {"dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "d3d12.dll", "wininet.dll", "winhttp.dll", "OptiScaler.asi"})
         cmbHookName.Location = New Point(160, 28)
         cmbHookName.Name = "cmbHookName"
-        cmbHookName.Size = New Size(215, 23)
+        cmbHookName.Size = New Size(264, 23)
         cmbHookName.TabIndex = 1
         ' 
         ' lblHookHint
@@ -611,10 +616,10 @@ Partial Class MainForm
         grpGpu.Controls.Add(chkDlssInputs)
         grpGpu.Controls.Add(lblDlssHint)
         grpGpu.Dock = DockStyle.Fill
-        grpGpu.Location = New Point(533, 120)
+        grpGpu.Location = New Point(628, 174)
         grpGpu.Margin = New Padding(8)
         grpGpu.Name = "grpGpu"
-        grpGpu.Size = New Size(555, 150)
+        grpGpu.Size = New Size(604, 150)
         grpGpu.TabIndex = 3
         grpGpu.TabStop = False
         grpGpu.Text = "GPU Selection"
@@ -666,10 +671,10 @@ Partial Class MainForm
         grpFg.Controls.Add(cmbFgType)
         grpFg.Controls.Add(lblFgHint)
         grpFg.Dock = DockStyle.Fill
-        grpFg.Location = New Point(8, 232)
+        grpFg.Location = New Point(8, 340)
         grpFg.Margin = New Padding(8)
         grpFg.Name = "grpFg"
-        grpFg.Size = New Size(555, 150)
+        grpFg.Size = New Size(604, 150)
         grpFg.TabIndex = 4
         grpFg.TabStop = False
         grpFg.Text = "Frame Generation"
@@ -691,7 +696,7 @@ Partial Class MainForm
         cmbFgType.Items.AddRange(New Object() {"Auto (no change)", "None", "OptiFG (DX12 only)", "Nukem's dlssg-to-fsr3"})
         cmbFgType.Location = New Point(160, 28)
         cmbFgType.Name = "cmbFgType"
-        cmbFgType.Size = New Size(355, 23)
+        cmbFgType.Size = New Size(404, 23)
         cmbFgType.TabIndex = 1
         ' 
         ' lblFgHint
@@ -709,10 +714,10 @@ Partial Class MainForm
         grpBehavior.Controls.Add(cmbConflictMode)
         grpBehavior.Controls.Add(lblBehaviorHint)
         grpBehavior.Dock = DockStyle.Fill
-        grpBehavior.Location = New Point(533, 232)
+        grpBehavior.Location = New Point(628, 340)
         grpBehavior.Margin = New Padding(8)
         grpBehavior.Name = "grpBehavior"
-        grpBehavior.Size = New Size(555, 150)
+        grpBehavior.Size = New Size(604, 150)
         grpBehavior.TabIndex = 5
         grpBehavior.TabStop = False
         grpBehavior.Text = "Install Behavior"
@@ -734,7 +739,7 @@ Partial Class MainForm
         cmbConflictMode.Items.AddRange(New Object() {"Backup and overwrite", "Overwrite", "Skip existing"})
         cmbConflictMode.Location = New Point(160, 28)
         cmbConflictMode.Name = "cmbConflictMode"
-        cmbConflictMode.Size = New Size(215, 23)
+        cmbConflictMode.Size = New Size(264, 23)
         cmbConflictMode.TabIndex = 1
         ' 
         ' lblBehaviorHint
@@ -756,10 +761,10 @@ Partial Class MainForm
         grpActions.Controls.Add(lblOnlineWarning)
         grpActions.Controls.Add(lblActionNote)
         grpActions.Dock = DockStyle.Fill
-        grpActions.Location = New Point(8, 344)
+        grpActions.Location = New Point(8, 506)
         grpActions.Margin = New Padding(8)
         grpActions.Name = "grpActions"
-        grpActions.Size = New Size(1126, 150)
+        grpActions.Size = New Size(1224, 151)
         grpActions.TabIndex = 6
         grpActions.TabStop = False
         grpActions.Text = "Actions"
@@ -796,7 +801,7 @@ Partial Class MainForm
         lblInstalledStatus.AutoSize = True
         lblInstalledStatus.Location = New Point(12, 74)
         lblInstalledStatus.Name = "lblInstalledStatus"
-        lblInstalledStatus.Size = New Size(89, 15)
+        lblInstalledStatus.Size = New Size(84, 15)
         lblInstalledStatus.TabIndex = 3
         lblInstalledStatus.Text = "Installed: none"
         ' 
@@ -828,7 +833,7 @@ Partial Class MainForm
         tabAddons.Location = New Point(4, 24)
         tabAddons.Name = "tabAddons"
         tabAddons.Padding = New Padding(3)
-        tabAddons.Size = New Size(1148, 674)
+        tabAddons.Size = New Size(1246, 671)
         tabAddons.TabIndex = 2
         tabAddons.Text = "Add-ons"
         tabAddons.UseVisualStyleBackColor = True
@@ -851,7 +856,7 @@ Partial Class MainForm
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
-        addonsLayout.Size = New Size(1142, 668)
+        addonsLayout.Size = New Size(1240, 665)
         addonsLayout.TabIndex = 0
         ' 
         ' grpFakenvapi
@@ -864,7 +869,7 @@ Partial Class MainForm
         grpFakenvapi.Location = New Point(8, 8)
         grpFakenvapi.Margin = New Padding(8)
         grpFakenvapi.Name = "grpFakenvapi"
-        grpFakenvapi.Size = New Size(555, 200)
+        grpFakenvapi.Size = New Size(604, 205)
         grpFakenvapi.TabIndex = 0
         grpFakenvapi.TabStop = False
         grpFakenvapi.Text = "Fakenvapi (AMD/Intel)"
@@ -887,13 +892,13 @@ Partial Class MainForm
         txtFakenvapiFolder.MinimumSize = New Size(0, 24)
         txtFakenvapiFolder.Name = "txtFakenvapiFolder"
         txtFakenvapiFolder.Padding = New Padding(6, 3, 6, 3)
-        txtFakenvapiFolder.Size = New Size(340, 24)
+        txtFakenvapiFolder.Size = New Size(389, 24)
         txtFakenvapiFolder.TabIndex = 1
         ' 
         ' btnBrowseFakenvapiFolder
         ' 
         btnBrowseFakenvapiFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseFakenvapiFolder.Location = New Point(465, 54)
+        btnBrowseFakenvapiFolder.Location = New Point(514, 54)
         btnBrowseFakenvapiFolder.Name = "btnBrowseFakenvapiFolder"
         btnBrowseFakenvapiFolder.Size = New Size(70, 23)
         btnBrowseFakenvapiFolder.TabIndex = 2
@@ -916,10 +921,10 @@ Partial Class MainForm
         grpNukem.Controls.Add(btnBrowseNukemDll)
         grpNukem.Controls.Add(lblNukemHint)
         grpNukem.Dock = DockStyle.Fill
-        grpNukem.Location = New Point(533, 8)
+        grpNukem.Location = New Point(628, 8)
         grpNukem.Margin = New Padding(8)
         grpNukem.Name = "grpNukem"
-        grpNukem.Size = New Size(555, 200)
+        grpNukem.Size = New Size(604, 205)
         grpNukem.TabIndex = 1
         grpNukem.TabStop = False
         grpNukem.Text = "Nukem Frame Generation"
@@ -942,13 +947,13 @@ Partial Class MainForm
         txtNukemDll.MinimumSize = New Size(0, 24)
         txtNukemDll.Name = "txtNukemDll"
         txtNukemDll.Padding = New Padding(6, 3, 6, 3)
-        txtNukemDll.Size = New Size(340, 24)
+        txtNukemDll.Size = New Size(389, 24)
         txtNukemDll.TabIndex = 1
         ' 
         ' btnBrowseNukemDll
         ' 
         btnBrowseNukemDll.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseNukemDll.Location = New Point(465, 54)
+        btnBrowseNukemDll.Location = New Point(514, 54)
         btnBrowseNukemDll.Name = "btnBrowseNukemDll"
         btnBrowseNukemDll.Size = New Size(70, 23)
         btnBrowseNukemDll.TabIndex = 2
@@ -971,10 +976,10 @@ Partial Class MainForm
         grpNvngx.Controls.Add(btnBrowseNvngx)
         grpNvngx.Controls.Add(lblNvngxHint)
         grpNvngx.Dock = DockStyle.Fill
-        grpNvngx.Location = New Point(8, 157)
+        grpNvngx.Location = New Point(8, 229)
         grpNvngx.Margin = New Padding(8)
         grpNvngx.Name = "grpNvngx"
-        grpNvngx.Size = New Size(555, 200)
+        grpNvngx.Size = New Size(604, 205)
         grpNvngx.TabIndex = 2
         grpNvngx.TabStop = False
         grpNvngx.Text = "nvngx_dlss.dll (Optional)"
@@ -997,13 +1002,13 @@ Partial Class MainForm
         txtNvngxDll.MinimumSize = New Size(0, 24)
         txtNvngxDll.Name = "txtNvngxDll"
         txtNvngxDll.Padding = New Padding(6, 3, 6, 3)
-        txtNvngxDll.Size = New Size(340, 24)
+        txtNvngxDll.Size = New Size(389, 24)
         txtNvngxDll.TabIndex = 1
         ' 
         ' btnBrowseNvngx
         ' 
         btnBrowseNvngx.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseNvngx.Location = New Point(465, 54)
+        btnBrowseNvngx.Location = New Point(514, 54)
         btnBrowseNvngx.Name = "btnBrowseNvngx"
         btnBrowseNvngx.Size = New Size(70, 23)
         btnBrowseNvngx.TabIndex = 2
@@ -1027,10 +1032,10 @@ Partial Class MainForm
         grpReshade.Controls.Add(btnBrowseReshade)
         grpReshade.Controls.Add(lblReshadeHint)
         grpReshade.Dock = DockStyle.Fill
-        grpReshade.Location = New Point(533, 157)
+        grpReshade.Location = New Point(628, 229)
         grpReshade.Margin = New Padding(8)
         grpReshade.Name = "grpReshade"
-        grpReshade.Size = New Size(555, 200)
+        grpReshade.Size = New Size(604, 205)
         grpReshade.TabIndex = 3
         grpReshade.TabStop = False
         grpReshade.Text = "ReShade"
@@ -1063,13 +1068,13 @@ Partial Class MainForm
         txtReshadeDll.MinimumSize = New Size(0, 24)
         txtReshadeDll.Name = "txtReshadeDll"
         txtReshadeDll.Padding = New Padding(6, 3, 6, 3)
-        txtReshadeDll.Size = New Size(340, 24)
+        txtReshadeDll.Size = New Size(389, 24)
         txtReshadeDll.TabIndex = 2
         ' 
         ' btnBrowseReshade
         ' 
         btnBrowseReshade.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseReshade.Location = New Point(465, 66)
+        btnBrowseReshade.Location = New Point(514, 66)
         btnBrowseReshade.Name = "btnBrowseReshade"
         btnBrowseReshade.Size = New Size(70, 23)
         btnBrowseReshade.TabIndex = 3
@@ -1094,10 +1099,10 @@ Partial Class MainForm
         grpSpecialK.Controls.Add(chkCreateSpecialKMarker)
         grpSpecialK.Controls.Add(lblSpecialKHint)
         grpSpecialK.Dock = DockStyle.Fill
-        grpSpecialK.Location = New Point(8, 306)
+        grpSpecialK.Location = New Point(8, 450)
         grpSpecialK.Margin = New Padding(8)
         grpSpecialK.Name = "grpSpecialK"
-        grpSpecialK.Size = New Size(555, 200)
+        grpSpecialK.Size = New Size(604, 207)
         grpSpecialK.TabIndex = 4
         grpSpecialK.TabStop = False
         grpSpecialK.Text = "Special K"
@@ -1130,13 +1135,13 @@ Partial Class MainForm
         txtSpecialKDll.MinimumSize = New Size(0, 24)
         txtSpecialKDll.Name = "txtSpecialKDll"
         txtSpecialKDll.Padding = New Padding(6, 3, 6, 3)
-        txtSpecialKDll.Size = New Size(340, 24)
+        txtSpecialKDll.Size = New Size(389, 24)
         txtSpecialKDll.TabIndex = 2
         ' 
         ' btnBrowseSpecialK
         ' 
         btnBrowseSpecialK.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseSpecialK.Location = New Point(465, 56)
+        btnBrowseSpecialK.Location = New Point(514, 56)
         btnBrowseSpecialK.Name = "btnBrowseSpecialK"
         btnBrowseSpecialK.Size = New Size(70, 23)
         btnBrowseSpecialK.TabIndex = 3
@@ -1170,10 +1175,10 @@ Partial Class MainForm
         grpAsi.Controls.Add(btnBrowsePluginsPath)
         grpAsi.Controls.Add(lblAsiHint)
         grpAsi.Dock = DockStyle.Fill
-        grpAsi.Location = New Point(533, 306)
+        grpAsi.Location = New Point(628, 450)
         grpAsi.Margin = New Padding(8)
         grpAsi.Name = "grpAsi"
-        grpAsi.Size = New Size(555, 200)
+        grpAsi.Size = New Size(604, 207)
         grpAsi.TabIndex = 5
         grpAsi.TabStop = False
         grpAsi.Text = "ASI Plugins"
@@ -1206,13 +1211,13 @@ Partial Class MainForm
         txtPluginsPath.MinimumSize = New Size(0, 24)
         txtPluginsPath.Name = "txtPluginsPath"
         txtPluginsPath.Padding = New Padding(6, 3, 6, 3)
-        txtPluginsPath.Size = New Size(340, 24)
+        txtPluginsPath.Size = New Size(389, 24)
         txtPluginsPath.TabIndex = 2
         ' 
         ' btnBrowsePluginsPath
         ' 
         btnBrowsePluginsPath.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowsePluginsPath.Location = New Point(465, 56)
+        btnBrowsePluginsPath.Location = New Point(514, 56)
         btnBrowsePluginsPath.Name = "btnBrowsePluginsPath"
         btnBrowsePluginsPath.Size = New Size(70, 23)
         btnBrowsePluginsPath.TabIndex = 3
@@ -1234,7 +1239,7 @@ Partial Class MainForm
         tabSettings.Location = New Point(4, 24)
         tabSettings.Name = "tabSettings"
         tabSettings.Padding = New Padding(8)
-        tabSettings.Size = New Size(1148, 674)
+        tabSettings.Size = New Size(1246, 671)
         tabSettings.TabIndex = 3
         tabSettings.Text = "Settings"
         tabSettings.UseVisualStyleBackColor = True
@@ -1263,11 +1268,12 @@ Partial Class MainForm
         grpSettings.Controls.Add(btnCheckForUpdates)
         grpSettings.Controls.Add(lblUpdateNotice)
         grpSettings.Controls.Add(lblSettingsPath)
+        grpSettings.Controls.Add(DarkThemeCheckBox)
         grpSettings.Dock = DockStyle.Fill
         grpSettings.Location = New Point(8, 8)
         grpSettings.Margin = New Padding(8)
         grpSettings.Name = "grpSettings"
-        grpSettings.Size = New Size(1132, 658)
+        grpSettings.Size = New Size(1230, 655)
         grpSettings.TabIndex = 0
         grpSettings.TabStop = False
         grpSettings.Text = "Update & Links"
@@ -1290,9 +1296,8 @@ Partial Class MainForm
         txtCompatibilityListUrl.MinimumSize = New Size(0, 24)
         txtCompatibilityListUrl.Name = "txtCompatibilityListUrl"
         txtCompatibilityListUrl.Padding = New Padding(6, 3, 6, 3)
-        txtCompatibilityListUrl.Size = New Size(920, 24)
+        txtCompatibilityListUrl.Size = New Size(1018, 24)
         txtCompatibilityListUrl.TabIndex = 1
-        ' 
         ' 
         ' lblWikiBaseUrl
         ' 
@@ -1312,7 +1317,7 @@ Partial Class MainForm
         txtWikiBaseUrl.MinimumSize = New Size(0, 24)
         txtWikiBaseUrl.Name = "txtWikiBaseUrl"
         txtWikiBaseUrl.Padding = New Padding(6, 3, 6, 3)
-        txtWikiBaseUrl.Size = New Size(920, 24)
+        txtWikiBaseUrl.Size = New Size(1018, 24)
         txtWikiBaseUrl.TabIndex = 5
         ' 
         ' lblStableReleaseUrl
@@ -1333,7 +1338,7 @@ Partial Class MainForm
         txtStableReleaseUrl.MinimumSize = New Size(0, 24)
         txtStableReleaseUrl.Name = "txtStableReleaseUrl"
         txtStableReleaseUrl.Padding = New Padding(6, 3, 6, 3)
-        txtStableReleaseUrl.Size = New Size(920, 24)
+        txtStableReleaseUrl.Size = New Size(1018, 24)
         txtStableReleaseUrl.TabIndex = 9
         ' 
         ' lblNightlyReleaseUrl
@@ -1354,7 +1359,7 @@ Partial Class MainForm
         txtNightlyReleaseUrl.MinimumSize = New Size(0, 24)
         txtNightlyReleaseUrl.Name = "txtNightlyReleaseUrl"
         txtNightlyReleaseUrl.Padding = New Padding(6, 3, 6, 3)
-        txtNightlyReleaseUrl.Size = New Size(920, 24)
+        txtNightlyReleaseUrl.Size = New Size(1018, 24)
         txtNightlyReleaseUrl.TabIndex = 11
         ' 
         ' lblInstallerReleaseUrl
@@ -1362,7 +1367,7 @@ Partial Class MainForm
         lblInstallerReleaseUrl.AutoSize = True
         lblInstallerReleaseUrl.Location = New Point(12, 160)
         lblInstallerReleaseUrl.Name = "lblInstallerReleaseUrl"
-        lblInstallerReleaseUrl.Size = New Size(114, 15)
+        lblInstallerReleaseUrl.Size = New Size(111, 15)
         lblInstallerReleaseUrl.TabIndex = 12
         lblInstallerReleaseUrl.Text = "Installer release URL"
         ' 
@@ -1375,7 +1380,7 @@ Partial Class MainForm
         txtInstallerReleaseUrl.MinimumSize = New Size(0, 24)
         txtInstallerReleaseUrl.Name = "txtInstallerReleaseUrl"
         txtInstallerReleaseUrl.Padding = New Padding(6, 3, 6, 3)
-        txtInstallerReleaseUrl.Size = New Size(920, 24)
+        txtInstallerReleaseUrl.Size = New Size(1018, 24)
         txtInstallerReleaseUrl.TabIndex = 13
         ' 
         ' lblDefaultIniPath
@@ -1383,7 +1388,7 @@ Partial Class MainForm
         lblDefaultIniPath.AutoSize = True
         lblDefaultIniPath.Location = New Point(12, 192)
         lblDefaultIniPath.Name = "lblDefaultIniPath"
-        lblDefaultIniPath.Size = New Size(104, 15)
+        lblDefaultIniPath.Size = New Size(113, 15)
         lblDefaultIniPath.TabIndex = 14
         lblDefaultIniPath.Text = "Default INI template"
         ' 
@@ -1396,13 +1401,13 @@ Partial Class MainForm
         txtDefaultIniPath.MinimumSize = New Size(0, 24)
         txtDefaultIniPath.Name = "txtDefaultIniPath"
         txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
-        txtDefaultIniPath.Size = New Size(812, 24)
+        txtDefaultIniPath.Size = New Size(910, 24)
         txtDefaultIniPath.TabIndex = 15
         ' 
         ' btnBrowseDefaultIni
         ' 
         btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseDefaultIni.Location = New Point(1000, 188)
+        btnBrowseDefaultIni.Location = New Point(1098, 188)
         btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
         btnBrowseDefaultIni.Size = New Size(100, 24)
         btnBrowseDefaultIni.TabIndex = 16
@@ -1414,7 +1419,7 @@ Partial Class MainForm
         lblDefaultIniMode.AutoSize = True
         lblDefaultIniMode.Location = New Point(12, 224)
         lblDefaultIniMode.Name = "lblDefaultIniMode"
-        lblDefaultIniMode.Size = New Size(106, 15)
+        lblDefaultIniMode.Size = New Size(112, 15)
         lblDefaultIniMode.TabIndex = 17
         lblDefaultIniMode.Text = "Default INI behavior"
         ' 
@@ -1431,7 +1436,7 @@ Partial Class MainForm
         ' btnSaveSettings
         ' 
         btnSaveSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnSaveSettings.Location = New Point(12, 592)
+        btnSaveSettings.Location = New Point(12, 589)
         btnSaveSettings.Name = "btnSaveSettings"
         btnSaveSettings.Size = New Size(120, 30)
         btnSaveSettings.TabIndex = 19
@@ -1441,7 +1446,7 @@ Partial Class MainForm
         ' btnReloadSettings
         ' 
         btnReloadSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnReloadSettings.Location = New Point(140, 592)
+        btnReloadSettings.Location = New Point(140, 589)
         btnReloadSettings.Name = "btnReloadSettings"
         btnReloadSettings.Size = New Size(120, 30)
         btnReloadSettings.TabIndex = 20
@@ -1451,7 +1456,7 @@ Partial Class MainForm
         ' btnLoadDefaults
         ' 
         btnLoadDefaults.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnLoadDefaults.Location = New Point(268, 592)
+        btnLoadDefaults.Location = New Point(268, 589)
         btnLoadDefaults.Name = "btnLoadDefaults"
         btnLoadDefaults.Size = New Size(120, 30)
         btnLoadDefaults.TabIndex = 21
@@ -1461,7 +1466,7 @@ Partial Class MainForm
         ' btnOpenSettingsFile
         ' 
         btnOpenSettingsFile.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnOpenSettingsFile.Location = New Point(396, 592)
+        btnOpenSettingsFile.Location = New Point(396, 589)
         btnOpenSettingsFile.Name = "btnOpenSettingsFile"
         btnOpenSettingsFile.Size = New Size(160, 30)
         btnOpenSettingsFile.TabIndex = 22
@@ -1471,7 +1476,7 @@ Partial Class MainForm
         ' btnCheckForUpdates
         ' 
         btnCheckForUpdates.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnCheckForUpdates.Location = New Point(564, 592)
+        btnCheckForUpdates.Location = New Point(564, 589)
         btnCheckForUpdates.Name = "btnCheckForUpdates"
         btnCheckForUpdates.Size = New Size(160, 30)
         btnCheckForUpdates.TabIndex = 23
@@ -1482,9 +1487,9 @@ Partial Class MainForm
         ' 
         lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblUpdateNotice.AutoSize = True
-        lblUpdateNotice.Location = New Point(732, 599)
+        lblUpdateNotice.Location = New Point(732, 596)
         lblUpdateNotice.Name = "lblUpdateNotice"
-        lblUpdateNotice.Size = New Size(96, 15)
+        lblUpdateNotice.Size = New Size(94, 15)
         lblUpdateNotice.TabIndex = 24
         lblUpdateNotice.Text = "Update available"
         lblUpdateNotice.Visible = False
@@ -1493,11 +1498,21 @@ Partial Class MainForm
         ' 
         lblSettingsPath.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblSettingsPath.AutoSize = True
-        lblSettingsPath.Location = New Point(12, 632)
+        lblSettingsPath.Location = New Point(12, 629)
         lblSettingsPath.Name = "lblSettingsPath"
         lblSettingsPath.Size = New Size(139, 15)
         lblSettingsPath.TabIndex = 24
         lblSettingsPath.Text = "Settings file: (not loaded)"
+        ' 
+        ' DarkThemeCheckBox
+        ' 
+        DarkThemeCheckBox.AutoSize = True
+        DarkThemeCheckBox.Location = New Point(12, 256)
+        DarkThemeCheckBox.Name = "DarkThemeCheckBox"
+        DarkThemeCheckBox.Size = New Size(87, 19)
+        DarkThemeCheckBox.TabIndex = 5
+        DarkThemeCheckBox.Text = "Dark theme"
+        DarkThemeCheckBox.UseVisualStyleBackColor = True
         ' 
         ' grpLog
         ' 
@@ -1526,17 +1541,6 @@ Partial Class MainForm
         txtLog.ScrollBars = ScrollBars.Vertical
         txtLog.Size = New Size(1238, 104)
         txtLog.TabIndex = 0
-        ' 
-        ' DarkThemeCheckBox
-        ' 
-        DarkThemeCheckBox.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        DarkThemeCheckBox.AutoSize = True
-        DarkThemeCheckBox.Location = New Point(1159, 6)
-        DarkThemeCheckBox.Name = "DarkThemeCheckBox"
-        DarkThemeCheckBox.Size = New Size(87, 19)
-        DarkThemeCheckBox.TabIndex = 5
-        DarkThemeCheckBox.Text = "Dark theme"
-        DarkThemeCheckBox.UseVisualStyleBackColor = True
         ' 
         ' statusStrip
         ' 
@@ -1614,8 +1618,6 @@ Partial Class MainForm
         grpSettings.ResumeLayout(False)
         grpSettings.PerformLayout()
         grpLog.ResumeLayout(False)
-        panelHeader.ResumeLayout(False)
-        panelHeader.PerformLayout()
         statusStrip.ResumeLayout(False)
         statusStrip.PerformLayout()
         ResumeLayout(False)
@@ -1624,7 +1626,6 @@ Partial Class MainForm
     End Sub
 
     Friend WithEvents mainLayout As System.Windows.Forms.TableLayoutPanel
-    Friend WithEvents panelHeader As System.Windows.Forms.Panel
     Friend WithEvents tabMain As System.Windows.Forms.TabControl
     Friend WithEvents tabInstall As System.Windows.Forms.TabPage
     Friend WithEvents tabAddons As System.Windows.Forms.TabPage
@@ -1731,6 +1732,8 @@ Partial Class MainForm
     Friend WithEvents txtPluginsPath As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblPluginsPath As System.Windows.Forms.Label
     Friend WithEvents chkLoadAsiPlugins As System.Windows.Forms.CheckBox
+    Friend WithEvents compatFooterPanel As System.Windows.Forms.Panel
+    Friend WithEvents compatHeaderPanel As System.Windows.Forms.Panel
     Friend WithEvents lblCompatibilityNote As System.Windows.Forms.Label
     Friend WithEvents btnOpenWiki As System.Windows.Forms.Button
     Friend WithEvents btnRefreshCompatibility As System.Windows.Forms.Button

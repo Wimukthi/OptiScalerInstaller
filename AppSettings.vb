@@ -117,6 +117,10 @@ Friend Class AppSettingsModel
 
         ' Fill missing values from defaults without overwriting user entries.
         Dim changed As Boolean = False
+        If String.IsNullOrWhiteSpace(Theme) AndAlso Not String.IsNullOrWhiteSpace(defaults.Theme) Then
+            Theme = defaults.Theme
+            changed = True
+        End If
         If String.IsNullOrWhiteSpace(CompatibilityListUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.CompatibilityListUrl) Then
             CompatibilityListUrl = defaults.CompatibilityListUrl
             changed = True
