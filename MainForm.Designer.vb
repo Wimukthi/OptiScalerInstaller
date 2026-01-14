@@ -23,21 +23,23 @@ Partial Class MainForm
         mainLayout = New TableLayoutPanel()
         tabMain = New TabControl()
         tabCompatibility = New TabPage()
-        compatFooterPanel = New Panel()
-        compatHeaderPanel = New Panel()
-        lblCompatibilityNote = New Label()
-        btnOpenWiki = New Button()
-        btnRefreshCompatibility = New Button()
-        btnUseDetected = New Button()
-        btnScanDetected = New Button()
-        lblSearch = New Label()
-        txtGameSearch = New ThemedTextBox()
         lvCompatibility = New ThemedListView()
         colCompatName = New ColumnHeader()
         colCompatDetected = New ColumnHeader()
         colCompatInstalled = New ColumnHeader()
         colCompatPlatform = New ColumnHeader()
         colCompatPath = New ColumnHeader()
+        compatHeaderPanel = New Panel()
+        compatHeaderLeftPanel = New TableLayoutPanel()
+        compatHeaderRightPanel = New FlowLayoutPanel()
+        btnOpenWiki = New Button()
+        btnRefreshCompatibility = New Button()
+        btnUseDetected = New Button()
+        btnScanDetected = New Button()
+        lblSearch = New Label()
+        txtGameSearch = New ThemedTextBox()
+        compatFooterPanel = New Panel()
+        lblCompatibilityNote = New Label()
         tabInstall = New TabPage()
         installLayout = New TableLayoutPanel()
         grpGame = New ThemedGroupBox()
@@ -151,6 +153,10 @@ Partial Class MainForm
         mainLayout.SuspendLayout()
         tabMain.SuspendLayout()
         tabCompatibility.SuspendLayout()
+        compatHeaderPanel.SuspendLayout()
+        compatHeaderLeftPanel.SuspendLayout()
+        compatHeaderRightPanel.SuspendLayout()
+        compatFooterPanel.SuspendLayout()
         tabInstall.SuspendLayout()
         installLayout.SuspendLayout()
         grpGame.SuspendLayout()
@@ -197,129 +203,36 @@ Partial Class MainForm
         tabMain.Controls.Add(tabAddons)
         tabMain.Controls.Add(tabSettings)
         tabMain.Dock = DockStyle.Fill
-        tabMain.Location = New Point(8, 8)
+        tabMain.Location = New Point(8, 0)
         tabMain.Margin = New Padding(0)
         tabMain.Name = "tabMain"
         tabMain.SelectedIndex = 0
-        tabMain.Size = New Size(1254, 699)
+        tabMain.Size = New Size(1254, 707)
         tabMain.TabIndex = 1
         ' 
         ' tabCompatibility
         ' 
-        tabCompatibility.Controls.Add(lvCompatibility)
-        tabCompatibility.Controls.Add(compatHeaderPanel)
         tabCompatibility.Controls.Add(compatFooterPanel)
+        tabCompatibility.Controls.Add(compatHeaderPanel)
+        tabCompatibility.Controls.Add(lvCompatibility)
         tabCompatibility.Location = New Point(4, 24)
         tabCompatibility.Name = "tabCompatibility"
         tabCompatibility.Padding = New Padding(3)
-        tabCompatibility.Size = New Size(1246, 671)
+        tabCompatibility.Size = New Size(1246, 679)
         tabCompatibility.TabIndex = 0
         tabCompatibility.Text = "Game Detection"
         tabCompatibility.UseVisualStyleBackColor = True
         ' 
-        ' compatFooterPanel
-        ' 
-        compatFooterPanel.Controls.Add(lblCompatibilityNote)
-        compatFooterPanel.Dock = DockStyle.Bottom
-        compatFooterPanel.Location = New Point(3, 644)
-        compatFooterPanel.Name = "compatFooterPanel"
-        compatFooterPanel.Size = New Size(1240, 24)
-        compatFooterPanel.TabIndex = 2
-        ' 
-        ' compatHeaderPanel
-        ' 
-        compatHeaderPanel.Controls.Add(btnOpenWiki)
-        compatHeaderPanel.Controls.Add(btnRefreshCompatibility)
-        compatHeaderPanel.Controls.Add(btnUseDetected)
-        compatHeaderPanel.Controls.Add(btnScanDetected)
-        compatHeaderPanel.Controls.Add(lblSearch)
-        compatHeaderPanel.Controls.Add(txtGameSearch)
-        compatHeaderPanel.Dock = DockStyle.Top
-        compatHeaderPanel.Location = New Point(3, 3)
-        compatHeaderPanel.Name = "compatHeaderPanel"
-        compatHeaderPanel.Size = New Size(1240, 40)
-        compatHeaderPanel.TabIndex = 0
-        ' 
-        ' lblCompatibilityNote
-        ' 
-        lblCompatibilityNote.AutoSize = True
-        lblCompatibilityNote.Location = New Point(12, 4)
-        lblCompatibilityNote.Name = "lblCompatibilityNote"
-        lblCompatibilityNote.Size = New Size(458, 15)
-        lblCompatibilityNote.TabIndex = 8
-        lblCompatibilityNote.Text = "List shows tested games only. Detected column is best-effort and may be incomplete."
-        ' 
-        ' btnOpenWiki
-        ' 
-        btnOpenWiki.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnOpenWiki.Location = New Point(1100, 14)
-        btnOpenWiki.Name = "btnOpenWiki"
-        btnOpenWiki.Size = New Size(140, 27)
-        btnOpenWiki.TabIndex = 5
-        btnOpenWiki.Text = "Open wiki page"
-        btnOpenWiki.UseVisualStyleBackColor = True
-        ' 
-        ' btnRefreshCompatibility
-        ' 
-        btnRefreshCompatibility.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnRefreshCompatibility.Location = New Point(960, 14)
-        btnRefreshCompatibility.Name = "btnRefreshCompatibility"
-        btnRefreshCompatibility.Size = New Size(130, 27)
-        btnRefreshCompatibility.TabIndex = 4
-        btnRefreshCompatibility.Text = "Refresh lists"
-        btnRefreshCompatibility.UseVisualStyleBackColor = True
-        ' 
-        ' btnUseDetected
-        ' 
-        btnUseDetected.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnUseDetected.Location = New Point(570, 12)
-        btnUseDetected.Name = "btnUseDetected"
-        btnUseDetected.Size = New Size(130, 27)
-        btnUseDetected.TabIndex = 3
-        btnUseDetected.Text = "Use detected"
-        btnUseDetected.UseVisualStyleBackColor = True
-        ' 
-        ' btnScanDetected
-        ' 
-        btnScanDetected.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnScanDetected.Location = New Point(410, 12)
-        btnScanDetected.Name = "btnScanDetected"
-        btnScanDetected.Size = New Size(150, 27)
-        btnScanDetected.TabIndex = 2
-        btnScanDetected.Text = "Scan installed games"
-        btnScanDetected.UseVisualStyleBackColor = True
-        ' 
-        ' lblSearch
-        ' 
-        lblSearch.AutoSize = True
-        lblSearch.Location = New Point(12, 17)
-        lblSearch.Name = "lblSearch"
-        lblSearch.Size = New Size(75, 15)
-        lblSearch.TabIndex = 0
-        lblSearch.Text = "Search game"
-        ' 
-        ' txtGameSearch
-        ' 
-        txtGameSearch.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
-        txtGameSearch.BackColor = SystemColors.Window
-        txtGameSearch.ForeColor = SystemColors.WindowText
-        txtGameSearch.Location = New Point(96, 14)
-        txtGameSearch.MinimumSize = New Size(0, 24)
-        txtGameSearch.Name = "txtGameSearch"
-        txtGameSearch.Padding = New Padding(6, 3, 6, 3)
-        txtGameSearch.Size = New Size(300, 24)
-        txtGameSearch.TabIndex = 1
-        ' 
         ' lvCompatibility
         ' 
-        lvCompatibility.Dock = DockStyle.Fill
         lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath})
+        lvCompatibility.Dock = DockStyle.Fill
         lvCompatibility.FullRowSelect = True
         lvCompatibility.Location = New Point(3, 43)
         lvCompatibility.MultiSelect = False
         lvCompatibility.Name = "lvCompatibility"
         lvCompatibility.OwnerDraw = True
-        lvCompatibility.Size = New Size(1240, 601)
+        lvCompatibility.Size = New Size(1240, 609)
         lvCompatibility.TabIndex = 6
         lvCompatibility.UseCompatibleStateImageBehavior = False
         lvCompatibility.View = View.Details
@@ -349,6 +262,139 @@ Partial Class MainForm
         colCompatPath.Text = "Install Path"
         colCompatPath.Width = 420
         ' 
+        ' compatHeaderPanel
+        ' 
+        compatHeaderPanel.Controls.Add(compatHeaderLeftPanel)
+        compatHeaderPanel.Controls.Add(compatHeaderRightPanel)
+        compatHeaderPanel.Dock = DockStyle.Top
+        compatHeaderPanel.Location = New Point(3, 3)
+        compatHeaderPanel.Name = "compatHeaderPanel"
+        compatHeaderPanel.Padding = New Padding(6, 6, 6, 6)
+        compatHeaderPanel.Size = New Size(1240, 44)
+        compatHeaderPanel.TabIndex = 0
+        ' 
+        ' compatHeaderLeftPanel
+        ' 
+        compatHeaderLeftPanel.ColumnCount = 4
+        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
+        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100F))
+        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
+        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
+        compatHeaderLeftPanel.Controls.Add(lblSearch, 0, 0)
+        compatHeaderLeftPanel.Controls.Add(txtGameSearch, 1, 0)
+        compatHeaderLeftPanel.Controls.Add(btnScanDetected, 2, 0)
+        compatHeaderLeftPanel.Controls.Add(btnUseDetected, 3, 0)
+        compatHeaderLeftPanel.Dock = DockStyle.Fill
+        compatHeaderLeftPanel.Location = New Point(6, 6)
+        compatHeaderLeftPanel.Margin = New Padding(0)
+        compatHeaderLeftPanel.Name = "compatHeaderLeftPanel"
+        compatHeaderLeftPanel.RowCount = 1
+        compatHeaderLeftPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100F))
+        compatHeaderLeftPanel.Size = New Size(835, 32)
+        compatHeaderLeftPanel.TabIndex = 0
+        ' 
+        ' compatHeaderRightPanel
+        ' 
+        compatHeaderRightPanel.AutoSize = True
+        compatHeaderRightPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink
+        compatHeaderRightPanel.Controls.Add(btnRefreshCompatibility)
+        compatHeaderRightPanel.Controls.Add(btnOpenWiki)
+        compatHeaderRightPanel.Dock = DockStyle.Right
+        compatHeaderRightPanel.FlowDirection = FlowDirection.LeftToRight
+        compatHeaderRightPanel.Location = New Point(841, 6)
+        compatHeaderRightPanel.Margin = New Padding(0)
+        compatHeaderRightPanel.Name = "compatHeaderRightPanel"
+        compatHeaderRightPanel.Padding = New Padding(0)
+        compatHeaderRightPanel.Size = New Size(393, 32)
+        compatHeaderRightPanel.TabIndex = 1
+        compatHeaderRightPanel.WrapContents = False
+        ' 
+        ' btnOpenWiki
+        ' 
+        btnOpenWiki.Anchor = AnchorStyles.None
+        btnOpenWiki.Location = New Point(133, 2)
+        btnOpenWiki.Margin = New Padding(6, 0, 0, 0)
+        btnOpenWiki.Name = "btnOpenWiki"
+        btnOpenWiki.Size = New Size(140, 27)
+        btnOpenWiki.TabIndex = 5
+        btnOpenWiki.Text = "Open wiki page"
+        btnOpenWiki.UseVisualStyleBackColor = True
+        ' 
+        ' btnRefreshCompatibility
+        ' 
+        btnRefreshCompatibility.Anchor = AnchorStyles.None
+        btnRefreshCompatibility.Location = New Point(0, 2)
+        btnRefreshCompatibility.Margin = New Padding(0)
+        btnRefreshCompatibility.Name = "btnRefreshCompatibility"
+        btnRefreshCompatibility.Size = New Size(130, 27)
+        btnRefreshCompatibility.TabIndex = 4
+        btnRefreshCompatibility.Text = "Refresh lists"
+        btnRefreshCompatibility.UseVisualStyleBackColor = True
+        ' 
+        ' btnUseDetected
+        ' 
+        btnUseDetected.Anchor = AnchorStyles.None
+        btnUseDetected.Location = New Point(680, 2)
+        btnUseDetected.Margin = New Padding(6, 0, 0, 0)
+        btnUseDetected.Name = "btnUseDetected"
+        btnUseDetected.Size = New Size(130, 27)
+        btnUseDetected.TabIndex = 3
+        btnUseDetected.Text = "Use detected"
+        btnUseDetected.UseVisualStyleBackColor = True
+        ' 
+        ' btnScanDetected
+        ' 
+        btnScanDetected.Anchor = AnchorStyles.None
+        btnScanDetected.Location = New Point(524, 2)
+        btnScanDetected.Margin = New Padding(6, 0, 0, 0)
+        btnScanDetected.Name = "btnScanDetected"
+        btnScanDetected.Size = New Size(150, 27)
+        btnScanDetected.TabIndex = 2
+        btnScanDetected.Text = "Scan installed games"
+        btnScanDetected.UseVisualStyleBackColor = True
+        ' 
+        ' lblSearch
+        ' 
+        lblSearch.AutoSize = True
+        lblSearch.Location = New Point(0, 8)
+        lblSearch.Margin = New Padding(0, 8, 6, 0)
+        lblSearch.Name = "lblSearch"
+        lblSearch.Size = New Size(75, 15)
+        lblSearch.TabIndex = 0
+        lblSearch.Text = "Search game"
+        ' 
+        ' txtGameSearch
+        ' 
+        txtGameSearch.Anchor = AnchorStyles.Left Or AnchorStyles.Right
+        txtGameSearch.BackColor = SystemColors.Window
+        txtGameSearch.Dock = DockStyle.Fill
+        txtGameSearch.ForeColor = SystemColors.WindowText
+        txtGameSearch.Location = New Point(81, 4)
+        txtGameSearch.Margin = New Padding(0, 4, 0, 4)
+        txtGameSearch.MinimumSize = New Size(0, 24)
+        txtGameSearch.Name = "txtGameSearch"
+        txtGameSearch.Padding = New Padding(6, 3, 6, 3)
+        txtGameSearch.Size = New Size(533, 24)
+        txtGameSearch.TabIndex = 1
+        ' 
+        ' compatFooterPanel
+        ' 
+        compatFooterPanel.Controls.Add(lblCompatibilityNote)
+        compatFooterPanel.Dock = DockStyle.Bottom
+        compatFooterPanel.Location = New Point(3, 652)
+        compatFooterPanel.Name = "compatFooterPanel"
+        compatFooterPanel.Size = New Size(1240, 24)
+        compatFooterPanel.TabIndex = 2
+        ' 
+        ' lblCompatibilityNote
+        ' 
+        lblCompatibilityNote.AutoSize = True
+        lblCompatibilityNote.Location = New Point(12, 4)
+        lblCompatibilityNote.Name = "lblCompatibilityNote"
+        lblCompatibilityNote.Size = New Size(458, 15)
+        lblCompatibilityNote.TabIndex = 8
+        lblCompatibilityNote.Text = "List shows tested games only. Detected column is best-effort and may be incomplete."
+        ' 
         ' tabInstall
         ' 
         tabInstall.AutoScroll = True
@@ -356,7 +402,7 @@ Partial Class MainForm
         tabInstall.Location = New Point(4, 24)
         tabInstall.Name = "tabInstall"
         tabInstall.Padding = New Padding(3)
-        tabInstall.Size = New Size(1246, 671)
+        tabInstall.Size = New Size(1246, 679)
         tabInstall.TabIndex = 1
         tabInstall.Text = "Install"
         tabInstall.UseVisualStyleBackColor = True
@@ -381,7 +427,7 @@ Partial Class MainForm
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
         installLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 25F))
-        installLayout.Size = New Size(1240, 665)
+        installLayout.Size = New Size(1240, 673)
         installLayout.TabIndex = 0
         ' 
         ' grpGame
@@ -396,7 +442,7 @@ Partial Class MainForm
         grpGame.Location = New Point(8, 8)
         grpGame.Margin = New Padding(8)
         grpGame.Name = "grpGame"
-        grpGame.Size = New Size(604, 150)
+        grpGame.Size = New Size(604, 152)
         grpGame.TabIndex = 0
         grpGame.TabStop = False
         grpGame.Text = "Game"
@@ -479,7 +525,7 @@ Partial Class MainForm
         grpSource.Location = New Point(628, 8)
         grpSource.Margin = New Padding(8)
         grpSource.Name = "grpSource"
-        grpSource.Size = New Size(604, 150)
+        grpSource.Size = New Size(604, 152)
         grpSource.TabIndex = 1
         grpSource.TabStop = False
         grpSource.Text = "OptiScaler Source"
@@ -572,10 +618,10 @@ Partial Class MainForm
         grpHook.Controls.Add(cmbHookName)
         grpHook.Controls.Add(lblHookHint)
         grpHook.Dock = DockStyle.Fill
-        grpHook.Location = New Point(8, 174)
+        grpHook.Location = New Point(8, 176)
         grpHook.Margin = New Padding(8)
         grpHook.Name = "grpHook"
-        grpHook.Size = New Size(604, 150)
+        grpHook.Size = New Size(604, 152)
         grpHook.TabIndex = 2
         grpHook.TabStop = False
         grpHook.Text = "Hook Filename"
@@ -616,10 +662,10 @@ Partial Class MainForm
         grpGpu.Controls.Add(chkDlssInputs)
         grpGpu.Controls.Add(lblDlssHint)
         grpGpu.Dock = DockStyle.Fill
-        grpGpu.Location = New Point(628, 174)
+        grpGpu.Location = New Point(628, 176)
         grpGpu.Margin = New Padding(8)
         grpGpu.Name = "grpGpu"
-        grpGpu.Size = New Size(604, 150)
+        grpGpu.Size = New Size(604, 152)
         grpGpu.TabIndex = 3
         grpGpu.TabStop = False
         grpGpu.Text = "GPU Selection"
@@ -671,10 +717,10 @@ Partial Class MainForm
         grpFg.Controls.Add(cmbFgType)
         grpFg.Controls.Add(lblFgHint)
         grpFg.Dock = DockStyle.Fill
-        grpFg.Location = New Point(8, 340)
+        grpFg.Location = New Point(8, 344)
         grpFg.Margin = New Padding(8)
         grpFg.Name = "grpFg"
-        grpFg.Size = New Size(604, 150)
+        grpFg.Size = New Size(604, 152)
         grpFg.TabIndex = 4
         grpFg.TabStop = False
         grpFg.Text = "Frame Generation"
@@ -714,10 +760,10 @@ Partial Class MainForm
         grpBehavior.Controls.Add(cmbConflictMode)
         grpBehavior.Controls.Add(lblBehaviorHint)
         grpBehavior.Dock = DockStyle.Fill
-        grpBehavior.Location = New Point(628, 340)
+        grpBehavior.Location = New Point(628, 344)
         grpBehavior.Margin = New Padding(8)
         grpBehavior.Name = "grpBehavior"
-        grpBehavior.Size = New Size(604, 150)
+        grpBehavior.Size = New Size(604, 152)
         grpBehavior.TabIndex = 5
         grpBehavior.TabStop = False
         grpBehavior.Text = "Install Behavior"
@@ -761,10 +807,10 @@ Partial Class MainForm
         grpActions.Controls.Add(lblOnlineWarning)
         grpActions.Controls.Add(lblActionNote)
         grpActions.Dock = DockStyle.Fill
-        grpActions.Location = New Point(8, 506)
+        grpActions.Location = New Point(8, 512)
         grpActions.Margin = New Padding(8)
         grpActions.Name = "grpActions"
-        grpActions.Size = New Size(1224, 151)
+        grpActions.Size = New Size(1224, 153)
         grpActions.TabIndex = 6
         grpActions.TabStop = False
         grpActions.Text = "Actions"
@@ -833,7 +879,7 @@ Partial Class MainForm
         tabAddons.Location = New Point(4, 24)
         tabAddons.Name = "tabAddons"
         tabAddons.Padding = New Padding(3)
-        tabAddons.Size = New Size(1246, 671)
+        tabAddons.Size = New Size(1246, 679)
         tabAddons.TabIndex = 2
         tabAddons.Text = "Add-ons"
         tabAddons.UseVisualStyleBackColor = True
@@ -856,7 +902,7 @@ Partial Class MainForm
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
         addonsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 33.33333F))
-        addonsLayout.Size = New Size(1240, 665)
+        addonsLayout.Size = New Size(1240, 673)
         addonsLayout.TabIndex = 0
         ' 
         ' grpFakenvapi
@@ -869,7 +915,7 @@ Partial Class MainForm
         grpFakenvapi.Location = New Point(8, 8)
         grpFakenvapi.Margin = New Padding(8)
         grpFakenvapi.Name = "grpFakenvapi"
-        grpFakenvapi.Size = New Size(604, 205)
+        grpFakenvapi.Size = New Size(604, 208)
         grpFakenvapi.TabIndex = 0
         grpFakenvapi.TabStop = False
         grpFakenvapi.Text = "Fakenvapi (AMD/Intel)"
@@ -924,7 +970,7 @@ Partial Class MainForm
         grpNukem.Location = New Point(628, 8)
         grpNukem.Margin = New Padding(8)
         grpNukem.Name = "grpNukem"
-        grpNukem.Size = New Size(604, 205)
+        grpNukem.Size = New Size(604, 208)
         grpNukem.TabIndex = 1
         grpNukem.TabStop = False
         grpNukem.Text = "Nukem Frame Generation"
@@ -976,10 +1022,10 @@ Partial Class MainForm
         grpNvngx.Controls.Add(btnBrowseNvngx)
         grpNvngx.Controls.Add(lblNvngxHint)
         grpNvngx.Dock = DockStyle.Fill
-        grpNvngx.Location = New Point(8, 229)
+        grpNvngx.Location = New Point(8, 232)
         grpNvngx.Margin = New Padding(8)
         grpNvngx.Name = "grpNvngx"
-        grpNvngx.Size = New Size(604, 205)
+        grpNvngx.Size = New Size(604, 208)
         grpNvngx.TabIndex = 2
         grpNvngx.TabStop = False
         grpNvngx.Text = "nvngx_dlss.dll (Optional)"
@@ -1032,10 +1078,10 @@ Partial Class MainForm
         grpReshade.Controls.Add(btnBrowseReshade)
         grpReshade.Controls.Add(lblReshadeHint)
         grpReshade.Dock = DockStyle.Fill
-        grpReshade.Location = New Point(628, 229)
+        grpReshade.Location = New Point(628, 232)
         grpReshade.Margin = New Padding(8)
         grpReshade.Name = "grpReshade"
-        grpReshade.Size = New Size(604, 205)
+        grpReshade.Size = New Size(604, 208)
         grpReshade.TabIndex = 3
         grpReshade.TabStop = False
         grpReshade.Text = "ReShade"
@@ -1099,10 +1145,10 @@ Partial Class MainForm
         grpSpecialK.Controls.Add(chkCreateSpecialKMarker)
         grpSpecialK.Controls.Add(lblSpecialKHint)
         grpSpecialK.Dock = DockStyle.Fill
-        grpSpecialK.Location = New Point(8, 450)
+        grpSpecialK.Location = New Point(8, 456)
         grpSpecialK.Margin = New Padding(8)
         grpSpecialK.Name = "grpSpecialK"
-        grpSpecialK.Size = New Size(604, 207)
+        grpSpecialK.Size = New Size(604, 209)
         grpSpecialK.TabIndex = 4
         grpSpecialK.TabStop = False
         grpSpecialK.Text = "Special K"
@@ -1175,10 +1221,10 @@ Partial Class MainForm
         grpAsi.Controls.Add(btnBrowsePluginsPath)
         grpAsi.Controls.Add(lblAsiHint)
         grpAsi.Dock = DockStyle.Fill
-        grpAsi.Location = New Point(628, 450)
+        grpAsi.Location = New Point(628, 456)
         grpAsi.Margin = New Padding(8)
         grpAsi.Name = "grpAsi"
-        grpAsi.Size = New Size(604, 207)
+        grpAsi.Size = New Size(604, 209)
         grpAsi.TabIndex = 5
         grpAsi.TabStop = False
         grpAsi.Text = "ASI Plugins"
@@ -1239,7 +1285,7 @@ Partial Class MainForm
         tabSettings.Location = New Point(4, 24)
         tabSettings.Name = "tabSettings"
         tabSettings.Padding = New Padding(8)
-        tabSettings.Size = New Size(1246, 671)
+        tabSettings.Size = New Size(1246, 679)
         tabSettings.TabIndex = 3
         tabSettings.Text = "Settings"
         tabSettings.UseVisualStyleBackColor = True
@@ -1273,7 +1319,7 @@ Partial Class MainForm
         grpSettings.Location = New Point(8, 8)
         grpSettings.Margin = New Padding(8)
         grpSettings.Name = "grpSettings"
-        grpSettings.Size = New Size(1230, 655)
+        grpSettings.Size = New Size(1230, 663)
         grpSettings.TabIndex = 0
         grpSettings.TabStop = False
         grpSettings.Text = "Update & Links"
@@ -1436,7 +1482,7 @@ Partial Class MainForm
         ' btnSaveSettings
         ' 
         btnSaveSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnSaveSettings.Location = New Point(12, 589)
+        btnSaveSettings.Location = New Point(12, 597)
         btnSaveSettings.Name = "btnSaveSettings"
         btnSaveSettings.Size = New Size(120, 30)
         btnSaveSettings.TabIndex = 19
@@ -1446,7 +1492,7 @@ Partial Class MainForm
         ' btnReloadSettings
         ' 
         btnReloadSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnReloadSettings.Location = New Point(140, 589)
+        btnReloadSettings.Location = New Point(140, 597)
         btnReloadSettings.Name = "btnReloadSettings"
         btnReloadSettings.Size = New Size(120, 30)
         btnReloadSettings.TabIndex = 20
@@ -1456,7 +1502,7 @@ Partial Class MainForm
         ' btnLoadDefaults
         ' 
         btnLoadDefaults.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnLoadDefaults.Location = New Point(268, 589)
+        btnLoadDefaults.Location = New Point(268, 597)
         btnLoadDefaults.Name = "btnLoadDefaults"
         btnLoadDefaults.Size = New Size(120, 30)
         btnLoadDefaults.TabIndex = 21
@@ -1466,7 +1512,7 @@ Partial Class MainForm
         ' btnOpenSettingsFile
         ' 
         btnOpenSettingsFile.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnOpenSettingsFile.Location = New Point(396, 589)
+        btnOpenSettingsFile.Location = New Point(396, 597)
         btnOpenSettingsFile.Name = "btnOpenSettingsFile"
         btnOpenSettingsFile.Size = New Size(160, 30)
         btnOpenSettingsFile.TabIndex = 22
@@ -1476,7 +1522,7 @@ Partial Class MainForm
         ' btnCheckForUpdates
         ' 
         btnCheckForUpdates.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnCheckForUpdates.Location = New Point(564, 589)
+        btnCheckForUpdates.Location = New Point(564, 597)
         btnCheckForUpdates.Name = "btnCheckForUpdates"
         btnCheckForUpdates.Size = New Size(160, 30)
         btnCheckForUpdates.TabIndex = 23
@@ -1487,7 +1533,7 @@ Partial Class MainForm
         ' 
         lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblUpdateNotice.AutoSize = True
-        lblUpdateNotice.Location = New Point(732, 596)
+        lblUpdateNotice.Location = New Point(732, 604)
         lblUpdateNotice.Name = "lblUpdateNotice"
         lblUpdateNotice.Size = New Size(94, 15)
         lblUpdateNotice.TabIndex = 24
@@ -1498,7 +1544,7 @@ Partial Class MainForm
         ' 
         lblSettingsPath.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblSettingsPath.AutoSize = True
-        lblSettingsPath.Location = New Point(12, 629)
+        lblSettingsPath.Location = New Point(12, 637)
         lblSettingsPath.Name = "lblSettingsPath"
         lblSettingsPath.Size = New Size(139, 15)
         lblSettingsPath.TabIndex = 24
@@ -1583,7 +1629,13 @@ Partial Class MainForm
         mainLayout.ResumeLayout(False)
         tabMain.ResumeLayout(False)
         tabCompatibility.ResumeLayout(False)
-        tabCompatibility.PerformLayout()
+        compatHeaderLeftPanel.ResumeLayout(False)
+        compatHeaderLeftPanel.PerformLayout()
+        compatHeaderRightPanel.ResumeLayout(False)
+        compatHeaderPanel.ResumeLayout(False)
+        compatHeaderPanel.PerformLayout()
+        compatFooterPanel.ResumeLayout(False)
+        compatFooterPanel.PerformLayout()
         tabInstall.ResumeLayout(False)
         installLayout.ResumeLayout(False)
         grpGame.ResumeLayout(False)
@@ -1734,6 +1786,8 @@ Partial Class MainForm
     Friend WithEvents chkLoadAsiPlugins As System.Windows.Forms.CheckBox
     Friend WithEvents compatFooterPanel As System.Windows.Forms.Panel
     Friend WithEvents compatHeaderPanel As System.Windows.Forms.Panel
+    Friend WithEvents compatHeaderLeftPanel As System.Windows.Forms.TableLayoutPanel
+    Friend WithEvents compatHeaderRightPanel As System.Windows.Forms.FlowLayoutPanel
     Friend WithEvents lblCompatibilityNote As System.Windows.Forms.Label
     Friend WithEvents btnOpenWiki As System.Windows.Forms.Button
     Friend WithEvents btnRefreshCompatibility As System.Windows.Forms.Button
