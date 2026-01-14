@@ -37,7 +37,6 @@ Partial Class MainForm
         colCompatPlatform = New ColumnHeader()
         colCompatPath = New ColumnHeader()
         colCompatInstalled = New ColumnHeader()
-        colCompatFsr4 = New ColumnHeader()
         tabInstall = New TabPage()
         installLayout = New TableLayoutPanel()
         grpGame = New ThemedGroupBox()
@@ -120,8 +119,6 @@ Partial Class MainForm
         grpSettings = New ThemedGroupBox()
         lblCompatibilityListUrl = New Label()
         txtCompatibilityListUrl = New ThemedTextBox()
-        lblFsr4ListUrl = New Label()
-        txtFsr4ListUrl = New ThemedTextBox()
         lblWikiBaseUrl = New Label()
         txtWikiBaseUrl = New ThemedTextBox()
         lblStableReleaseUrl = New Label()
@@ -244,7 +241,7 @@ Partial Class MainForm
         lblCompatibilityNote.Name = "lblCompatibilityNote"
         lblCompatibilityNote.Size = New Size(501, 15)
         lblCompatibilityNote.TabIndex = 8
-        lblCompatibilityNote.Text = "List shows tested games only. Detected/FSR4 columns are best-effort and may be incomplete."
+        lblCompatibilityNote.Text = "List shows tested games only. Detected column is best-effort and may be incomplete."
         ' 
         ' btnOpenWiki
         ' 
@@ -309,7 +306,7 @@ Partial Class MainForm
         ' lvCompatibility
         ' 
         lvCompatibility.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
-        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath, colCompatFsr4})
+        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath})
         lvCompatibility.FullRowSelect = True
         lvCompatibility.Location = New Point(12, 48)
         lvCompatibility.MultiSelect = False
@@ -345,10 +342,6 @@ Partial Class MainForm
         colCompatPath.Text = "Install Path"
         colCompatPath.Width = 420
         ' 
-        ' colCompatFsr4
-        ' 
-        colCompatFsr4.Text = "FSR4"
-        colCompatFsr4.Width = 60
         ' 
         ' tabInstall
         ' 
@@ -1249,8 +1242,6 @@ Partial Class MainForm
         ' 
         grpSettings.Controls.Add(lblCompatibilityListUrl)
         grpSettings.Controls.Add(txtCompatibilityListUrl)
-        grpSettings.Controls.Add(lblFsr4ListUrl)
-        grpSettings.Controls.Add(txtFsr4ListUrl)
         grpSettings.Controls.Add(lblWikiBaseUrl)
         grpSettings.Controls.Add(txtWikiBaseUrl)
         grpSettings.Controls.Add(lblStableReleaseUrl)
@@ -1300,31 +1291,11 @@ Partial Class MainForm
         txtCompatibilityListUrl.Size = New Size(920, 24)
         txtCompatibilityListUrl.TabIndex = 1
         ' 
-        ' lblFsr4ListUrl
-        ' 
-        lblFsr4ListUrl.AutoSize = True
-        lblFsr4ListUrl.Location = New Point(12, 64)
-        lblFsr4ListUrl.Name = "lblFsr4ListUrl"
-        lblFsr4ListUrl.Size = New Size(74, 15)
-        lblFsr4ListUrl.TabIndex = 2
-        lblFsr4ListUrl.Text = "FSR4 list URL"
-        ' 
-        ' txtFsr4ListUrl
-        ' 
-        txtFsr4ListUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
-        txtFsr4ListUrl.BackColor = SystemColors.Window
-        txtFsr4ListUrl.ForeColor = SystemColors.WindowText
-        txtFsr4ListUrl.Location = New Point(180, 60)
-        txtFsr4ListUrl.MinimumSize = New Size(0, 24)
-        txtFsr4ListUrl.Name = "txtFsr4ListUrl"
-        txtFsr4ListUrl.Padding = New Padding(6, 3, 6, 3)
-        txtFsr4ListUrl.Size = New Size(920, 24)
-        txtFsr4ListUrl.TabIndex = 3
         ' 
         ' lblWikiBaseUrl
         ' 
         lblWikiBaseUrl.AutoSize = True
-        lblWikiBaseUrl.Location = New Point(12, 96)
+        lblWikiBaseUrl.Location = New Point(12, 64)
         lblWikiBaseUrl.Name = "lblWikiBaseUrl"
         lblWikiBaseUrl.Size = New Size(81, 15)
         lblWikiBaseUrl.TabIndex = 4
@@ -1335,7 +1306,7 @@ Partial Class MainForm
         txtWikiBaseUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtWikiBaseUrl.BackColor = SystemColors.Window
         txtWikiBaseUrl.ForeColor = SystemColors.WindowText
-        txtWikiBaseUrl.Location = New Point(180, 92)
+        txtWikiBaseUrl.Location = New Point(180, 60)
         txtWikiBaseUrl.MinimumSize = New Size(0, 24)
         txtWikiBaseUrl.Name = "txtWikiBaseUrl"
         txtWikiBaseUrl.Padding = New Padding(6, 3, 6, 3)
@@ -1345,7 +1316,7 @@ Partial Class MainForm
         ' lblStableReleaseUrl
         ' 
         lblStableReleaseUrl.AutoSize = True
-        lblStableReleaseUrl.Location = New Point(12, 128)
+        lblStableReleaseUrl.Location = New Point(12, 96)
         lblStableReleaseUrl.Name = "lblStableReleaseUrl"
         lblStableReleaseUrl.Size = New Size(102, 15)
         lblStableReleaseUrl.TabIndex = 8
@@ -1356,7 +1327,7 @@ Partial Class MainForm
         txtStableReleaseUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtStableReleaseUrl.BackColor = SystemColors.Window
         txtStableReleaseUrl.ForeColor = SystemColors.WindowText
-        txtStableReleaseUrl.Location = New Point(180, 124)
+        txtStableReleaseUrl.Location = New Point(180, 92)
         txtStableReleaseUrl.MinimumSize = New Size(0, 24)
         txtStableReleaseUrl.Name = "txtStableReleaseUrl"
         txtStableReleaseUrl.Padding = New Padding(6, 3, 6, 3)
@@ -1366,7 +1337,7 @@ Partial Class MainForm
         ' lblNightlyReleaseUrl
         ' 
         lblNightlyReleaseUrl.AutoSize = True
-        lblNightlyReleaseUrl.Location = New Point(12, 160)
+        lblNightlyReleaseUrl.Location = New Point(12, 128)
         lblNightlyReleaseUrl.Name = "lblNightlyReleaseUrl"
         lblNightlyReleaseUrl.Size = New Size(109, 15)
         lblNightlyReleaseUrl.TabIndex = 10
@@ -1377,7 +1348,7 @@ Partial Class MainForm
         txtNightlyReleaseUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtNightlyReleaseUrl.BackColor = SystemColors.Window
         txtNightlyReleaseUrl.ForeColor = SystemColors.WindowText
-        txtNightlyReleaseUrl.Location = New Point(180, 156)
+        txtNightlyReleaseUrl.Location = New Point(180, 124)
         txtNightlyReleaseUrl.MinimumSize = New Size(0, 24)
         txtNightlyReleaseUrl.Name = "txtNightlyReleaseUrl"
         txtNightlyReleaseUrl.Padding = New Padding(6, 3, 6, 3)
@@ -1387,7 +1358,7 @@ Partial Class MainForm
         ' lblInstallerReleaseUrl
         ' 
         lblInstallerReleaseUrl.AutoSize = True
-        lblInstallerReleaseUrl.Location = New Point(12, 192)
+        lblInstallerReleaseUrl.Location = New Point(12, 160)
         lblInstallerReleaseUrl.Name = "lblInstallerReleaseUrl"
         lblInstallerReleaseUrl.Size = New Size(114, 15)
         lblInstallerReleaseUrl.TabIndex = 12
@@ -1398,7 +1369,7 @@ Partial Class MainForm
         txtInstallerReleaseUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtInstallerReleaseUrl.BackColor = SystemColors.Window
         txtInstallerReleaseUrl.ForeColor = SystemColors.WindowText
-        txtInstallerReleaseUrl.Location = New Point(180, 188)
+        txtInstallerReleaseUrl.Location = New Point(180, 156)
         txtInstallerReleaseUrl.MinimumSize = New Size(0, 24)
         txtInstallerReleaseUrl.Name = "txtInstallerReleaseUrl"
         txtInstallerReleaseUrl.Padding = New Padding(6, 3, 6, 3)
@@ -1408,7 +1379,7 @@ Partial Class MainForm
         ' lblDefaultIniPath
         ' 
         lblDefaultIniPath.AutoSize = True
-        lblDefaultIniPath.Location = New Point(12, 224)
+        lblDefaultIniPath.Location = New Point(12, 192)
         lblDefaultIniPath.Name = "lblDefaultIniPath"
         lblDefaultIniPath.Size = New Size(104, 15)
         lblDefaultIniPath.TabIndex = 14
@@ -1419,7 +1390,7 @@ Partial Class MainForm
         txtDefaultIniPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtDefaultIniPath.BackColor = SystemColors.Window
         txtDefaultIniPath.ForeColor = SystemColors.WindowText
-        txtDefaultIniPath.Location = New Point(180, 220)
+        txtDefaultIniPath.Location = New Point(180, 188)
         txtDefaultIniPath.MinimumSize = New Size(0, 24)
         txtDefaultIniPath.Name = "txtDefaultIniPath"
         txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
@@ -1429,7 +1400,7 @@ Partial Class MainForm
         ' btnBrowseDefaultIni
         ' 
         btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseDefaultIni.Location = New Point(1000, 220)
+        btnBrowseDefaultIni.Location = New Point(1000, 188)
         btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
         btnBrowseDefaultIni.Size = New Size(100, 24)
         btnBrowseDefaultIni.TabIndex = 16
@@ -1439,7 +1410,7 @@ Partial Class MainForm
         ' lblDefaultIniMode
         ' 
         lblDefaultIniMode.AutoSize = True
-        lblDefaultIniMode.Location = New Point(12, 256)
+        lblDefaultIniMode.Location = New Point(12, 224)
         lblDefaultIniMode.Name = "lblDefaultIniMode"
         lblDefaultIniMode.Size = New Size(106, 15)
         lblDefaultIniMode.TabIndex = 17
@@ -1450,7 +1421,7 @@ Partial Class MainForm
         cmbDefaultIniMode.DropDownStyle = ComboBoxStyle.DropDownList
         cmbDefaultIniMode.FormattingEnabled = True
         cmbDefaultIniMode.Items.AddRange(New Object() {"Off", "Merge", "Replace"})
-        cmbDefaultIniMode.Location = New Point(180, 252)
+        cmbDefaultIniMode.Location = New Point(180, 220)
         cmbDefaultIniMode.Name = "cmbDefaultIniMode"
         cmbDefaultIniMode.Size = New Size(220, 23)
         cmbDefaultIniMode.TabIndex = 18
@@ -1652,8 +1623,6 @@ Partial Class MainForm
     Friend WithEvents grpSettings As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblCompatibilityListUrl As System.Windows.Forms.Label
     Friend WithEvents txtCompatibilityListUrl As OptiScalerInstaller.ThemedTextBox
-    Friend WithEvents lblFsr4ListUrl As System.Windows.Forms.Label
-    Friend WithEvents txtFsr4ListUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblWikiBaseUrl As System.Windows.Forms.Label
     Friend WithEvents txtWikiBaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblStableReleaseUrl As System.Windows.Forms.Label
@@ -1757,7 +1726,6 @@ Partial Class MainForm
     Friend WithEvents colCompatPlatform As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPath As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatInstalled As System.Windows.Forms.ColumnHeader
-    Friend WithEvents colCompatFsr4 As System.Windows.Forms.ColumnHeader
     Friend WithEvents txtGameSearch As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblSearch As System.Windows.Forms.Label
     Friend WithEvents btnScanDetected As System.Windows.Forms.Button

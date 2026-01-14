@@ -12,7 +12,6 @@ Public Class MainForm
     Private detectedGames As List(Of DetectedGame) = New List(Of DetectedGame)()
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
-    Private fsr4Normalized As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private lastNormalBounds As Rectangle?
     Private windowSettingsApplied As Boolean
     Private windowSaveTimer As Timer
@@ -233,9 +232,7 @@ Public Class MainForm
 
     Private Sub LoadCompatibility()
         allCompatibilityEntries = CompatibilityService.LoadCompatibilityList()
-        fsr4Normalized = Fsr4Service.LoadFsr4Normalized()
         AppendLog("Loaded compatibility list: " & allCompatibilityEntries.Count & " entries.")
-        AppendLog("Loaded FSR4 list: " & fsr4Normalized.Count & " entries.")
         ApplyCompatibilityFilter()
     End Sub
 
@@ -251,7 +248,6 @@ Public Class MainForm
                 detectedLookup.TryGetValue(normalizedKey, detected)
 
                 Dim isDetected As Boolean = detected IsNot Nothing
-                Dim isFsr4 As Boolean = fsr4Normalized.Contains(normalizedKey)
 
                 Dim installInfo As OptiScalerInstallInfo = Nothing
                 If isDetected Then
@@ -263,8 +259,7 @@ Public Class MainForm
                 item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
-                item.SubItems.Add(If(isFsr4, "Yes", ""))
-                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .IsFsr4 = isFsr4}
+                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo}
                 ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count)
                 lvCompatibility.Items.Add(item)
             End If
@@ -512,30 +507,17 @@ Public Class MainForm
 
     Private Async Sub btnRefreshCompatibility_Click(sender As Object, e As EventArgs) Handles btnRefreshCompatibility.Click
         SetStatus("Updating lists...")
-        AppendLog("Refreshing compatibility and FSR4 lists...")
-        Dim updatedAny As Boolean = False
+        AppendLog("Refreshing compatibility list...")
 
         Try
             allCompatibilityEntries = Await CompatibilityService.UpdateCompatibilityListAsync()
-            updatedAny = True
+            ApplyCompatibilityFilter()
+            SetStatus("List updated.")
+            AppendLog("List updated.")
         Catch ex As Exception
             AppendLog("Failed to update compatibility list: " & ex.Message)
-        End Try
-
-        Try
-            fsr4Normalized = Await Fsr4Service.UpdateFsr4NormalizedAsync()
-            updatedAny = True
-        Catch ex As Exception
-            AppendLog("Failed to update FSR4 list: " & ex.Message)
-        End Try
-
-        If updatedAny Then
-            ApplyCompatibilityFilter()
-            SetStatus("Lists updated.")
-            AppendLog("Lists updated.")
-        Else
             SetStatus("List update failed.")
-        End If
+        End Try
     End Sub
 
     Private Async Sub btnScanDetected_Click(sender As Object, e As EventArgs) Handles btnScanDetected.Click
@@ -1118,7 +1100,6 @@ Public Class MainForm
     Private Sub btnSaveSettings_Click(sender As Object, e As EventArgs) Handles btnSaveSettings.Click
         Dim settings As AppSettingsModel = AppSettings.Load()
         settings.CompatibilityListUrl = txtCompatibilityListUrl.Text.Trim()
-        settings.Fsr4ListUrl = txtFsr4ListUrl.Text.Trim()
         settings.WikiBaseUrl = txtWikiBaseUrl.Text.Trim()
         settings.StableReleaseUrl = txtStableReleaseUrl.Text.Trim()
         settings.NightlyReleaseUrl = txtNightlyReleaseUrl.Text.Trim()
@@ -1236,9 +1217,9 @@ Public Class MainForm
         toolTip.SetToolTip(txtGameSearch, "Filter the list by game name. Case-insensitive.")
         toolTip.SetToolTip(btnScanDetected, "Scan installed Steam, Epic, and GOG games and mark matches in the list. No files are modified.")
         toolTip.SetToolTip(btnUseDetected, "Use the selected detected game and prefill the Install tab. You can still change settings before installing.")
-        toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility and FSR4 lists from the wiki and refresh the table.")
+        toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the wiki and refresh the table.")
         toolTip.SetToolTip(btnOpenWiki, "Open the selected game's wiki page in your browser.")
-        toolTip.SetToolTip(lvCompatibility, "Compatibility list with detection and FSR4 info. Double-click a detected row to prefill the Install tab.")
+        toolTip.SetToolTip(lvCompatibility, "Compatibility list with detection info. Double-click a detected row to prefill the Install tab.")
 
         toolTip.SetToolTip(txtGameExe, "Path to the game's main executable. Avoid launchers, uninstallers, or setup tools.")
         toolTip.SetToolTip(btnBrowseGameExe, "Browse for the game's executable (.exe).")
@@ -1285,7 +1266,6 @@ Public Class MainForm
         toolTip.SetToolTip(grpLog, "Log output for all installer actions.")
 
         toolTip.SetToolTip(txtCompatibilityListUrl, "Raw markdown URL for the compatibility list (used by Refresh lists).")
-        toolTip.SetToolTip(txtFsr4ListUrl, "Raw markdown URL for the FSR4 list (used by Refresh lists).")
         toolTip.SetToolTip(txtWikiBaseUrl, "Base URL for wiki pages (used when opening a selected game's page).")
         toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API URL for the latest stable release.")
         toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the nightly release.")
@@ -1523,7 +1503,6 @@ Public Class MainForm
         End If
 
         txtCompatibilityListUrl.Text = settings.CompatibilityListUrl
-        txtFsr4ListUrl.Text = settings.Fsr4ListUrl
         txtWikiBaseUrl.Text = settings.WikiBaseUrl
         txtStableReleaseUrl.Text = settings.StableReleaseUrl
         txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
@@ -1551,6 +1530,5 @@ Public Class MainForm
         Public Property Entry As CompatibilityEntry
         Public Property Detected As DetectedGame
         Public Property InstallInfo As OptiScalerInstallInfo
-        Public Property IsFsr4 As Boolean
     End Class
 End Class

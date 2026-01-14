@@ -99,7 +99,6 @@ Friend Class AppSettingsModel
     Public Property WindowHeight As Integer?
     Public Property WindowState As String
     Public Property CompatibilityListUrl As String
-    Public Property Fsr4ListUrl As String
     Public Property WikiBaseUrl As String
     Public Property StableReleaseUrl As String
     Public Property NightlyReleaseUrl As String
@@ -115,10 +114,6 @@ Friend Class AppSettingsModel
         Dim changed As Boolean = False
         If String.IsNullOrWhiteSpace(CompatibilityListUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.CompatibilityListUrl) Then
             CompatibilityListUrl = defaults.CompatibilityListUrl
-            changed = True
-        End If
-        If String.IsNullOrWhiteSpace(Fsr4ListUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.Fsr4ListUrl) Then
-            Fsr4ListUrl = defaults.Fsr4ListUrl
             changed = True
         End If
         If String.IsNullOrWhiteSpace(WikiBaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.WikiBaseUrl) Then

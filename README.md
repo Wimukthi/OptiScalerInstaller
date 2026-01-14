@@ -5,7 +5,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 ## Features
 
 - Auto-detect supported games (Steam, Epic, GOG) and prefill install settings.
-- Compatibility list view with detection, OptiScaler install status/version, and FSR4 indicators.
+- Compatibility list view with detection and OptiScaler install status/version.
 - Install from stable, nightly, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
@@ -99,6 +99,7 @@ Settings:
 
 ## Version History
 
+- v1.0.0.15 - Remove FSR4 compatibility detection and related settings/UI.
 - v1.0.0.14 - Improve GPU auto-detection with WMI fallback and adapter logging.
 - v1.0.0.13 - Auto-detect GPU vendor and fix FSR4 list parsing.
 - v1.0.0.11 - Fix updater version comparison to respect build revision.
@@ -108,7 +109,7 @@ Settings:
 ## Notes
 
 - Do not use OptiScaler with online games (anti-cheat risk, possible bans).
-- Detection and FSR4 indicators are best-effort based on the wiki lists.
+- Detection indicators are best-effort based on the wiki lists.
 
 ## Credits
 
