@@ -99,6 +99,7 @@ Settings:
 
 ## Version History
 
+- v1.0.0.14 - Improve GPU auto-detection with WMI fallback and adapter logging.
 - v1.0.0.13 - Auto-detect GPU vendor and fix FSR4 list parsing.
 - v1.0.0.11 - Fix updater version comparison to respect build revision.
 - v1.0.0.9 - Fix install root detection, add legacy uninstall fallback, and normalize detected paths.

@@ -2,6 +2,7 @@ Imports System.IO
 Imports System.Diagnostics
 Imports System.Threading.Tasks
 Imports System.Runtime.InteropServices
+Imports System.Management
 
 Public Class MainForm
     Private allCompatibilityEntries As List(Of CompatibilityEntry) = New List(Of CompatibilityEntry)()
@@ -119,7 +120,12 @@ Public Class MainForm
             Return
         End If
 
-        Dim vendor As GpuVendor = DetectGpuVendor()
+        Dim adapterNames As List(Of String) = GetGpuAdapterNames()
+        If adapterNames.Count > 0 Then
+            AppendLog("GPU detection candidates: " & String.Join("; ", adapterNames))
+        End If
+
+        Dim vendor As GpuVendor = DetectGpuVendor(adapterNames)
         Select Case vendor
             Case GpuVendor.Nvidia
                 rbGpuNvidia.Checked = True
@@ -133,34 +139,27 @@ Public Class MainForm
         End Select
     End Sub
 
-    Private Function DetectGpuVendor() As GpuVendor
+    Private Function DetectGpuVendor(adapterNames As IEnumerable(Of String)) As GpuVendor
         Try
             Dim hasNvidia As Boolean = False
             Dim hasAmd As Boolean = False
             Dim hasIntel As Boolean = False
-            Dim index As Integer = 0
-            Dim device As DISPLAY_DEVICE = New DISPLAY_DEVICE()
-            device.cb = Marshal.SizeOf(device)
-
-            While EnumDisplayDevices(Nothing, index, device, 0)
-                Dim name As String = device.DeviceString
-                If Not String.IsNullOrWhiteSpace(name) Then
-                    Dim upper As String = name.ToUpperInvariant()
-                    If upper.Contains("NVIDIA") Then
-                        hasNvidia = True
-                    End If
-                    If upper.Contains("AMD") OrElse upper.Contains("RADEON") Then
-                        hasAmd = True
-                    End If
-                    If upper.Contains("INTEL") Then
-                        hasIntel = True
-                    End If
+            For Each name As String In adapterNames
+                If String.IsNullOrWhiteSpace(name) Then
+                    Continue For
                 End If
 
-                index += 1
-                device = New DISPLAY_DEVICE()
-                device.cb = Marshal.SizeOf(device)
-            End While
+                Dim upper As String = name.ToUpperInvariant()
+                If upper.Contains("NVIDIA") Then
+                    hasNvidia = True
+                End If
+                If upper.Contains("AMD") OrElse upper.Contains("RADEON") OrElse upper.Contains("ATI") OrElse upper.Contains("ADVANCED MICRO DEVICES") Then
+                    hasAmd = True
+                End If
+                If upper.Contains("INTEL") OrElse upper.Contains("ARC") Then
+                    hasIntel = True
+                End If
+            Next
 
             If hasNvidia Then
                 Return GpuVendor.Nvidia
@@ -172,6 +171,64 @@ Public Class MainForm
         End Try
 
         Return GpuVendor.Unknown
+    End Function
+
+    Private Function GetGpuAdapterNames() As List(Of String)
+        Dim names As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+        Try
+            Using searcher As New ManagementObjectSearcher("SELECT Name, AdapterCompatibility FROM Win32_VideoController")
+                For Each item As ManagementObject In searcher.Get()
+                    Dim name As String = TryCast(item("Name"), String)
+                    If Not IsGenericAdapter(name) Then
+                        names.Add(name.Trim())
+                    End If
+
+                    Dim compat As String = TryCast(item("AdapterCompatibility"), String)
+                    If Not IsGenericAdapter(compat) Then
+                        names.Add(compat.Trim())
+                    End If
+                Next
+            End Using
+        Catch
+        End Try
+
+        If names.Count = 0 Then
+            Try
+                Dim index As Integer = 0
+                Dim device As DISPLAY_DEVICE = New DISPLAY_DEVICE()
+                device.cb = Marshal.SizeOf(device)
+
+                While EnumDisplayDevices(Nothing, index, device, 0)
+                    If Not IsGenericAdapter(device.DeviceString) Then
+                        names.Add(device.DeviceString.Trim())
+                    End If
+
+                    index += 1
+                    device = New DISPLAY_DEVICE()
+                    device.cb = Marshal.SizeOf(device)
+                End While
+            Catch
+            End Try
+        End If
+
+        Return names.ToList()
+    End Function
+
+    Private Function IsGenericAdapter(name As String) As Boolean
+        If String.IsNullOrWhiteSpace(name) Then
+            Return True
+        End If
+
+        Dim upper As String = name.ToUpperInvariant()
+        If upper.Contains("MICROSOFT") AndAlso (upper.Contains("BASIC") OrElse upper.Contains("RENDER") OrElse upper.Contains("REMOTE") OrElse upper.Contains("HYPER-V")) Then
+            Return True
+        End If
+        If upper.Contains("VIRTUAL") OrElse upper.Contains("VMWARE") OrElse upper.Contains("VBOX") Then
+            Return True
+        End If
+
+        Return False
     End Function
 
     Private Sub LoadCompatibility()
