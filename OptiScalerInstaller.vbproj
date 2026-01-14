@@ -61,10 +61,12 @@
       <BuildNumber Condition="'@(BuildVersionLines)' != ''">$([System.Int32]::Parse('%(BuildVersionLines.Identity)'))</BuildNumber>
       <BuildNumber Condition="'@(BuildVersionLines)' == ''">0</BuildNumber>
       <BuildNumber>$([MSBuild]::Add($(BuildNumber), 1))</BuildNumber>
-      <MajorNumber>1</MajorNumber>
-      <MinorNumber>0</MinorNumber>
-      <PatchNumber>0</PatchNumber>
-      <Version>$(MajorNumber).$(MinorNumber).$(PatchNumber).$(BuildNumber)</Version>
+      <BaseMajor>1</BaseMajor>
+      <MajorNumber>$([MSBuild]::Add($(BaseMajor), $([MSBuild]::Divide($(BuildNumber), 1000))))</MajorNumber>
+      <MinorNumber>$([MSBuild]::Divide($([MSBuild]::Modulo($(BuildNumber), 1000)), 100))</MinorNumber>
+      <PatchNumber>$([MSBuild]::Divide($([MSBuild]::Modulo($(BuildNumber), 100)), 10))</PatchNumber>
+      <RevisionNumber>$([MSBuild]::Modulo($(BuildNumber), 10))</RevisionNumber>
+      <Version>$(MajorNumber).$(MinorNumber).$(PatchNumber).$(RevisionNumber)</Version>
       <AssemblyVersion>$(Version)</AssemblyVersion>
       <FileVersion>$(Version)</FileVersion>
       <InformationalVersion>$(Version)</InformationalVersion>

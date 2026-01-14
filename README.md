@@ -72,12 +72,14 @@ You can edit this file manually or use the Settings tab.
 
 ## Versioning
 
-Build version auto-increments on each build using `BuildVersion.txt` and is emitted as `v1.0.0.Build`:
+Build version auto-increments on each build using `BuildVersion.txt` and is emitted as `vMajor.Minor.Patch.Build`:
 
 - Build increments every build
-- Version is fixed at `1.0.0` with the build number as the revision
+- Patch increments every 10 builds
+- Minor increments every 100 builds
+- Major increments every 1000 builds (base major starts at 1)
 
-The window title shows the current version as `v1.0.0.Build`.
+The window title shows the current version as `vMajor.Minor.Patch.Build`.
 
 ## Screenshots
 
@@ -99,6 +101,7 @@ Settings:
 
 ## Version History
 
+- v1.0.1.7 - Versioning now auto-bumps patch/minor/major every 10/100/1000 builds.
 - v1.0.0.16 - Silent release refresh/update check, error logging, and comment pass cleanup.
 - v1.0.0.15 - Remove FSR4 compatibility detection and related settings/UI.
 - v1.0.0.14 - Improve GPU auto-detection with WMI fallback and adapter logging.

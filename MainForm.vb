@@ -73,10 +73,7 @@ Public Class MainForm
 
         Dim build As Integer = If(version.Build >= 0, version.Build, 0)
         Dim revision As Integer = If(version.Revision >= 0, version.Revision, 0)
-        Dim versionText As String = $"{version.Major}.{version.Minor}.{build}"
-        If revision > 0 Then
-            versionText &= "." & revision
-        End If
+        Dim versionText As String = $"{version.Major}.{version.Minor}.{build}.{revision}"
 
         Text = "OptiScaler Installer v" & versionText
     End Sub

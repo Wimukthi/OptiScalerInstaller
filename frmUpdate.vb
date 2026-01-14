@@ -63,10 +63,7 @@ Friend Partial Class frmUpdate
 
         Dim build As Integer = If(version.Build >= 0, version.Build, 0)
         Dim revision As Integer = If(version.Revision >= 0, version.Revision, 0)
-        Dim text As String = $"{version.Major}.{version.Minor}.{build}"
-        If revision > 0 Then
-            text &= "." & revision
-        End If
+        Dim text As String = $"{version.Major}.{version.Minor}.{build}.{revision}"
         If version.Major = 0 AndAlso version.Minor = 0 AndAlso build = 0 AndAlso revision = 0 AndAlso Not String.IsNullOrWhiteSpace(tagName) Then
             Return tagName
         End If
