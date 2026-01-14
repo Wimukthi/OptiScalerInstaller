@@ -6,12 +6,14 @@ Imports System.Threading
 Imports System.Threading.Tasks
 
 Public Class UpdateAssetInfo
+    ' Minimal metadata for a release asset.
     Public Property Name As String
     Public Property DownloadUrl As String
     Public Property Size As Long
 End Class
 
 Public Class UpdateReleaseInfo
+    ' Parsed GitHub release metadata for the updater.
     Public Property TagName As String
     Public Property Version As Version
     Public Property Title As String
@@ -21,6 +23,7 @@ Public Class UpdateReleaseInfo
 End Class
 
 Public Structure DownloadProgressInfo
+    ' Progress snapshot used by the updater download UI.
     Public ReadOnly BytesReceived As Long
     Public ReadOnly TotalBytes As Long
     Public ReadOnly SpeedBytesPerSec As Double
@@ -45,6 +48,7 @@ Public Structure DownloadProgressInfo
 End Structure
 
 Public Module UpdateService
+    ' Fetches installer updates and handles version comparison + download helpers.
     Public Async Function GetLatestReleaseAsync() As Task(Of UpdateReleaseInfo)
         Dim url As String = GetInstallerReleaseUrl()
         If String.IsNullOrWhiteSpace(url) Then

@@ -5,6 +5,7 @@ Imports System.IO
 Imports System.Text.Json
 
 Friend Module AppSettings
+    ' Stores settings next to the executable and merges defaults on first run.
     Private ReadOnly SettingsPath As String = Path.Combine(AppContext.BaseDirectory, "OptiScalerInstaller.settings.json")
     Private ReadOnly DefaultSettingsPath As String = Path.Combine(AppContext.BaseDirectory, "Data", "DefaultSettings.json")
     Private ReadOnly SyncRoot As New Object()
@@ -57,7 +58,8 @@ Friend Module AppSettings
                 }
                 Dim json As String = JsonSerializer.Serialize(settings, options)
                 File.WriteAllText(SettingsPath, json)
-            Catch
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "AppSettings.Save")
             End Try
         End SyncLock
     End Sub
@@ -85,13 +87,15 @@ Friend Module AppSettings
             Dim json As String = File.ReadAllText(path)
             Dim settings As AppSettingsModel = JsonSerializer.Deserialize(Of AppSettingsModel)(json)
             Return settings
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "AppSettings.TryLoadFromFile")
             Return Nothing
         End Try
     End Function
 End Module
 
 Friend Class AppSettingsModel
+    ' Persisted settings schema for the installer UI.
     Public Property Theme As String
     Public Property WindowX As Integer?
     Public Property WindowY As Integer?
@@ -111,6 +115,7 @@ Friend Class AppSettingsModel
             Return False
         End If
 
+        ' Fill missing values from defaults without overwriting user entries.
         Dim changed As Boolean = False
         If String.IsNullOrWhiteSpace(CompatibilityListUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.CompatibilityListUrl) Then
             CompatibilityListUrl = defaults.CompatibilityListUrl

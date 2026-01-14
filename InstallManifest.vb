@@ -1,6 +1,7 @@
 Imports System.Text.Json.Serialization
 
 Public Class InstallManifest
+    ' Records installer actions to support clean uninstalls and updates.
     Public Property InstallerVersion As String
     Public Property OptiScalerVersion As String
     Public Property OptiScalerSource As String

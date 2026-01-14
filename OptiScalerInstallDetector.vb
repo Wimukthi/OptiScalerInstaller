@@ -3,6 +3,7 @@ Imports System.Diagnostics
 Imports System.Text.Json
 
 Public Class OptiScalerInstallInfo
+    ' Summarizes detected OptiScaler install state for a game folder.
     Public Property IsInstalled As Boolean
     Public Property Version As String
     Public Property Source As String
@@ -11,6 +12,7 @@ Public Class OptiScalerInstallInfo
 End Class
 
 Public Module OptiScalerInstallDetector
+    ' Detects existing OptiScaler installs via manifest or known files.
     Private ReadOnly KnownHookNames As String() = {
         "OptiScaler.dll",
         "dxgi.dll",
@@ -68,7 +70,8 @@ Public Module OptiScalerInstallDetector
             If manifest IsNot Nothing Then
                 Return manifest
             End If
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.TryLoadManifest")
         End Try
 
         Return New InstallManifest()
@@ -104,7 +107,8 @@ Public Module OptiScalerInstallDetector
                 version = info.ProductVersion
             End If
             Return If(version, "")
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.TryGetFileVersion")
             Return ""
         End Try
     End Function

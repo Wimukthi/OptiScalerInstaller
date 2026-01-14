@@ -4,6 +4,7 @@ Option Explicit On
 Imports System.Windows.Forms
 
 Friend Module ThemeSettings
+    ' Persists the preferred theme selection in settings.
     Public Function GetPreferredColorMode() As SystemColorMode
         Dim settings As AppSettingsModel = AppSettings.Load()
         Dim value As String = settings.Theme

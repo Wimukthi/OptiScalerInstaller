@@ -7,6 +7,7 @@ Imports SharpCompress.Archives
 Imports SharpCompress.Archives.SevenZip
 
 Public Class InstallerService
+    ' Orchestrates OptiScaler install/uninstall operations.
     Private Shared ReadOnly ManifestName As String = "OptiScalerInstaller.manifest.json"
 
     Private Class ArchiveResult
@@ -17,6 +18,7 @@ Public Class InstallerService
     Public Shared Async Function InstallAsync(config As InstallerConfig, log As Action(Of String), progress As Action(Of Integer)) As Task(Of InstallManifest)
         ValidateConfig(config)
 
+        ' Stage downloads and extraction in a temp folder to avoid partial installs.
         Dim tempRoot As String = Path.Combine(Path.GetTempPath(), "OptiScalerInstaller")
         Directory.CreateDirectory(tempRoot)
 
@@ -46,6 +48,7 @@ Public Class InstallerService
             Await Task.Run(Sub() ExtractArchive(archivePath, extractRoot, log))
             progress?.Invoke(45)
 
+            ' Determine the actual root that contains OptiScaler.dll.
             Dim packageRoot As String = ResolvePackageRoot(extractRoot)
             Await Task.Run(Sub()
                                log?.Invoke("Copying OptiScaler files to game folder...")
@@ -67,7 +70,8 @@ Public Class InstallerService
             If extractRoot IsNot Nothing AndAlso Directory.Exists(extractRoot) Then
                 Try
                     Directory.Delete(extractRoot, True)
-                Catch
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "InstallerService.CleanupExtractRoot")
                 End Try
             End If
         End Try
@@ -85,6 +89,7 @@ Public Class InstallerService
             manifest = JsonSerializer.Deserialize(Of InstallManifest)(json)
         Catch ex As Exception
             log?.Invoke("Failed to read manifest: " & ex.Message)
+            ErrorLogger.Log(ex, "InstallerService.ReadManifest")
             Return False
         End Try
 
@@ -100,6 +105,7 @@ Public Class InstallerService
                 End If
             Catch ex As Exception
                 log?.Invoke("Failed to delete " & filePath & ": " & ex.Message)
+                ErrorLogger.Log(ex, "InstallerService.DeleteInstalledFile")
             End Try
         Next
 
@@ -114,6 +120,7 @@ Public Class InstallerService
                 End If
             Catch ex As Exception
                 log?.Invoke("Failed to restore backup for " & kvp.Key & ": " & ex.Message)
+                ErrorLogger.Log(ex, "InstallerService.RestoreBackup")
             End Try
         Next
 
@@ -123,6 +130,7 @@ Public Class InstallerService
             End If
         Catch ex As Exception
             log?.Invoke("Failed to delete manifest: " & ex.Message)
+            ErrorLogger.Log(ex, "InstallerService.DeleteManifest")
         End Try
 
         log?.Invoke("Uninstall complete.")
@@ -186,7 +194,8 @@ Public Class InstallerService
                     Return fileName
                 End If
             Next
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.ParseUninstallBat")
         End Try
 
         Return ""
@@ -217,6 +226,7 @@ Public Class InstallerService
             Return True
         Catch ex As Exception
             log?.Invoke("Failed to remove " & filePath & ": " & ex.Message)
+            ErrorLogger.Log(ex, "InstallerService.DeleteFile")
             Return False
         End Try
     End Function
@@ -232,6 +242,7 @@ Public Class InstallerService
             Return True
         Catch ex As Exception
             log?.Invoke("Failed to remove folder " & folderPath & ": " & ex.Message)
+            ErrorLogger.Log(ex, "InstallerService.DeleteFolder")
             Return False
         End Try
     End Function
@@ -341,6 +352,7 @@ Public Class InstallerService
 
     Private Shared Sub ExtractArchive(archivePath As String, outputDir As String, log As Action(Of String))
         log?.Invoke("Extracting archive...")
+        ' Use SharpCompress for .7z and fallback to generic archive open for other formats.
         Dim options As New ExtractionOptions With {
             .ExtractFullPath = True,
             .Overwrite = True
@@ -379,6 +391,7 @@ Public Class InstallerService
                 entry.WriteToDirectory(outputDir, options)
             Catch ex As Exception
                 log?.Invoke("Failed to extract " & entry.Key & ": " & ex.Message)
+                ErrorLogger.Log(ex, "InstallerService.ExtractEntry")
             End Try
         Next
     End Sub
@@ -395,7 +408,8 @@ Public Class InstallerService
                 If TypeOf value Is Boolean Then
                     Return CBool(value)
                 End If
-            Catch
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "InstallerService.EntryHasStream")
             End Try
         End If
 
@@ -421,6 +435,7 @@ Public Class InstallerService
     End Sub
 
     Private Shared Function ResolvePackageRoot(extractRoot As String) As String
+        ' Prefer the folder that directly contains OptiScaler.dll, plus OptiScaler.ini when available.
         Dim directDll As String = Path.Combine(extractRoot, "OptiScaler.dll")
         If File.Exists(directDll) Then
             Return extractRoot
@@ -484,6 +499,7 @@ Public Class InstallerService
     Private Shared Function CopyFileWithConflict(source As String, destination As String, conflictMode As ConflictMode, manifest As InstallManifest, log As Action(Of String)) As Boolean
         Directory.CreateDirectory(Path.GetDirectoryName(destination))
 
+        ' Handle existing files according to the selected conflict mode.
         If File.Exists(destination) Then
             Select Case conflictMode
                 Case ConflictMode.Skip
@@ -540,6 +556,7 @@ Public Class InstallerService
         Dim iniPath As String = Path.Combine(config.GameFolder, "OptiScaler.ini")
         ApplyDefaultIni(config, iniPath, log)
 
+        ' Apply runtime overrides for spoofing, frame gen, and plugin toggles.
         If Not File.Exists(iniPath) Then
             log?.Invoke("OptiScaler.ini not found. Skipping INI updates.")
             Return
@@ -578,6 +595,7 @@ Public Class InstallerService
     End Sub
 
     Private Shared Sub CopyAddOns(config As InstallerConfig, manifest As InstallManifest, log As Action(Of String))
+        ' Copy optional addon files if they are configured and present.
         If Not String.IsNullOrWhiteSpace(config.FakenvapiFolder) Then
             Dim folder As String = config.FakenvapiFolder
             If File.Exists(folder) Then
@@ -662,6 +680,7 @@ Public Class InstallerService
                     log?.Invoke("Removed setup artifact: " & name)
                 Catch ex As Exception
                     log?.Invoke("Failed to remove setup artifact " & name & ": " & ex.Message)
+                    ErrorLogger.Log(ex, "InstallerService.CleanupPackageArtifacts")
                 End Try
             End If
         Next
@@ -749,7 +768,8 @@ Public Class InstallerService
                 version = info.ProductVersion
             End If
             Return If(version, "")
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.TryGetFileVersion")
             Return ""
         End Try
     End Function

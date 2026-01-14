@@ -7,6 +7,7 @@ Imports System.Windows.Forms
 
 <DefaultEvent("SelectedIndexChanged")>
 Friend Class ThemedListView
+    ' Owner-drawn list view with theme colors and optional grid lines.
     Inherits ListView
 
     Private _headerBackColor As Color = SystemColors.Control

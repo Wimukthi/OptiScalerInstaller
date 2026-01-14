@@ -137,6 +137,7 @@ Partial Class MainForm
         btnLoadDefaults = New Button()
         btnOpenSettingsFile = New Button()
         btnCheckForUpdates = New Button()
+        lblUpdateNotice = New Label()
         lblSettingsPath = New Label()
         grpLog = New ThemedGroupBox()
         txtLog = New ThemedTextBox()
@@ -1260,6 +1261,7 @@ Partial Class MainForm
         grpSettings.Controls.Add(btnLoadDefaults)
         grpSettings.Controls.Add(btnOpenSettingsFile)
         grpSettings.Controls.Add(btnCheckForUpdates)
+        grpSettings.Controls.Add(lblUpdateNotice)
         grpSettings.Controls.Add(lblSettingsPath)
         grpSettings.Dock = DockStyle.Fill
         grpSettings.Location = New Point(8, 8)
@@ -1476,6 +1478,17 @@ Partial Class MainForm
         btnCheckForUpdates.Text = "Check for updates"
         btnCheckForUpdates.UseVisualStyleBackColor = True
         ' 
+        ' lblUpdateNotice
+        ' 
+        lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
+        lblUpdateNotice.AutoSize = True
+        lblUpdateNotice.Location = New Point(732, 599)
+        lblUpdateNotice.Name = "lblUpdateNotice"
+        lblUpdateNotice.Size = New Size(96, 15)
+        lblUpdateNotice.TabIndex = 24
+        lblUpdateNotice.Text = "Update available"
+        lblUpdateNotice.Visible = False
+        ' 
         ' lblSettingsPath
         ' 
         lblSettingsPath.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
@@ -1641,6 +1654,7 @@ Partial Class MainForm
     Friend WithEvents btnLoadDefaults As System.Windows.Forms.Button
     Friend WithEvents btnOpenSettingsFile As System.Windows.Forms.Button
     Friend WithEvents btnCheckForUpdates As System.Windows.Forms.Button
+    Friend WithEvents lblUpdateNotice As System.Windows.Forms.Label
     Friend WithEvents lblSettingsPath As System.Windows.Forms.Label
     Friend WithEvents grpGame As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblEngineWarning As System.Windows.Forms.Label

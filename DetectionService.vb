@@ -4,6 +4,7 @@ Imports System.Text.RegularExpressions
 Imports Microsoft.Win32
 
 Public Class DetectionService
+    ' Scans known launchers and matches installs against the compatibility list.
     Public Shared Function DetectSupportedGames(entries As IEnumerable(Of CompatibilityEntry), log As Action(Of String)) As List(Of DetectedGame)
         Dim results As New List(Of DetectedGame)()
         If entries Is Nothing Then
@@ -22,6 +23,7 @@ Public Class DetectionService
     End Function
 
     Private Shared Sub AddSteamGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
+        ' Steam installs are read from libraryfolders.vdf and appmanifest_*.acf.
         Dim steamPath As String = GetSteamPath()
         If String.IsNullOrWhiteSpace(steamPath) OrElse Not Directory.Exists(steamPath) Then
             If log IsNot Nothing Then
@@ -45,7 +47,8 @@ Public Class DetectionService
                 Dim content As String
                 Try
                     content = File.ReadAllText(manifestPath)
-                Catch
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "DetectionService.AddSteamGames.ReadManifest")
                     Continue For
                 End Try
 
@@ -62,6 +65,7 @@ Public Class DetectionService
     End Sub
 
     Private Shared Sub AddEpicGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
+        ' Epic installs are read from the launcher manifest JSON files.
         Dim manifestRoot As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Epic", "EpicGamesLauncher", "Data", "Manifests")
         If Not Directory.Exists(manifestRoot) Then
             If log IsNot Nothing Then
@@ -81,13 +85,15 @@ Public Class DetectionService
                     Dim installDir As String = TryGetJsonString(doc.RootElement, "InstallLocation")
                     AddIfSupported(matcher, results, seenPaths, name, installDir, "Epic")
                 End Using
-            Catch
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.AddEpicGames.ReadManifest")
                 Continue For
             End Try
         Next
     End Sub
 
     Private Shared Sub AddGogGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
+        ' GOG installs are discovered through registry keys.
         Dim roots As String() = {
             "Software\GOG.com\Games",
             "Software\WOW6432Node\GOG.com\Games"
@@ -154,6 +160,7 @@ Public Class DetectionService
     End Sub
 
     Private Shared Function NormalizeInstallPath(value As String) As String
+        ' Normalize separators and resolve to a full path when possible.
         If String.IsNullOrWhiteSpace(value) Then
             Return ""
         End If
@@ -162,7 +169,8 @@ Public Class DetectionService
         Dim normalized As String = trimmed.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
         Try
             normalized = Path.GetFullPath(normalized)
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "DetectionService.NormalizeInstallPath")
             normalized = trimmed
         End Try
 
@@ -194,6 +202,7 @@ Public Class DetectionService
     End Function
 
     Private Shared Function GetSteamLibraries(steamPath As String) As List(Of String)
+        ' Parse the Steam libraryfolders.vdf file for extra library roots.
         Dim libraries As New List(Of String)()
         Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
 
@@ -211,7 +220,8 @@ Public Class DetectionService
         Dim content As String
         Try
             content = File.ReadAllText(vdfPath)
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "DetectionService.GetSteamLibraries.ReadLibraryFolders")
             Return libraries
         End Try
 
@@ -260,12 +270,14 @@ Public Class DetectionService
                 End If
                 Return Convert.ToString(key.GetValue(valueName))
             End Using
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "DetectionService.TryGetRegistryValue")
             Return Nothing
         End Try
     End Function
 
     Private Class CompatibilityMatcher
+        ' Matching uses exact, normalized, and relaxed string maps.
         Private ReadOnly exactMap As Dictionary(Of String, CompatibilityEntry)
         Private ReadOnly normalizedMap As Dictionary(Of String, CompatibilityEntry)
         Private ReadOnly relaxedMap As Dictionary(Of String, CompatibilityEntry)

@@ -99,6 +99,7 @@ Settings:
 
 ## Version History
 
+- v1.0.0.16 - Silent release refresh/update check, error logging, and comment pass cleanup.
 - v1.0.0.15 - Remove FSR4 compatibility detection and related settings/UI.
 - v1.0.0.14 - Improve GPU auto-detection with WMI fallback and adapter logging.
 - v1.0.0.13 - Auto-detect GPU vendor and fix FSR4 list parsing.

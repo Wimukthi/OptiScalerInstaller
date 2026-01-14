@@ -6,6 +6,7 @@ Imports System.Drawing
 Imports System.Windows.Forms
 
 Friend Class ThemedGroupBox
+    ' Custom group box renderer for the dark theme.
     Inherits GroupBox
 
     Private _borderColor As Color = SystemColors.ControlDark

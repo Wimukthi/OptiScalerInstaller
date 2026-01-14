@@ -1,4 +1,5 @@
 Public Class CompatibilityEntry
+    ' Represents a wiki compatibility entry (display name + wiki slug).
     Public Property Name As String
     Public Property Slug As String
 

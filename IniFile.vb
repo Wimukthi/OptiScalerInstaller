@@ -1,12 +1,14 @@
 Imports System.IO
 
 Public Class IniUpdate
+    ' Represents a single INI key/value update.
     Public Property Section As String
     Public Property Key As String
     Public Property Value As String
 End Class
 
 Public Class IniFile
+    ' Minimal INI reader/writer for OptiScaler.ini edits.
     Public Shared Sub SetValues(path As String, updates As List(Of IniUpdate))
         Dim lines As New List(Of String)(File.ReadAllLines(path))
         For Each update In updates

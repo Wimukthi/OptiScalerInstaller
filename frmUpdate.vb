@@ -7,6 +7,7 @@ Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
 Friend Partial Class frmUpdate
+    ' Minimal update UI for downloading and applying installer releases.
     Inherits Form
 
     Private ReadOnly _release As UpdateReleaseInfo
@@ -25,7 +26,8 @@ Friend Partial Class frmUpdate
 
         Try
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath)
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmUpdate.LoadIcon")
         End Try
 
         AddHandler btnDownload.Click, AddressOf DownloadClicked
@@ -108,6 +110,7 @@ Friend Partial Class frmUpdate
             lblStatus.Text = "Update failed: " & ex.Message
             btnCancel.Text = "Close"
             btnDownload.Enabled = True
+            ErrorLogger.Log(ex, "frmUpdate.DownloadUpdate")
         Finally
             _cts = Nothing
         End Try
@@ -128,7 +131,8 @@ Friend Partial Class frmUpdate
         End If
         Try
             Process.Start(New ProcessStartInfo(_release.HtmlUrl) With {.UseShellExecute = True})
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmUpdate.OpenRelease")
         End Try
     End Sub
 
@@ -195,7 +199,8 @@ Friend Partial Class frmUpdate
             File.WriteAllText(testPath, "x")
             File.Delete(testPath)
             Return True
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmUpdate.CanWriteToFolder")
             Return False
         End Try
     End Function

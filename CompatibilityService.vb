@@ -4,6 +4,7 @@ Imports System.Text.Json
 Imports System.Text.RegularExpressions
 
 Public Class CompatibilityService
+    ' Loads, caches, and parses the OptiScaler compatibility list.
     Private Shared ReadOnly DefaultListPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "Compatibility-List.md")
     Private Shared ReadOnly CachePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OptiScalerInstaller", "compatibility.json")
 
@@ -50,7 +51,8 @@ Public Class CompatibilityService
             Dim json As String = File.ReadAllText(CachePath)
             Dim entries As List(Of CompatibilityEntry) = JsonSerializer.Deserialize(Of List(Of CompatibilityEntry))(json)
             Return entries
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "CompatibilityService.TryLoadCache")
             Return Nothing
         End Try
     End Function
@@ -66,6 +68,7 @@ Public Class CompatibilityService
     End Sub
 
     Public Shared Function ParseCompatibilityList(content As String) As List(Of CompatibilityEntry)
+        ' Extract markdown link entries and ignore non-wiki URLs.
         Dim entries As New List(Of CompatibilityEntry)()
         Dim regex As New Regex("\[(.*?)\]\((.*?)\)")
 

@@ -1,10 +1,12 @@
 Imports System.IO
 Imports System.Diagnostics
 Imports System.Threading.Tasks
+Imports System.Drawing
 Imports System.Runtime.InteropServices
 Imports System.Management
 
 Public Class MainForm
+    ' Main UI surface for detection, install, add-ons, settings, and logging.
     Private allCompatibilityEntries As List(Of CompatibilityEntry) = New List(Of CompatibilityEntry)()
     Private stableRelease As ReleaseInfo
     Private nightlyRelease As ReleaseInfo
@@ -17,6 +19,7 @@ Public Class MainForm
     Private windowSaveTimer As Timer
     Private windowSavePending As Boolean
     Private lastInstallStatusKey As String
+    Private latestUpdateRelease As UpdateReleaseInfo
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -51,7 +54,14 @@ Public Class MainForm
         ApplyWindowSettings()
         InitializeWindowSaveTimer()
         AppendLog("OptiScaler Installer started.")
+        BeginInvoke(New Action(AddressOf StartBackgroundTasks))
         BeginInvoke(New Action(AddressOf StartAutoDetection))
+    End Sub
+
+    ' Run background refreshes after the UI is ready.
+    Private Async Sub StartBackgroundTasks()
+        Await RefreshReleaseInfoAsync(False)
+        Await CheckForUpdatesSilentAsync()
     End Sub
 
     Private Sub UpdateWindowTitle()
@@ -94,6 +104,7 @@ Public Class MainForm
     End Sub
 
     Private Sub InitializeDefaults()
+        ' Set initial selections before applying user settings.
         rbStable.Checked = True
         rbGpuNvidia.Checked = True
         chkDlssInputs.Checked = True
@@ -115,6 +126,7 @@ Public Class MainForm
     End Sub
 
     Private Sub ApplyDetectedGpuVendor()
+        ' Auto-select GPU vendor based on detected adapters.
         If rbGpuNvidia Is Nothing OrElse rbGpuAmdIntel Is Nothing Then
             Return
         End If
@@ -166,7 +178,8 @@ Public Class MainForm
             If hasAmd OrElse hasIntel Then
                 Return GpuVendor.AmdIntel
             End If
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.DetectGpuVendor")
         End Try
 
         Return GpuVendor.Unknown
@@ -189,7 +202,8 @@ Public Class MainForm
                     End If
                 Next
             End Using
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.GetGpuAdapterNames.Wmi")
         End Try
 
         If names.Count = 0 Then
@@ -207,7 +221,8 @@ Public Class MainForm
                     device = New DISPLAY_DEVICE()
                     device.cb = Marshal.SizeOf(device)
                 End While
-            Catch
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "MainForm.GetGpuAdapterNames.DisplayDevices")
             End Try
         End If
 
@@ -231,6 +246,7 @@ Public Class MainForm
     End Function
 
     Private Sub LoadCompatibility()
+        ' Load cached or bundled compatibility data for the detection list.
         allCompatibilityEntries = CompatibilityService.LoadCompatibilityList()
         AppendLog("Loaded compatibility list: " & allCompatibilityEntries.Count & " entries.")
         ApplyCompatibilityFilter()
@@ -369,19 +385,33 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnRefreshReleases_Click(sender As Object, e As EventArgs) Handles btnRefreshReleases.Click
+        Await RefreshReleaseInfoAsync(True)
+    End Sub
+
+    Private Async Function RefreshReleaseInfoAsync(reportStatus As Boolean) As Task
+        ' Refresh stable/nightly release metadata without blocking the UI.
         Try
             AppendLog("Refreshing release info...")
-            SetStatus("Fetching release info...")
+            If reportStatus Then
+                SetStatus("Fetching release info...")
+            End If
+
             stableRelease = Await ReleaseService.GetStableReleaseAsync()
             nightlyRelease = Await ReleaseService.GetNightlyReleaseAsync()
             UpdateReleaseLabels()
-            SetStatus("Release info updated.")
+
+            If reportStatus Then
+                SetStatus("Release info updated.")
+            End If
             AppendLog("Release info updated.")
         Catch ex As Exception
             AppendLog("Failed to fetch releases: " & ex.Message)
-            SetStatus("Release fetch failed.")
+            If reportStatus Then
+                SetStatus("Release fetch failed.")
+            End If
+            ErrorLogger.Log(ex, "MainForm.RefreshReleases")
         End Try
-    End Sub
+    End Function
 
     Private Sub UpdateReleaseLabels()
         lblStableInfo.Text = FormatReleaseLabel("Stable", stableRelease)
@@ -447,6 +477,7 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog("Install failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ErrorLogger.Log(ex, "MainForm.Install")
         Finally
             btnInstall.Enabled = True
             UpdateProgress(0)
@@ -462,6 +493,7 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog("Uninstall failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Uninstall Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ErrorLogger.Log(ex, "MainForm.Uninstall")
         Finally
             btnUninstall.Enabled = True
             UpdateInstallStatus()
@@ -517,6 +549,7 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog("Failed to update compatibility list: " & ex.Message)
             SetStatus("List update failed.")
+            ErrorLogger.Log(ex, "MainForm.RefreshCompatibility")
         End Try
     End Sub
 
@@ -776,7 +809,8 @@ Public Class MainForm
             If result Is uninstallButton Then
                 Return InstallAction.Uninstall
             End If
-        Catch
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.PromptInstallAction")
             Dim fallbackText As String = "OptiScaler already installed." & Environment.NewLine &
                 "Yes = Update, No = Reinstall, Cancel = Stop (use Uninstall button to remove)."
             Dim result As DialogResult = MessageBox.Show(Me, fallbackText, "Existing Install Detected", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question)
@@ -1153,6 +1187,7 @@ Public Class MainForm
             If release Is Nothing Then
                 AppendLog("Update check failed: no release data.")
                 SetStatus("Update check failed.")
+                SetUpdateNoticeVisible(False, "")
                 If showUpToDateDialog Then
                     MessageBox.Show(Me, "Unable to check for updates right now.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 End If
@@ -1167,12 +1202,15 @@ Public Class MainForm
             If Not UpdateService.IsUpdateAvailable(currentVersion, release.Version) Then
                 AppendLog("Installer is up to date.")
                 SetStatus("Installer up to date.")
+                SetUpdateNoticeVisible(False, release.TagName)
                 If showUpToDateDialog Then
                     MessageBox.Show(Me, "You're already up to date.", "Updates", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 End If
                 Return
             End If
 
+            latestUpdateRelease = release
+            SetUpdateNoticeVisible(True, release.TagName)
             Using dlg As New frmUpdate(release, currentVersion)
                 dlg.ShowDialog(Me)
             End Using
@@ -1182,10 +1220,61 @@ Public Class MainForm
             If showUpToDateDialog Then
                 MessageBox.Show(Me, "Update check failed: " & ex.Message, "Updates", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End If
+            ErrorLogger.Log(ex, "MainForm.CheckForUpdates")
         Finally
             btnCheckForUpdates.Enabled = True
         End Try
     End Function
+
+    Private Async Function CheckForUpdatesSilentAsync() As Task
+        ' Check for installer updates without user prompts and set a subtle UI hint.
+        Try
+            AppendLog("Checking for installer updates...")
+            Dim release As UpdateReleaseInfo = Await UpdateService.GetLatestReleaseAsync()
+            If release Is Nothing Then
+                AppendLog("Update check failed: no release data.")
+                SetUpdateNoticeVisible(False, "")
+                Return
+            End If
+
+            latestUpdateRelease = release
+            Dim currentVersion As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+            If currentVersion Is Nothing Then
+                currentVersion = New Version(0, 0)
+            End If
+
+            Dim isAvailable As Boolean = UpdateService.IsUpdateAvailable(currentVersion, release.Version)
+            SetUpdateNoticeVisible(isAvailable, release.TagName)
+            If isAvailable Then
+                AppendLog("Installer update available: " & release.TagName)
+            Else
+                AppendLog("Installer is up to date.")
+            End If
+        Catch ex As Exception
+            AppendLog("Update check failed: " & ex.Message)
+            SetUpdateNoticeVisible(False, "")
+            ErrorLogger.Log(ex, "MainForm.CheckForUpdatesSilent")
+        End Try
+    End Function
+
+    Private Sub SetUpdateNoticeVisible(isVisible As Boolean, latestTag As String)
+        ' Toggle the update hint label on the Settings tab.
+        If lblUpdateNotice Is Nothing Then
+            Return
+        End If
+
+        If lblUpdateNotice.InvokeRequired Then
+            lblUpdateNotice.BeginInvoke(New Action(Of Boolean, String)(AddressOf SetUpdateNoticeVisible), isVisible, latestTag)
+            Return
+        End If
+
+        lblUpdateNotice.Visible = isVisible
+        If isVisible Then
+            Dim tagText As String = If(String.IsNullOrWhiteSpace(latestTag), "", " (" & latestTag & ")")
+            lblUpdateNotice.Text = "Update available" & tagText
+            lblUpdateNotice.ForeColor = Color.Goldenrod
+        End If
+    End Sub
 
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then
@@ -1492,6 +1581,7 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog(label & " failed: " & ex.Message)
             toolDetectedLabel.Text = "Detected: error"
+            ErrorLogger.Log(ex, "MainForm.DetectGames")
         Finally
             btnScanDetected.Enabled = True
         End Try

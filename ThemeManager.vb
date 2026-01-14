@@ -5,6 +5,7 @@ Imports System.Drawing
 Imports System.Windows.Forms
 
 Friend Module ThemeManager
+    ' Applies the custom light/dark palette to supported WinForms controls.
     Public Sub ApplyTheme(root As Control, mode As SystemColorMode)
         Dim palette As ThemePalette = ThemePalette.FromMode(mode)
         ApplyToControl(root, palette)

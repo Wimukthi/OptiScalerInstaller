@@ -1,6 +1,7 @@
 Imports System.Text
 
 Friend Module NameNormalization
+    ' Normalizes titles for looser matching against compatibility entries.
     Private ReadOnly SkipTokens As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {
         "game", "of", "the", "year", "goty", "ultimate", "edition", "definitive", "remastered",
         "deluxe", "complete", "collector", "collectors", "director", "directors", "cut",

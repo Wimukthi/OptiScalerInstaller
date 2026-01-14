@@ -2,6 +2,7 @@ Imports System.Net.Http
 Imports System.Text.Json
 
 Public Class ReleaseService
+    ' Fetches OptiScaler stable/nightly release metadata from GitHub.
     Public Shared Async Function GetStableReleaseAsync() As Task(Of ReleaseInfo)
         Dim url As String = GetStableReleaseUrl()
         If String.IsNullOrWhiteSpace(url) Then

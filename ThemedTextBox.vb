@@ -7,6 +7,7 @@ Imports System.Windows.Forms
 
 <DefaultEvent("TextChanged")>
 Friend Class ThemedTextBox
+    ' UserControl wrapper that renders a themed border around a TextBox.
     Inherits UserControl
 
     Private ReadOnly _textBox As TextBox

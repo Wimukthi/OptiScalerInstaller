@@ -1,4 +1,5 @@
 Public Class DetectedGame
+    ' Result of a detected installation matched against the compatibility list.
     Public Property DisplayName As String
     Public Property Platform As String
     Public Property InstallDir As String

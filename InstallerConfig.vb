@@ -1,4 +1,5 @@
 Public Class InstallerConfig
+    ' Captures all install-time options gathered from the UI.
     Public Property GameExePath As String
     Public Property GameFolder As String
     Public Property HookName As String
