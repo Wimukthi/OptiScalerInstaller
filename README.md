@@ -101,6 +101,7 @@ Settings:
 
 ## Version History
 
+- v1.0.3.4 - Restore list view headers by correcting dock order in the Game Detection layout.
 - v1.0.3.2 - Stabilize Game Detection header layout with layout panels and fix dock order.
 - v1.0.2.8 - Fix Game Detection layout spacing, dock the header/footer, and persist dark theme by default.
 - v1.0.1.7 - Versioning now auto-bumps patch/minor/major every 10/100/1000 builds.

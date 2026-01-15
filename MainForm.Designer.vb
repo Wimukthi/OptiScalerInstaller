@@ -212,9 +212,9 @@ Partial Class MainForm
         ' 
         ' tabCompatibility
         ' 
+        tabCompatibility.Controls.Add(lvCompatibility)
         tabCompatibility.Controls.Add(compatFooterPanel)
         tabCompatibility.Controls.Add(compatHeaderPanel)
-        tabCompatibility.Controls.Add(lvCompatibility)
         tabCompatibility.Location = New Point(4, 24)
         tabCompatibility.Name = "tabCompatibility"
         tabCompatibility.Padding = New Padding(3)
