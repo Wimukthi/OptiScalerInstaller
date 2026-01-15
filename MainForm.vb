@@ -1271,6 +1271,10 @@ Public Class MainForm
             lblUpdateNotice.Text = "Update available" & tagText
             lblUpdateNotice.ForeColor = Color.Goldenrod
         End If
+
+        If btnCheckForUpdates IsNot Nothing Then
+            btnCheckForUpdates.Text = If(isVisible, "Update now", "Check for updates")
+        End If
     End Sub
 
     Private Sub SetStatus(message As String)

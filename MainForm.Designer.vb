@@ -275,15 +275,11 @@ Partial Class MainForm
         ' 
         ' compatHeaderLeftPanel
         ' 
-        compatHeaderLeftPanel.ColumnCount = 4
+        compatHeaderLeftPanel.ColumnCount = 2
         compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
         compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100F))
-        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
-        compatHeaderLeftPanel.ColumnStyles.Add(New ColumnStyle())
         compatHeaderLeftPanel.Controls.Add(lblSearch, 0, 0)
         compatHeaderLeftPanel.Controls.Add(txtGameSearch, 1, 0)
-        compatHeaderLeftPanel.Controls.Add(btnScanDetected, 2, 0)
-        compatHeaderLeftPanel.Controls.Add(btnUseDetected, 3, 0)
         compatHeaderLeftPanel.Dock = DockStyle.Fill
         compatHeaderLeftPanel.Location = New Point(6, 6)
         compatHeaderLeftPanel.Margin = New Padding(0)
@@ -297,6 +293,8 @@ Partial Class MainForm
         ' 
         compatHeaderRightPanel.AutoSize = True
         compatHeaderRightPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink
+        compatHeaderRightPanel.Controls.Add(btnScanDetected)
+        compatHeaderRightPanel.Controls.Add(btnUseDetected)
         compatHeaderRightPanel.Controls.Add(btnRefreshCompatibility)
         compatHeaderRightPanel.Controls.Add(btnOpenWiki)
         compatHeaderRightPanel.Dock = DockStyle.Right
@@ -312,7 +310,7 @@ Partial Class MainForm
         ' btnOpenWiki
         ' 
         btnOpenWiki.Anchor = AnchorStyles.None
-        btnOpenWiki.Location = New Point(133, 2)
+        btnOpenWiki.Location = New Point(419, 2)
         btnOpenWiki.Margin = New Padding(6, 0, 0, 0)
         btnOpenWiki.Name = "btnOpenWiki"
         btnOpenWiki.Size = New Size(140, 27)
@@ -323,8 +321,8 @@ Partial Class MainForm
         ' btnRefreshCompatibility
         ' 
         btnRefreshCompatibility.Anchor = AnchorStyles.None
-        btnRefreshCompatibility.Location = New Point(0, 2)
-        btnRefreshCompatibility.Margin = New Padding(0)
+        btnRefreshCompatibility.Location = New Point(283, 2)
+        btnRefreshCompatibility.Margin = New Padding(6, 0, 0, 0)
         btnRefreshCompatibility.Name = "btnRefreshCompatibility"
         btnRefreshCompatibility.Size = New Size(130, 27)
         btnRefreshCompatibility.TabIndex = 4
@@ -334,7 +332,7 @@ Partial Class MainForm
         ' btnUseDetected
         ' 
         btnUseDetected.Anchor = AnchorStyles.None
-        btnUseDetected.Location = New Point(680, 2)
+        btnUseDetected.Location = New Point(147, 2)
         btnUseDetected.Margin = New Padding(6, 0, 0, 0)
         btnUseDetected.Name = "btnUseDetected"
         btnUseDetected.Size = New Size(130, 27)
@@ -345,8 +343,8 @@ Partial Class MainForm
         ' btnScanDetected
         ' 
         btnScanDetected.Anchor = AnchorStyles.None
-        btnScanDetected.Location = New Point(524, 2)
-        btnScanDetected.Margin = New Padding(6, 0, 0, 0)
+        btnScanDetected.Location = New Point(0, 2)
+        btnScanDetected.Margin = New Padding(0)
         btnScanDetected.Name = "btnScanDetected"
         btnScanDetected.Size = New Size(150, 27)
         btnScanDetected.TabIndex = 2
