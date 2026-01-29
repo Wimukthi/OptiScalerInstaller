@@ -8,6 +8,7 @@ Imports System.Management
 Imports System.Text
 Imports System.Text.Json
 Imports System.Net
+Imports System.Net.Http
 
 Public Class MainForm
     ' Main UI surface for detection, install, add-ons, settings, and logging.

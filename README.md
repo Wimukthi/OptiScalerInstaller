@@ -105,6 +105,7 @@ Settings:
 
 ## Version History
 
+- v1.0.3.8 - Handle missing OptiScaler release URLs (404) without blocking other release data.
 - v1.0.3.7 - Default install presets, diagnostics export, EA/Ubisoft detection, and updater rollback safety.
 - v1.0.3.5 - Align Game Detection action buttons and update the update button label when a new version is available.
 - v1.0.3.4 - Restore list view headers by correcting dock order in the Game Detection layout.
