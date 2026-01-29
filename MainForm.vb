@@ -7,6 +7,7 @@ Imports System.Runtime.InteropServices
 Imports System.Management
 Imports System.Text
 Imports System.Text.Json
+Imports System.Net
 
 Public Class MainForm
     ' Main UI surface for detection, install, add-ons, settings, and logging.
@@ -442,27 +443,51 @@ Public Class MainForm
 
     Private Async Function RefreshReleaseInfoAsync(reportStatus As Boolean) As Task
         ' Refresh stable/nightly release metadata without blocking the UI.
+        AppendLog("Refreshing release info...")
+        If reportStatus Then
+            SetStatus("Fetching release info...")
+        End If
+
+        Dim stableOk As Boolean = False
+        Dim nightlyOk As Boolean = False
+
         Try
-            AppendLog("Refreshing release info...")
-            If reportStatus Then
-                SetStatus("Fetching release info...")
-            End If
-
             stableRelease = Await ReleaseService.GetStableReleaseAsync()
-            nightlyRelease = Await ReleaseService.GetNightlyReleaseAsync()
-            UpdateReleaseLabels()
+            stableOk = stableRelease IsNot Nothing
+        Catch ex As HttpRequestException When ex.StatusCode.HasValue AndAlso ex.StatusCode.Value = HttpStatusCode.NotFound
+            stableRelease = Nothing
+            AppendLog("Stable release not found (404). Check the stable release URL in Settings.")
+        Catch ex As Exception
+            stableRelease = Nothing
+            AppendLog("Failed to fetch stable release: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.RefreshReleases.Stable")
+        End Try
 
+        Try
+            nightlyRelease = Await ReleaseService.GetNightlyReleaseAsync()
+            nightlyOk = nightlyRelease IsNot Nothing
+        Catch ex As HttpRequestException When ex.StatusCode.HasValue AndAlso ex.StatusCode.Value = HttpStatusCode.NotFound
+            nightlyRelease = Nothing
+            AppendLog("Nightly release not found (404). It may be unavailable or the URL may be incorrect.")
+        Catch ex As Exception
+            nightlyRelease = Nothing
+            AppendLog("Failed to fetch nightly release: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.RefreshReleases.Nightly")
+        End Try
+
+        UpdateReleaseLabels()
+
+        If stableOk OrElse nightlyOk Then
             If reportStatus Then
                 SetStatus("Release info updated.")
             End If
             AppendLog("Release info updated.")
-        Catch ex As Exception
-            AppendLog("Failed to fetch releases: " & ex.Message)
+        Else
             If reportStatus Then
                 SetStatus("Release fetch failed.")
             End If
-            ErrorLogger.Log(ex, "MainForm.RefreshReleases")
-        End Try
+            AppendLog("Failed to fetch releases.")
+        End If
     End Function
 
     Private Sub UpdateReleaseLabels()
