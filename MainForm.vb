@@ -2,8 +2,11 @@ Imports System.IO
 Imports System.Diagnostics
 Imports System.Threading.Tasks
 Imports System.Drawing
+Imports System.IO.Compression
 Imports System.Runtime.InteropServices
 Imports System.Management
+Imports System.Text
+Imports System.Text.Json
 
 Public Class MainForm
     ' Main UI surface for detection, install, add-ons, settings, and logging.
@@ -11,6 +14,7 @@ Public Class MainForm
     Private stableRelease As ReleaseInfo
     Private nightlyRelease As ReleaseInfo
     Private _settingThemeState As Boolean
+    Private _settingDefaultsPreset As Boolean
     Private detectedGames As List(Of DetectedGame) = New List(Of DetectedGame)()
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
@@ -113,6 +117,12 @@ Public Class MainForm
         cmbConflictMode.SelectedIndex = 0
         cmbFgType.SelectedIndex = 0
         cmbDefaultIniMode.SelectedIndex = 0
+        cmbDefaultPreset.SelectedIndex = 0
+        cmbDefaultHookName.SelectedIndex = 0
+        cmbDefaultGpuVendor.SelectedIndex = 0
+        chkDefaultDlssInputs.Checked = True
+        cmbDefaultFgType.SelectedIndex = 0
+        cmbDefaultConflictMode.SelectedIndex = 0
         ToggleLocalArchive()
         ApplyDetectedGpuVendor()
         UpdateGpuControls()
@@ -345,6 +355,51 @@ Public Class MainForm
         End Using
     End Sub
 
+    Private Sub cmbDefaultPreset_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbDefaultPreset.SelectedIndexChanged
+        If _settingDefaultsPreset Then
+            Return
+        End If
+
+        If cmbDefaultPreset.SelectedIndex <= 0 Then
+            Return
+        End If
+
+        _settingDefaultsPreset = True
+        Select Case cmbDefaultPreset.SelectedIndex
+            Case 1
+                cmbDefaultGpuVendor.SelectedIndex = 1
+                chkDefaultDlssInputs.Checked = True
+            Case 2
+                cmbDefaultGpuVendor.SelectedIndex = 2
+                chkDefaultDlssInputs.Checked = False
+        End Select
+        _settingDefaultsPreset = False
+    End Sub
+
+    Private Sub DefaultInstallSettingChanged(sender As Object, e As EventArgs) Handles cmbDefaultHookName.SelectedIndexChanged,
+        cmbDefaultGpuVendor.SelectedIndexChanged,
+        chkDefaultDlssInputs.CheckedChanged,
+        cmbDefaultFgType.SelectedIndexChanged,
+        cmbDefaultConflictMode.SelectedIndexChanged
+        If _settingDefaultsPreset Then
+            Return
+        End If
+
+        If cmbDefaultPreset.SelectedIndex < 0 Then
+            Return
+        End If
+
+        If cmbDefaultPreset.SelectedIndex <> 0 Then
+            _settingDefaultsPreset = True
+            cmbDefaultPreset.SelectedIndex = 0
+            _settingDefaultsPreset = False
+        End If
+    End Sub
+
+    Private Sub btnApplyDefaults_Click(sender As Object, e As EventArgs) Handles btnApplyDefaults.Click
+        ApplyDefaultInstallOptionsFromUi(True)
+    End Sub
+
     Private Sub rbStable_CheckedChanged(sender As Object, e As EventArgs) Handles rbStable.CheckedChanged
         ToggleLocalArchive()
     End Sub
@@ -467,6 +522,11 @@ Public Class MainForm
                 AppendLog("Updating existing OptiScaler install...")
             End If
 
+            If Not RunInstallPreflight(config) Then
+                AppendLog("Install aborted (preflight).")
+                Return
+            End If
+
             Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
 
             MessageBox.Show(Me, "OptiScaler installed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -516,6 +576,106 @@ Public Class MainForm
         End If
 
         Return removed
+    End Function
+
+    Private Function RunInstallPreflight(config As InstallerConfig) As Boolean
+        If config Is Nothing Then
+            MessageBox.Show(Me, "Installer configuration is missing.", "Install", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return False
+        End If
+
+        Dim errors As New List(Of String)()
+        Dim warnings As New List(Of String)()
+
+        If String.IsNullOrWhiteSpace(config.GameExePath) OrElse Not File.Exists(config.GameExePath) Then
+            errors.Add("Game executable not found.")
+        End If
+
+        If String.IsNullOrWhiteSpace(config.GameFolder) OrElse Not Directory.Exists(config.GameFolder) Then
+            errors.Add("Game folder not found.")
+        End If
+
+        If String.IsNullOrWhiteSpace(config.HookName) Then
+            errors.Add("Hook filename is missing.")
+        End If
+
+        If config.Source = ReleaseSource.LocalArchive Then
+            If String.IsNullOrWhiteSpace(config.LocalArchivePath) OrElse Not File.Exists(config.LocalArchivePath) Then
+                errors.Add("Local OptiScaler archive not found.")
+            End If
+        End If
+
+        If config.FgType = FgTypeSelection.Nukem Then
+            If String.IsNullOrWhiteSpace(config.NukemDllPath) OrElse Not File.Exists(config.NukemDllPath) Then
+                errors.Add("Nukem frame generation selected but DLL is missing.")
+            End If
+        End If
+
+        If errors.Count > 0 Then
+            Dim message As String = "Fix the following before installing:" & Environment.NewLine & "- " & String.Join(Environment.NewLine & "- ", errors)
+            MessageBox.Show(Me, message, "Install validation failed", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            AppendLog("Preflight errors: " & String.Join("; ", errors))
+            Return False
+        End If
+
+        If Not String.IsNullOrWhiteSpace(config.GameExePath) AndAlso Not String.IsNullOrWhiteSpace(config.GameFolder) Then
+            Dim exeDir As String = Path.GetDirectoryName(config.GameExePath)
+            If Not String.IsNullOrWhiteSpace(exeDir) Then
+                Dim normalizedExeDir As String = NormalizePathSafe(exeDir)
+                Dim normalizedGameDir As String = NormalizePathSafe(config.GameFolder)
+                If Not String.Equals(normalizedExeDir, normalizedGameDir, StringComparison.OrdinalIgnoreCase) Then
+                    warnings.Add("Game executable is not inside the selected game folder.")
+                End If
+            End If
+        End If
+
+        If Directory.Exists(Path.Combine(config.GameFolder, "Engine")) Then
+            warnings.Add("Engine folder detected. Unreal Engine games should target the Win64/WinGDK binaries folder.")
+        End If
+
+        If Not IsFolderWritable(config.GameFolder) Then
+            warnings.Add("Game folder is not writable. Installation may require admin rights.")
+        End If
+
+        If warnings.Count > 0 Then
+            Dim message As String = "Continue with these warnings?" & Environment.NewLine & "- " & String.Join(Environment.NewLine & "- ", warnings)
+            Dim result As DialogResult = MessageBox.Show(Me, message, "Install warnings", MessageBoxButtons.YesNo, MessageBoxIcon.Warning)
+            AppendLog("Preflight warnings: " & String.Join("; ", warnings))
+            Return result = DialogResult.Yes
+        End If
+
+        Return True
+    End Function
+
+    Private Function NormalizePathSafe(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Dim normalized As String = value.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+        Try
+            normalized = Path.GetFullPath(normalized)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.NormalizePathSafe")
+        End Try
+
+        Return normalized.TrimEnd(Path.DirectorySeparatorChar)
+    End Function
+
+    Private Function IsFolderWritable(folderPath As String) As Boolean
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return False
+        End If
+
+        Try
+            Dim testPath As String = Path.Combine(folderPath, ".write_test_" & Guid.NewGuid().ToString("N"))
+            File.WriteAllText(testPath, "x")
+            File.Delete(testPath)
+            Return True
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.IsFolderWritable")
+            Return False
+        End Try
     End Function
 
     Private Sub btnOpenWiki_Click(sender As Object, e As EventArgs) Handles btnOpenWiki.Click
@@ -711,6 +871,7 @@ Public Class MainForm
             txtGameExe.Text = exePath
         End If
 
+        ApplyDefaultInstallOptionsFromUi(False)
         tabMain.SelectedTab = tabInstall
     End Sub
 
@@ -1137,6 +1298,12 @@ Public Class MainForm
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
+        settings.DefaultPreset = GetDefaultPresetValue()
+        settings.DefaultHookName = GetDefaultHookValue()
+        settings.DefaultGpuVendor = GetDefaultGpuVendorValue()
+        settings.DefaultDlssInputs = chkDefaultDlssInputs.Checked
+        settings.DefaultFrameGeneration = GetDefaultFrameGenerationToken(cmbDefaultFgType.SelectedIndex)
+        settings.DefaultConflictMode = GetDefaultConflictModeToken(cmbDefaultConflictMode.SelectedIndex)
         AppSettings.Save(settings)
         lblSettingsPath.Text = "Settings file: " & AppSettings.GetSettingsPath()
         AppendLog("Settings saved.")
@@ -1172,6 +1339,10 @@ Public Class MainForm
 
     Private Async Sub btnCheckForUpdates_Click(sender As Object, e As EventArgs) Handles btnCheckForUpdates.Click
         Await CheckForUpdatesAsync(True)
+    End Sub
+
+    Private Async Sub btnExportDiagnostics_Click(sender As Object, e As EventArgs) Handles btnExportDiagnostics.Click
+        Await ExportDiagnosticsAsync()
     End Sub
 
     Private Async Function CheckForUpdatesAsync(showUpToDateDialog As Boolean) As Task
@@ -1277,6 +1448,118 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Async Function ExportDiagnosticsAsync() As Task
+        Dim dialog As New SaveFileDialog() With {
+            .Filter = "Diagnostics zip (*.zip)|*.zip|All files (*.*)|*.*",
+            .Title = "Save diagnostics package",
+            .FileName = "OptiScalerInstaller-diagnostics-" & DateTime.Now.ToString("yyyyMMdd-HHmmss") & ".zip"
+        }
+
+        If dialog.ShowDialog(Me) <> DialogResult.OK Then
+            Return
+        End If
+
+        Dim tempRoot As String = Path.Combine(Path.GetTempPath(), "OptiScalerInstallerDiagnostics", Guid.NewGuid().ToString("N"))
+        Dim logText As String = txtLog.Text
+        Dim settingsPath As String = AppSettings.GetSettingsPath()
+        Dim errorPath As String = Path.Combine(Application.StartupPath, "Errors", "Error_Log.txt")
+        Dim detectedSnapshot As List(Of DiagnosticsDetectedGame) = BuildDiagnosticsDetectedGames()
+        Dim detectedJson As String = JsonSerializer.Serialize(detectedSnapshot, New JsonSerializerOptions With {.WriteIndented = True})
+        Dim systemInfo As String = BuildSystemInfo(detectedSnapshot.Count)
+
+        Try
+            Await Task.Run(Sub()
+                               Directory.CreateDirectory(tempRoot)
+                               File.WriteAllText(Path.Combine(tempRoot, "log_output.txt"), logText)
+                               File.WriteAllText(Path.Combine(tempRoot, "system_info.txt"), systemInfo)
+                               File.WriteAllText(Path.Combine(tempRoot, "detected_games.json"), detectedJson)
+
+                               If File.Exists(settingsPath) Then
+                                   File.Copy(settingsPath, Path.Combine(tempRoot, "settings.json"), True)
+                               End If
+
+                               If File.Exists(errorPath) Then
+                                   File.Copy(errorPath, Path.Combine(tempRoot, "error_log.txt"), True)
+                               End If
+                           End Sub)
+
+            If File.Exists(dialog.FileName) Then
+                File.Delete(dialog.FileName)
+            End If
+
+            ZipFile.CreateFromDirectory(tempRoot, dialog.FileName, CompressionLevel.Optimal, False)
+            AppendLog("Diagnostics exported: " & dialog.FileName)
+            MessageBox.Show(Me, "Diagnostics package saved.", "Diagnostics", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Catch ex As Exception
+            AppendLog("Diagnostics export failed: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.ExportDiagnostics")
+            MessageBox.Show(Me, "Diagnostics export failed: " & ex.Message, "Diagnostics", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            Try
+                If Directory.Exists(tempRoot) Then
+                    Directory.Delete(tempRoot, True)
+                End If
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "MainForm.ExportDiagnosticsCleanup")
+            End Try
+        End Try
+    End Function
+
+    Private Function BuildDiagnosticsDetectedGames() As List(Of DiagnosticsDetectedGame)
+        Dim snapshot As New List(Of DiagnosticsDetectedGame)()
+
+        If detectedGames Is Nothing Then
+            Return snapshot
+        End If
+
+        For Each game As DetectedGame In detectedGames
+            If game Is Nothing Then
+                Continue For
+            End If
+
+            Dim key As String = NameNormalization.NormalizeRelaxedName(game.DisplayName)
+            Dim info As OptiScalerInstallInfo = Nothing
+            If detectedInstallLookup IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(key) Then
+                detectedInstallLookup.TryGetValue(key, info)
+            End If
+
+            If info Is Nothing AndAlso Not String.IsNullOrWhiteSpace(game.InstallDir) Then
+                info = OptiScalerInstallDetector.Detect(game.InstallDir)
+            End If
+
+            snapshot.Add(New DiagnosticsDetectedGame With {
+                .DisplayName = game.DisplayName,
+                .Platform = game.Platform,
+                .InstallDir = game.InstallDir,
+                .SourceName = game.SourceName,
+                .OptiScalerInstalled = If(info IsNot Nothing, info.IsInstalled, False),
+                .OptiScalerVersion = If(info IsNot Nothing, info.Version, ""),
+                .OptiScalerSource = If(info IsNot Nothing, info.Source, "")
+            })
+        Next
+
+        Return snapshot
+    End Function
+
+    Private Function BuildSystemInfo(detectedCount As Integer) As String
+        Dim version As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+        Dim build As Integer = If(version IsNot Nothing AndAlso version.Build >= 0, version.Build, 0)
+        Dim revision As Integer = If(version IsNot Nothing AndAlso version.Revision >= 0, version.Revision, 0)
+        Dim versionText As String = If(version Is Nothing, "Unknown", $"{version.Major}.{version.Minor}.{build}.{revision}")
+
+        Dim sb As New StringBuilder()
+        sb.AppendLine("OptiScaler Installer Diagnostics")
+        sb.AppendLine("Generated: " & DateTime.Now.ToString("u"))
+        sb.AppendLine("AppVersion: " & versionText)
+        sb.AppendLine("OS: " & Environment.OSVersion.ToString())
+        sb.AppendLine("Is64BitOS: " & Environment.Is64BitOperatingSystem)
+        sb.AppendLine(".NET: " & Environment.Version.ToString())
+        sb.AppendLine("DetectedGames: " & detectedCount)
+        sb.AppendLine("Theme: " & ThemeSettings.GetPreferredColorMode().ToString())
+        sb.AppendLine("GPU Adapters: " & String.Join("; ", GetGpuAdapterNames()))
+        Return sb.ToString()
+    End Function
+
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then
             statusStrip.BeginInvoke(New Action(Of String)(AddressOf SetStatus), message)
@@ -1305,7 +1588,7 @@ Public Class MainForm
         toolTip.SetToolTip(tabMain, "Main navigation tabs.")
 
         toolTip.SetToolTip(txtGameSearch, "Filter the list by game name. Case-insensitive.")
-        toolTip.SetToolTip(btnScanDetected, "Scan installed Steam, Epic, and GOG games and mark matches in the list. No files are modified.")
+        toolTip.SetToolTip(btnScanDetected, "Scan installed Steam, Epic, GOG, EA, and Ubisoft games and mark matches in the list. No files are modified.")
         toolTip.SetToolTip(btnUseDetected, "Use the selected detected game and prefill the Install tab. You can still change settings before installing.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the wiki and refresh the table.")
         toolTip.SetToolTip(btnOpenWiki, "Open the selected game's wiki page in your browser.")
@@ -1363,17 +1646,26 @@ Public Class MainForm
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
         toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for a default OptiScaler.ini template.")
         toolTip.SetToolTip(cmbDefaultIniMode, "Choose how to apply the default OptiScaler.ini.")
+        toolTip.SetToolTip(cmbDefaultPreset, "Preset defaults for new installs (customizable).")
+        toolTip.SetToolTip(cmbDefaultHookName, "Default hook filename applied to installs.")
+        toolTip.SetToolTip(cmbDefaultGpuVendor, "Default GPU selection applied to installs.")
+        toolTip.SetToolTip(chkDefaultDlssInputs, "Default DLSS input spoofing toggle for installs.")
+        toolTip.SetToolTip(cmbDefaultFgType, "Default frame generation choice for installs.")
+        toolTip.SetToolTip(cmbDefaultConflictMode, "Default behavior when files already exist.")
+        toolTip.SetToolTip(btnApplyDefaults, "Apply these default options to the Install tab.")
         toolTip.SetToolTip(btnSaveSettings, "Save settings to disk.")
         toolTip.SetToolTip(btnReloadSettings, "Reload settings from disk and discard edits.")
         toolTip.SetToolTip(btnLoadDefaults, "Load defaults from the bundled settings file.")
         toolTip.SetToolTip(btnOpenSettingsFile, "Open the settings file in your default editor.")
         toolTip.SetToolTip(btnCheckForUpdates, "Check for OptiScaler Installer updates.")
+        toolTip.SetToolTip(btnExportDiagnostics, "Export logs, settings, and detection data to a diagnostics zip.")
         toolTip.SetToolTip(lblInstalledStatus, "Shows detected OptiScaler installation status for the selected game folder.")
     End Sub
 
     Private Sub LoadSettingsUi()
         Dim settings As AppSettingsModel = AppSettings.Load()
         ApplySettingsToUi(settings)
+        ApplyDefaultInstallOptionsFromSettings(settings, False)
         lblSettingsPath.Text = "Settings file: " & AppSettings.GetSettingsPath()
         AppendLog("Settings loaded.")
     End Sub
@@ -1600,7 +1892,202 @@ Public Class MainForm
         txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
         txtDefaultIniPath.Text = settings.DefaultIniPath
         cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
+        _settingDefaultsPreset = True
+        cmbDefaultPreset.SelectedIndex = GetDefaultPresetIndex(settings.DefaultPreset)
+        cmbDefaultHookName.SelectedIndex = GetDefaultHookIndex(settings.DefaultHookName)
+        cmbDefaultGpuVendor.SelectedIndex = GetDefaultGpuVendorIndex(settings.DefaultGpuVendor)
+        chkDefaultDlssInputs.Checked = If(settings.DefaultDlssInputs.HasValue, settings.DefaultDlssInputs.Value, True)
+        cmbDefaultFgType.SelectedIndex = GetDefaultFrameGenerationIndex(settings.DefaultFrameGeneration)
+        cmbDefaultConflictMode.SelectedIndex = GetDefaultConflictModeIndex(settings.DefaultConflictMode)
+        _settingDefaultsPreset = False
     End Sub
+
+    Private Sub ApplyDefaultInstallOptionsFromSettings(settings As AppSettingsModel, Optional logAction As Boolean = True)
+        If settings Is Nothing Then
+            Return
+        End If
+
+        ApplyDefaultInstallOptions(settings.DefaultHookName,
+                                   settings.DefaultGpuVendor,
+                                   settings.DefaultDlssInputs,
+                                   settings.DefaultFrameGeneration,
+                                   settings.DefaultConflictMode,
+                                   logAction)
+    End Sub
+
+    Private Sub ApplyDefaultInstallOptionsFromUi(Optional logAction As Boolean = True)
+        Dim hookName As String = GetDefaultHookValue()
+        Dim gpuVendor As String = GetDefaultGpuVendorValue()
+        Dim fgToken As String = GetDefaultFrameGenerationToken(cmbDefaultFgType.SelectedIndex)
+        Dim conflictToken As String = GetDefaultConflictModeToken(cmbDefaultConflictMode.SelectedIndex)
+        Dim dlssInputs As Boolean? = chkDefaultDlssInputs.Checked
+        ApplyDefaultInstallOptions(hookName, gpuVendor, dlssInputs, fgToken, conflictToken, logAction)
+    End Sub
+
+    Private Sub ApplyDefaultInstallOptions(hookName As String,
+                                           gpuVendor As String,
+                                           dlssInputs As Boolean?,
+                                           frameGeneration As String,
+                                           conflictMode As String,
+                                           Optional logAction As Boolean = True)
+        Dim hookIndex As Integer = GetHookIndex(cmbHookName, hookName)
+        If hookIndex >= 0 Then
+            cmbHookName.SelectedIndex = hookIndex
+        End If
+
+        Select Case GetDefaultGpuVendorIndex(gpuVendor)
+            Case 1
+                rbGpuNvidia.Checked = True
+            Case 2
+                rbGpuAmdIntel.Checked = True
+            Case Else
+                ApplyDetectedGpuVendor()
+        End Select
+
+        If dlssInputs.HasValue Then
+            chkDlssInputs.Checked = dlssInputs.Value
+        End If
+
+        cmbFgType.SelectedIndex = GetDefaultFrameGenerationIndex(frameGeneration)
+        cmbConflictMode.SelectedIndex = GetDefaultConflictModeIndex(conflictMode)
+
+        If logAction Then
+            AppendLog("Applied default install options.")
+        End If
+    End Sub
+
+    Private Function GetHookIndex(combo As ComboBox, value As String) As Integer
+        If combo Is Nothing OrElse combo.Items Is Nothing Then
+            Return 0
+        End If
+
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Dim index As Integer = combo.Items.IndexOf(value)
+        If index < 0 Then
+            Return 0
+        End If
+
+        Return index
+    End Function
+
+    Private Function GetDefaultPresetIndex(value As String) As Integer
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Dim normalized As String = value.Trim().ToLowerInvariant()
+        If normalized.Contains("nvidia") Then
+            Return 1
+        End If
+        If normalized.Contains("amd") OrElse normalized.Contains("intel") Then
+            Return 2
+        End If
+
+        Return 0
+    End Function
+
+    Private Function GetDefaultHookIndex(value As String) As Integer
+        Return GetHookIndex(cmbDefaultHookName, value)
+    End Function
+
+    Private Function GetDefaultGpuVendorIndex(value As String) As Integer
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Dim normalized As String = value.Trim().ToLowerInvariant()
+        If normalized.Contains("nvidia") Then
+            Return 1
+        End If
+        If normalized.Contains("amd") OrElse normalized.Contains("intel") Then
+            Return 2
+        End If
+
+        Return 0
+    End Function
+
+    Private Function GetDefaultFrameGenerationIndex(value As String) As Integer
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Dim normalized As String = value.Trim().ToLowerInvariant()
+        If normalized.Contains("optifg") Then
+            Return 2
+        End If
+        If normalized.Contains("nukem") Then
+            Return 3
+        End If
+        If normalized.Contains("none") Then
+            Return 1
+        End If
+
+        Return 0
+    End Function
+
+    Private Function GetDefaultConflictModeIndex(value As String) As Integer
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Dim normalized As String = value.Trim().ToLowerInvariant()
+        If normalized.Contains("skip") Then
+            Return 2
+        End If
+        If normalized.Contains("overwrite") AndAlso Not normalized.Contains("backup") Then
+            Return 1
+        End If
+
+        Return 0
+    End Function
+
+    Private Function GetDefaultFrameGenerationToken(index As Integer) As String
+        Select Case index
+            Case 1
+                Return "None"
+            Case 2
+                Return "OptiFG"
+            Case 3
+                Return "Nukem"
+            Case Else
+                Return "Auto"
+        End Select
+    End Function
+
+    Private Function GetDefaultConflictModeToken(index As Integer) As String
+        Select Case index
+            Case 1
+                Return "Overwrite"
+            Case 2
+                Return "Skip"
+            Case Else
+                Return "BackupAndOverwrite"
+        End Select
+    End Function
+
+    Private Function GetDefaultPresetValue() As String
+        If cmbDefaultPreset.SelectedItem Is Nothing Then
+            Return "Custom"
+        End If
+        Return cmbDefaultPreset.SelectedItem.ToString()
+    End Function
+
+    Private Function GetDefaultHookValue() As String
+        If cmbDefaultHookName.SelectedItem Is Nothing Then
+            Return ""
+        End If
+        Return cmbDefaultHookName.SelectedItem.ToString()
+    End Function
+
+    Private Function GetDefaultGpuVendorValue() As String
+        If cmbDefaultGpuVendor.SelectedItem Is Nothing Then
+            Return "Auto"
+        End If
+        Return cmbDefaultGpuVendor.SelectedItem.ToString()
+    End Function
 
     Private Function BuildWikiUrl(slug As String) As String
         Dim settings As AppSettingsModel = AppSettings.Load()
@@ -1616,6 +2103,16 @@ Public Class MainForm
         Dim trimmedSlug As String = slug.TrimStart("/"c)
         Return baseUrl & trimmedSlug
     End Function
+
+    Private Class DiagnosticsDetectedGame
+        Public Property DisplayName As String
+        Public Property Platform As String
+        Public Property InstallDir As String
+        Public Property SourceName As String
+        Public Property OptiScalerInstalled As Boolean
+        Public Property OptiScalerVersion As String
+        Public Property OptiScalerSource As String
+    End Class
 
     Private Class CompatibilityRow
         Public Property Entry As CompatibilityEntry

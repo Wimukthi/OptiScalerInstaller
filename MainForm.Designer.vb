@@ -135,11 +135,26 @@ Partial Class MainForm
         btnBrowseDefaultIni = New Button()
         lblDefaultIniMode = New Label()
         cmbDefaultIniMode = New ComboBox()
+        grpDefaultInstall = New ThemedGroupBox()
+        lblDefaultPreset = New Label()
+        cmbDefaultPreset = New ComboBox()
+        lblDefaultHookName = New Label()
+        cmbDefaultHookName = New ComboBox()
+        lblDefaultGpuVendor = New Label()
+        cmbDefaultGpuVendor = New ComboBox()
+        lblDefaultDlssInputs = New Label()
+        chkDefaultDlssInputs = New CheckBox()
+        lblDefaultFgType = New Label()
+        cmbDefaultFgType = New ComboBox()
+        lblDefaultConflictMode = New Label()
+        cmbDefaultConflictMode = New ComboBox()
+        btnApplyDefaults = New Button()
         btnSaveSettings = New Button()
         btnReloadSettings = New Button()
         btnLoadDefaults = New Button()
         btnOpenSettingsFile = New Button()
         btnCheckForUpdates = New Button()
+        btnExportDiagnostics = New Button()
         lblUpdateNotice = New Label()
         lblSettingsPath = New Label()
         DarkThemeCheckBox = New CheckBox()
@@ -176,6 +191,7 @@ Partial Class MainForm
         grpAsi.SuspendLayout()
         tabSettings.SuspendLayout()
         grpSettings.SuspendLayout()
+        grpDefaultInstall.SuspendLayout()
         grpLog.SuspendLayout()
         statusStrip.SuspendLayout()
         SuspendLayout()
@@ -1305,11 +1321,13 @@ Partial Class MainForm
         grpSettings.Controls.Add(btnBrowseDefaultIni)
         grpSettings.Controls.Add(lblDefaultIniMode)
         grpSettings.Controls.Add(cmbDefaultIniMode)
+        grpSettings.Controls.Add(grpDefaultInstall)
         grpSettings.Controls.Add(btnSaveSettings)
         grpSettings.Controls.Add(btnReloadSettings)
         grpSettings.Controls.Add(btnLoadDefaults)
         grpSettings.Controls.Add(btnOpenSettingsFile)
         grpSettings.Controls.Add(btnCheckForUpdates)
+        grpSettings.Controls.Add(btnExportDiagnostics)
         grpSettings.Controls.Add(lblUpdateNotice)
         grpSettings.Controls.Add(lblSettingsPath)
         grpSettings.Controls.Add(DarkThemeCheckBox)
@@ -1477,6 +1495,158 @@ Partial Class MainForm
         cmbDefaultIniMode.Size = New Size(220, 23)
         cmbDefaultIniMode.TabIndex = 18
         ' 
+        ' grpDefaultInstall
+        ' 
+        grpDefaultInstall.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        grpDefaultInstall.Controls.Add(lblDefaultPreset)
+        grpDefaultInstall.Controls.Add(cmbDefaultPreset)
+        grpDefaultInstall.Controls.Add(lblDefaultHookName)
+        grpDefaultInstall.Controls.Add(cmbDefaultHookName)
+        grpDefaultInstall.Controls.Add(lblDefaultGpuVendor)
+        grpDefaultInstall.Controls.Add(cmbDefaultGpuVendor)
+        grpDefaultInstall.Controls.Add(lblDefaultDlssInputs)
+        grpDefaultInstall.Controls.Add(chkDefaultDlssInputs)
+        grpDefaultInstall.Controls.Add(lblDefaultFgType)
+        grpDefaultInstall.Controls.Add(cmbDefaultFgType)
+        grpDefaultInstall.Controls.Add(lblDefaultConflictMode)
+        grpDefaultInstall.Controls.Add(cmbDefaultConflictMode)
+        grpDefaultInstall.Controls.Add(btnApplyDefaults)
+        grpDefaultInstall.Location = New Point(12, 288)
+        grpDefaultInstall.Name = "grpDefaultInstall"
+        grpDefaultInstall.Size = New Size(1186, 250)
+        grpDefaultInstall.TabIndex = 19
+        grpDefaultInstall.TabStop = False
+        grpDefaultInstall.Text = "Default Install Options"
+        ' 
+        ' lblDefaultPreset
+        ' 
+        lblDefaultPreset.AutoSize = True
+        lblDefaultPreset.Location = New Point(12, 32)
+        lblDefaultPreset.Name = "lblDefaultPreset"
+        lblDefaultPreset.Size = New Size(41, 15)
+        lblDefaultPreset.TabIndex = 0
+        lblDefaultPreset.Text = "Preset"
+        ' 
+        ' cmbDefaultPreset
+        ' 
+        cmbDefaultPreset.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        cmbDefaultPreset.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultPreset.FormattingEnabled = True
+        cmbDefaultPreset.Items.AddRange(New Object() {"Custom", "NVIDIA + DLSS Inputs", "AMD/Intel (DLSS Inputs Off)"})
+        cmbDefaultPreset.Location = New Point(180, 28)
+        cmbDefaultPreset.Name = "cmbDefaultPreset"
+        cmbDefaultPreset.Size = New Size(480, 23)
+        cmbDefaultPreset.TabIndex = 1
+        ' 
+        ' lblDefaultHookName
+        ' 
+        lblDefaultHookName.AutoSize = True
+        lblDefaultHookName.Location = New Point(12, 64)
+        lblDefaultHookName.Name = "lblDefaultHookName"
+        lblDefaultHookName.Size = New Size(87, 15)
+        lblDefaultHookName.TabIndex = 2
+        lblDefaultHookName.Text = "Hook filename"
+        ' 
+        ' cmbDefaultHookName
+        ' 
+        cmbDefaultHookName.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        cmbDefaultHookName.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultHookName.FormattingEnabled = True
+        cmbDefaultHookName.Items.AddRange(New Object() {"dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "d3d12.dll", "wininet.dll", "winhttp.dll", "OptiScaler.asi"})
+        cmbDefaultHookName.Location = New Point(180, 60)
+        cmbDefaultHookName.Name = "cmbDefaultHookName"
+        cmbDefaultHookName.Size = New Size(480, 23)
+        cmbDefaultHookName.TabIndex = 3
+        ' 
+        ' lblDefaultGpuVendor
+        ' 
+        lblDefaultGpuVendor.AutoSize = True
+        lblDefaultGpuVendor.Location = New Point(12, 96)
+        lblDefaultGpuVendor.Name = "lblDefaultGpuVendor"
+        lblDefaultGpuVendor.Size = New Size(80, 15)
+        lblDefaultGpuVendor.TabIndex = 4
+        lblDefaultGpuVendor.Text = "GPU selection"
+        ' 
+        ' cmbDefaultGpuVendor
+        ' 
+        cmbDefaultGpuVendor.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        cmbDefaultGpuVendor.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultGpuVendor.FormattingEnabled = True
+        cmbDefaultGpuVendor.Items.AddRange(New Object() {"Auto (detect)", "NVIDIA", "AMD/Intel"})
+        cmbDefaultGpuVendor.Location = New Point(180, 92)
+        cmbDefaultGpuVendor.Name = "cmbDefaultGpuVendor"
+        cmbDefaultGpuVendor.Size = New Size(480, 23)
+        cmbDefaultGpuVendor.TabIndex = 5
+        ' 
+        ' lblDefaultDlssInputs
+        ' 
+        lblDefaultDlssInputs.AutoSize = True
+        lblDefaultDlssInputs.Location = New Point(12, 128)
+        lblDefaultDlssInputs.Name = "lblDefaultDlssInputs"
+        lblDefaultDlssInputs.Size = New Size(73, 15)
+        lblDefaultDlssInputs.TabIndex = 6
+        lblDefaultDlssInputs.Text = "DLSS inputs"
+        ' 
+        ' chkDefaultDlssInputs
+        ' 
+        chkDefaultDlssInputs.AutoSize = True
+        chkDefaultDlssInputs.Location = New Point(180, 126)
+        chkDefaultDlssInputs.Name = "chkDefaultDlssInputs"
+        chkDefaultDlssInputs.Size = New Size(180, 19)
+        chkDefaultDlssInputs.TabIndex = 7
+        chkDefaultDlssInputs.Text = "Enable DLSS input spoofing"
+        chkDefaultDlssInputs.UseVisualStyleBackColor = True
+        ' 
+        ' lblDefaultFgType
+        ' 
+        lblDefaultFgType.AutoSize = True
+        lblDefaultFgType.Location = New Point(12, 160)
+        lblDefaultFgType.Name = "lblDefaultFgType"
+        lblDefaultFgType.Size = New Size(104, 15)
+        lblDefaultFgType.TabIndex = 8
+        lblDefaultFgType.Text = "Frame generation"
+        ' 
+        ' cmbDefaultFgType
+        ' 
+        cmbDefaultFgType.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        cmbDefaultFgType.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultFgType.FormattingEnabled = True
+        cmbDefaultFgType.Items.AddRange(New Object() {"Auto (no change)", "None", "OptiFG (DX12 only)", "Nukem's dlssg-to-fsr3"})
+        cmbDefaultFgType.Location = New Point(180, 156)
+        cmbDefaultFgType.Name = "cmbDefaultFgType"
+        cmbDefaultFgType.Size = New Size(480, 23)
+        cmbDefaultFgType.TabIndex = 9
+        ' 
+        ' lblDefaultConflictMode
+        ' 
+        lblDefaultConflictMode.AutoSize = True
+        lblDefaultConflictMode.Location = New Point(12, 192)
+        lblDefaultConflictMode.Name = "lblDefaultConflictMode"
+        lblDefaultConflictMode.Size = New Size(76, 15)
+        lblDefaultConflictMode.TabIndex = 10
+        lblDefaultConflictMode.Text = "Existing files"
+        ' 
+        ' cmbDefaultConflictMode
+        ' 
+        cmbDefaultConflictMode.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        cmbDefaultConflictMode.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbDefaultConflictMode.FormattingEnabled = True
+        cmbDefaultConflictMode.Items.AddRange(New Object() {"Backup and overwrite", "Overwrite", "Skip existing"})
+        cmbDefaultConflictMode.Location = New Point(180, 188)
+        cmbDefaultConflictMode.Name = "cmbDefaultConflictMode"
+        cmbDefaultConflictMode.Size = New Size(480, 23)
+        cmbDefaultConflictMode.TabIndex = 11
+        ' 
+        ' btnApplyDefaults
+        ' 
+        btnApplyDefaults.Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
+        btnApplyDefaults.Location = New Point(1054, 210)
+        btnApplyDefaults.Name = "btnApplyDefaults"
+        btnApplyDefaults.Size = New Size(120, 30)
+        btnApplyDefaults.TabIndex = 12
+        btnApplyDefaults.Text = "Apply defaults"
+        btnApplyDefaults.UseVisualStyleBackColor = True
+        ' 
         ' btnSaveSettings
         ' 
         btnSaveSettings.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
@@ -1527,14 +1697,24 @@ Partial Class MainForm
         btnCheckForUpdates.Text = "Check for updates"
         btnCheckForUpdates.UseVisualStyleBackColor = True
         ' 
+        ' btnExportDiagnostics
+        ' 
+        btnExportDiagnostics.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
+        btnExportDiagnostics.Location = New Point(732, 597)
+        btnExportDiagnostics.Name = "btnExportDiagnostics"
+        btnExportDiagnostics.Size = New Size(160, 30)
+        btnExportDiagnostics.TabIndex = 24
+        btnExportDiagnostics.Text = "Export diagnostics"
+        btnExportDiagnostics.UseVisualStyleBackColor = True
+        ' 
         ' lblUpdateNotice
         ' 
         lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblUpdateNotice.AutoSize = True
-        lblUpdateNotice.Location = New Point(732, 604)
+        lblUpdateNotice.Location = New Point(900, 604)
         lblUpdateNotice.Name = "lblUpdateNotice"
         lblUpdateNotice.Size = New Size(94, 15)
-        lblUpdateNotice.TabIndex = 24
+        lblUpdateNotice.TabIndex = 25
         lblUpdateNotice.Text = "Update available"
         lblUpdateNotice.Visible = False
         ' 
@@ -1665,6 +1845,8 @@ Partial Class MainForm
         grpAsi.ResumeLayout(False)
         grpAsi.PerformLayout()
         tabSettings.ResumeLayout(False)
+        grpDefaultInstall.ResumeLayout(False)
+        grpDefaultInstall.PerformLayout()
         grpSettings.ResumeLayout(False)
         grpSettings.PerformLayout()
         grpLog.ResumeLayout(False)
@@ -1700,11 +1882,26 @@ Partial Class MainForm
     Friend WithEvents btnBrowseDefaultIni As System.Windows.Forms.Button
     Friend WithEvents lblDefaultIniMode As System.Windows.Forms.Label
     Friend WithEvents cmbDefaultIniMode As System.Windows.Forms.ComboBox
+    Friend WithEvents grpDefaultInstall As OptiScalerInstaller.ThemedGroupBox
+    Friend WithEvents lblDefaultPreset As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultPreset As System.Windows.Forms.ComboBox
+    Friend WithEvents lblDefaultHookName As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultHookName As System.Windows.Forms.ComboBox
+    Friend WithEvents lblDefaultGpuVendor As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultGpuVendor As System.Windows.Forms.ComboBox
+    Friend WithEvents lblDefaultDlssInputs As System.Windows.Forms.Label
+    Friend WithEvents chkDefaultDlssInputs As System.Windows.Forms.CheckBox
+    Friend WithEvents lblDefaultFgType As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultFgType As System.Windows.Forms.ComboBox
+    Friend WithEvents lblDefaultConflictMode As System.Windows.Forms.Label
+    Friend WithEvents cmbDefaultConflictMode As System.Windows.Forms.ComboBox
+    Friend WithEvents btnApplyDefaults As System.Windows.Forms.Button
     Friend WithEvents btnSaveSettings As System.Windows.Forms.Button
     Friend WithEvents btnReloadSettings As System.Windows.Forms.Button
     Friend WithEvents btnLoadDefaults As System.Windows.Forms.Button
     Friend WithEvents btnOpenSettingsFile As System.Windows.Forms.Button
     Friend WithEvents btnCheckForUpdates As System.Windows.Forms.Button
+    Friend WithEvents btnExportDiagnostics As System.Windows.Forms.Button
     Friend WithEvents lblUpdateNotice As System.Windows.Forms.Label
     Friend WithEvents lblSettingsPath As System.Windows.Forms.Label
     Friend WithEvents grpGame As OptiScalerInstaller.ThemedGroupBox

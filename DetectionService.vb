@@ -17,6 +17,8 @@ Public Class DetectionService
         AddSteamGames(matcher, results, seenPaths, log)
         AddEpicGames(matcher, results, seenPaths, log)
         AddGogGames(matcher, results, seenPaths, log)
+        AddEaGames(matcher, results, seenPaths, log)
+        AddUbisoftGames(matcher, results, seenPaths, log)
 
         results.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName))
         Return results
@@ -127,6 +129,107 @@ Public Class DetectionService
 
         If log IsNot Nothing AndAlso Not foundAny Then
             log("GOG Galaxy not detected.")
+        End If
+    End Sub
+
+    Private Shared Sub AddEaGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
+        ' EA installs are discovered through registry keys.
+        Dim roots As String() = {
+            "Software\EA Games",
+            "Software\WOW6432Node\EA Games",
+            "Software\Electronic Arts\EA Games",
+            "Software\WOW6432Node\Electronic Arts\EA Games"
+        }
+
+        Dim foundAny As Boolean = False
+        For Each rootPath As String In roots
+            Using rootKey As RegistryKey = Registry.LocalMachine.OpenSubKey(rootPath)
+                If rootKey Is Nothing Then
+                    Continue For
+                End If
+
+                foundAny = True
+                For Each subKeyName As String In rootKey.GetSubKeyNames()
+                    Using gameKey As RegistryKey = rootKey.OpenSubKey(subKeyName)
+                        If gameKey Is Nothing Then
+                            Continue For
+                        End If
+
+                        Dim name As String = Convert.ToString(gameKey.GetValue("DisplayName"))
+                        If String.IsNullOrWhiteSpace(name) Then
+                            name = Convert.ToString(gameKey.GetValue("name"))
+                        End If
+                        If String.IsNullOrWhiteSpace(name) Then
+                            name = Convert.ToString(gameKey.GetValue("gameName"))
+                        End If
+
+                        Dim installDir As String = Convert.ToString(gameKey.GetValue("Install Dir"))
+                        If String.IsNullOrWhiteSpace(installDir) Then
+                            installDir = Convert.ToString(gameKey.GetValue("InstallDir"))
+                        End If
+                        If String.IsNullOrWhiteSpace(installDir) Then
+                            installDir = Convert.ToString(gameKey.GetValue("InstallLocation"))
+                        End If
+                        If String.IsNullOrWhiteSpace(installDir) Then
+                            installDir = Convert.ToString(gameKey.GetValue("Install Path"))
+                        End If
+
+                        AddIfSupported(matcher, results, seenPaths, name, installDir, "EA App")
+                    End Using
+                Next
+            End Using
+        Next
+
+        If log IsNot Nothing AndAlso Not foundAny Then
+            log("EA App not detected.")
+        End If
+    End Sub
+
+    Private Shared Sub AddUbisoftGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
+        ' Ubisoft installs are discovered through Ubisoft Connect registry keys.
+        Dim roots As String() = {
+            "Software\Ubisoft\Launcher\Installs",
+            "Software\WOW6432Node\Ubisoft\Launcher\Installs"
+        }
+
+        Dim foundAny As Boolean = False
+        For Each rootPath As String In roots
+            Using rootKey As RegistryKey = Registry.LocalMachine.OpenSubKey(rootPath)
+                If rootKey Is Nothing Then
+                    Continue For
+                End If
+
+                foundAny = True
+                For Each subKeyName As String In rootKey.GetSubKeyNames()
+                    Using gameKey As RegistryKey = rootKey.OpenSubKey(subKeyName)
+                        If gameKey Is Nothing Then
+                            Continue For
+                        End If
+
+                        Dim installDir As String = Convert.ToString(gameKey.GetValue("InstallDir"))
+                        If String.IsNullOrWhiteSpace(installDir) Then
+                            installDir = Convert.ToString(gameKey.GetValue("InstallLocation"))
+                        End If
+                        If String.IsNullOrWhiteSpace(installDir) Then
+                            installDir = Convert.ToString(gameKey.GetValue("Path"))
+                        End If
+
+                        Dim name As String = Convert.ToString(gameKey.GetValue("DisplayName"))
+                        If String.IsNullOrWhiteSpace(name) Then
+                            name = Convert.ToString(gameKey.GetValue("Name"))
+                        End If
+                        If String.IsNullOrWhiteSpace(name) AndAlso Not String.IsNullOrWhiteSpace(installDir) Then
+                            name = Path.GetFileName(installDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                        End If
+
+                        AddIfSupported(matcher, results, seenPaths, name, installDir, "Ubisoft")
+                    End Using
+                Next
+            End Using
+        Next
+
+        If log IsNot Nothing AndAlso Not foundAny Then
+            log("Ubisoft Connect not detected.")
         End If
     End Sub
 

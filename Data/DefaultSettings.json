@@ -6,5 +6,11 @@
   "NightlyReleaseUrl": "https://api.github.com/repos/optiscaler/OptiScaler/releases/tags/nightly",
   "InstallerReleaseUrl": "https://api.github.com/repos/Wimukthi/OptiScalerInstaller/releases/latest",
   "DefaultIniMode": "Off",
-  "DefaultIniPath": ""
+  "DefaultIniPath": "",
+  "DefaultPreset": "Custom",
+  "DefaultHookName": "dxgi.dll",
+  "DefaultGpuVendor": "Auto",
+  "DefaultDlssInputs": true,
+  "DefaultFrameGeneration": "Auto",
+  "DefaultConflictMode": "BackupAndOverwrite"
 }

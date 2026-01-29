@@ -109,6 +109,12 @@ Friend Class AppSettingsModel
     Public Property InstallerReleaseUrl As String
     Public Property DefaultIniMode As String
     Public Property DefaultIniPath As String
+    Public Property DefaultPreset As String
+    Public Property DefaultHookName As String
+    Public Property DefaultGpuVendor As String
+    Public Property DefaultDlssInputs As Boolean?
+    Public Property DefaultFrameGeneration As String
+    Public Property DefaultConflictMode As String
 
     Public Function ApplyDefaults(defaults As AppSettingsModel) As Boolean
         If defaults Is Nothing Then
@@ -147,6 +153,30 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(DefaultIniPath) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniPath) Then
             DefaultIniPath = defaults.DefaultIniPath
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultPreset) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultPreset) Then
+            DefaultPreset = defaults.DefaultPreset
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultHookName) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultHookName) Then
+            DefaultHookName = defaults.DefaultHookName
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultGpuVendor) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultGpuVendor) Then
+            DefaultGpuVendor = defaults.DefaultGpuVendor
+            changed = True
+        End If
+        If Not DefaultDlssInputs.HasValue AndAlso defaults.DefaultDlssInputs.HasValue Then
+            DefaultDlssInputs = defaults.DefaultDlssInputs
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultFrameGeneration) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultFrameGeneration) Then
+            DefaultFrameGeneration = defaults.DefaultFrameGeneration
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(DefaultConflictMode) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultConflictMode) Then
+            DefaultConflictMode = defaults.DefaultConflictMode
             changed = True
         End If
 

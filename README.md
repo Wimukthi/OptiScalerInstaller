@@ -4,14 +4,16 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 
 ## Features
 
-- Auto-detect supported games (Steam, Epic, GOG) and prefill install settings.
+- Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect) and prefill install settings.
 - Compatibility list view with detection and OptiScaler install status/version.
 - Install from stable, nightly, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
 - Global OptiScaler.ini defaults (merge or replace) during install.
+- Default install option presets (hook, GPU, DLSS inputs, frame generation, conflict mode).
 - Detect existing OptiScaler installs and offer update/reinstall/uninstall.
 - Built-in installer update checker.
+- Diagnostics export bundle (logs, settings, detection snapshot).
 - Configurable URLs for lists and releases.
 
 ## Requirements
@@ -39,7 +41,7 @@ Run (Debug):
 ### Game Detection tab
 
 - Search/filter the compatibility list.
-- Click "Scan installed games" to detect Steam/Epic/GOG installs.
+- Click "Scan installed games" to detect Steam/Epic/GOG/EA/Ubisoft installs.
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
 
 ### Install tab
@@ -59,6 +61,8 @@ Run (Debug):
 - Update list URLs and release endpoints.
 - Configure installer update URL.
 - Set default OptiScaler.ini template and behavior.
+- Configure default install options and apply them to the Install tab.
+- Export diagnostics bundles for support/debugging.
 - Save, reload, or load defaults.
 - Open the settings file directly from the UI.
 
@@ -101,6 +105,7 @@ Settings:
 
 ## Version History
 
+- v1.0.3.7 - Default install presets, diagnostics export, EA/Ubisoft detection, and updater rollback safety.
 - v1.0.3.5 - Align Game Detection action buttons and update the update button label when a new version is available.
 - v1.0.3.4 - Restore list view headers by correcting dock order in the Game Detection layout.
 - v1.0.3.2 - Stabilize Game Detection header layout with layout panels and fix dock order.
