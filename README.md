@@ -6,7 +6,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 
 - Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect) and prefill install settings.
 - Compatibility list view with detection and OptiScaler install status/version.
-- Install from stable, nightly, or local OptiScaler archive (.7z).
+- Install from stable, alternate release source, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
 - Global OptiScaler.ini defaults (merge or replace) during install.
@@ -47,7 +47,7 @@ Run (Debug):
 ### Install tab
 
 - Select the game EXE or folder.
-- Choose OptiScaler source (stable/nightly/local .7z).
+- Choose OptiScaler source (stable/alternate/local .7z).
 - Set hook DLL name, GPU vendor, and frame generation mode.
 - Install or uninstall using the Actions section.
 
@@ -105,6 +105,7 @@ Settings:
 
 ## Version History
 
+- v1.0.3.9 - Rename nightly to alternate source, skip checks when unset, and keep update notice aligned.
 - v1.0.3.8 - Handle missing OptiScaler release URLs (404) without blocking other release data.
 - v1.0.3.7 - Default install presets, diagnostics export, EA/Ubisoft detection, and updater rollback safety.
 - v1.0.3.5 - Align Game Detection action buttons and update the update button label when a new version is available.

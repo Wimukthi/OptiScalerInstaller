@@ -451,6 +451,8 @@ Public Class MainForm
 
         Dim stableOk As Boolean = False
         Dim nightlyOk As Boolean = False
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim alternateUrl As String = If(settings Is Nothing, "", settings.NightlyReleaseUrl)
 
         Try
             stableRelease = Await ReleaseService.GetStableReleaseAsync()
@@ -464,19 +466,27 @@ Public Class MainForm
             ErrorLogger.Log(ex, "MainForm.RefreshReleases.Stable")
         End Try
 
-        Try
-            nightlyRelease = Await ReleaseService.GetNightlyReleaseAsync()
-            nightlyOk = nightlyRelease IsNot Nothing
-        Catch ex As HttpRequestException When ex.StatusCode.HasValue AndAlso ex.StatusCode.Value = HttpStatusCode.NotFound
+        If String.IsNullOrWhiteSpace(alternateUrl) Then
             nightlyRelease = Nothing
-            AppendLog("Nightly release not found (404). It may be unavailable or the URL may be incorrect.")
-        Catch ex As Exception
-            nightlyRelease = Nothing
-            AppendLog("Failed to fetch nightly release: " & ex.Message)
-            ErrorLogger.Log(ex, "MainForm.RefreshReleases.Nightly")
-        End Try
+            AppendLog("Alternate source URL not set; skipping.")
+        Else
+            Try
+                nightlyRelease = Await ReleaseService.GetNightlyReleaseAsync()
+                nightlyOk = nightlyRelease IsNot Nothing
+            Catch ex As HttpRequestException When ex.StatusCode.HasValue AndAlso ex.StatusCode.Value = HttpStatusCode.NotFound
+                nightlyRelease = Nothing
+                AppendLog("Alternate source not found (404). It may be unavailable or the URL may be incorrect.")
+            Catch ex As Exception
+                nightlyRelease = Nothing
+                AppendLog("Failed to fetch alternate source release: " & ex.Message)
+                ErrorLogger.Log(ex, "MainForm.RefreshReleases.Alternate")
+            End Try
+        End If
 
         UpdateReleaseLabels()
+        If String.IsNullOrWhiteSpace(alternateUrl) Then
+            lblNightlyInfo.Text = "Alternate: not configured"
+        End If
 
         If stableOk OrElse nightlyOk Then
             If reportStatus Then
@@ -493,7 +503,7 @@ Public Class MainForm
 
     Private Sub UpdateReleaseLabels()
         lblStableInfo.Text = FormatReleaseLabel("Stable", stableRelease)
-        lblNightlyInfo.Text = FormatReleaseLabel("Nightly", nightlyRelease)
+        lblNightlyInfo.Text = FormatReleaseLabel("Alternate", nightlyRelease)
     End Sub
 
     Private Function FormatReleaseLabel(prefix As String, release As ReleaseInfo) As String
@@ -1624,7 +1634,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnBrowseGameExe, "Browse for the game's executable (.exe).")
         toolTip.SetToolTip(txtGameFolder, "Game install folder, auto-filled from the EXE. Edit only if needed.")
         toolTip.SetToolTip(rbStable, "Install the latest stable OptiScaler release.")
-        toolTip.SetToolTip(rbNightly, "Install the latest nightly build (experimental).")
+        toolTip.SetToolTip(rbNightly, "Install from an alternate OptiScaler release source (for forks or mirrors).")
         toolTip.SetToolTip(rbLocal, "Install from a local OptiScaler .7z archive.")
         toolTip.SetToolTip(txtLocalArchive, "Path to the local OptiScaler archive.")
         toolTip.SetToolTip(btnBrowseArchive, "Browse for a local OptiScaler .7z archive.")
@@ -1667,7 +1677,7 @@ Public Class MainForm
         toolTip.SetToolTip(txtCompatibilityListUrl, "Raw markdown URL for the compatibility list (used by Refresh lists).")
         toolTip.SetToolTip(txtWikiBaseUrl, "Base URL for wiki pages (used when opening a selected game's page).")
         toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API URL for the latest stable release.")
-        toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the nightly release.")
+        toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the alternate release source.")
         toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
         toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for a default OptiScaler.ini template.")

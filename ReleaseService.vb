@@ -14,7 +14,7 @@ Public Class ReleaseService
     Public Shared Async Function GetNightlyReleaseAsync() As Task(Of ReleaseInfo)
         Dim url As String = GetNightlyReleaseUrl()
         If String.IsNullOrWhiteSpace(url) Then
-            Throw New InvalidOperationException("Nightly release URL is not set. Update it in Settings.")
+            Throw New InvalidOperationException("Alternate release URL is not set. Update it in Settings.")
         End If
         Return Await GetReleaseAsync(url)
     End Function

@@ -3,7 +3,7 @@
   "CompatibilityListUrl": "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md",
   "WikiBaseUrl": "https://github.com/optiscaler/OptiScaler/wiki/",
   "StableReleaseUrl": "https://api.github.com/repos/optiscaler/OptiScaler/releases/latest",
-  "NightlyReleaseUrl": "https://api.github.com/repos/optiscaler/OptiScaler/releases/tags/nightly",
+  "NightlyReleaseUrl": "",
   "InstallerReleaseUrl": "https://api.github.com/repos/Wimukthi/OptiScalerInstaller/releases/latest",
   "DefaultIniMode": "Off",
   "DefaultIniPath": "",

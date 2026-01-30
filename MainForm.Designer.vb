@@ -572,7 +572,7 @@ Partial Class MainForm
         rbNightly.Size = New Size(64, 19)
         rbNightly.TabIndex = 1
         rbNightly.TabStop = True
-        rbNightly.Text = "Nightly"
+        rbNightly.Text = "Alternate source"
         rbNightly.UseVisualStyleBackColor = True
         ' 
         ' lblNightlyInfo
@@ -582,7 +582,7 @@ Partial Class MainForm
         lblNightlyInfo.Name = "lblNightlyInfo"
         lblNightlyInfo.Size = New Size(109, 15)
         lblNightlyInfo.TabIndex = 4
-        lblNightlyInfo.Text = "Nightly: not loaded"
+        lblNightlyInfo.Text = "Alternate: not loaded"
         ' 
         ' rbLocal
         ' 
@@ -1410,7 +1410,7 @@ Partial Class MainForm
         lblNightlyReleaseUrl.Name = "lblNightlyReleaseUrl"
         lblNightlyReleaseUrl.Size = New Size(109, 15)
         lblNightlyReleaseUrl.TabIndex = 10
-        lblNightlyReleaseUrl.Text = "Nightly release URL"
+        lblNightlyReleaseUrl.Text = "Alternate release URL"
         ' 
         ' txtNightlyReleaseUrl
         ' 
@@ -1700,7 +1700,7 @@ Partial Class MainForm
         ' btnExportDiagnostics
         ' 
         btnExportDiagnostics.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
-        btnExportDiagnostics.Location = New Point(732, 597)
+        btnExportDiagnostics.Location = New Point(842, 597)
         btnExportDiagnostics.Name = "btnExportDiagnostics"
         btnExportDiagnostics.Size = New Size(160, 30)
         btnExportDiagnostics.TabIndex = 24
@@ -1711,7 +1711,7 @@ Partial Class MainForm
         ' 
         lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
         lblUpdateNotice.AutoSize = True
-        lblUpdateNotice.Location = New Point(900, 604)
+        lblUpdateNotice.Location = New Point(732, 604)
         lblUpdateNotice.Name = "lblUpdateNotice"
         lblUpdateNotice.Size = New Size(94, 15)
         lblUpdateNotice.TabIndex = 25
