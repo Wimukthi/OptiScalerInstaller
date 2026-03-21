@@ -4,4 +4,6 @@ Public Class ReleaseInfo
     Public Property AssetName As String
     Public Property DownloadUrl As String
     Public Property Size As Long
+    Public Property HtmlUrl As String
+    Public Property AssetDigest As String
 End Class

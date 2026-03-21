@@ -42,6 +42,9 @@
     <Content Include="Data\DefaultSettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Data\GameTemplates.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Icons\com_94698.ico" />
     <None Include="BuildVersion.txt" />
     <EmbeddedResource Update="frmUpdate.resx">

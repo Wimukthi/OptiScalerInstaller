@@ -2,6 +2,9 @@ Imports System.IO
 Imports System.Net.Http
 Imports System.Text.Json
 Imports System.Diagnostics
+Imports System.Security.Cryptography
+Imports System.Text.RegularExpressions
+Imports System.Linq
 Imports SharpCompress.Common
 Imports SharpCompress.Archives
 Imports SharpCompress.Archives.SevenZip
@@ -13,7 +16,32 @@ Public Class InstallerService
     Private Class ArchiveResult
         Public Property ArchivePath As String
         Public Property Release As ReleaseInfo
+        Public Property SourceUrl As String
+        Public Property ExpectedSize As Long
+        Public Property AssetName As String
     End Class
+
+    Public Shared Function IsLikelyBundledComponentRelease(config As InstallerConfig) As Boolean
+        If config Is Nothing Then
+            Return False
+        End If
+
+        If config.Source = ReleaseSource.LocalArchive Then
+            Return False
+        End If
+
+        Dim sourceRelease As ReleaseInfo = GetSelectedRelease(config)
+        If sourceRelease Is Nothing Then
+            Return False
+        End If
+
+        Dim version As Version = ParseOptiScalerVersion(sourceRelease.TagName)
+        If version Is Nothing Then
+            Return False
+        End If
+
+        Return version >= New Version(0, 9, 0, 0)
+    End Function
 
     Public Shared Async Function InstallAsync(config As InstallerConfig, log As Action(Of String), progress As Action(Of Integer)) As Task(Of InstallManifest)
         ValidateConfig(config)
@@ -41,6 +69,11 @@ Public Class InstallerService
             If archiveResult.Release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(archiveResult.Release.TagName) Then
                 manifest.OptiScalerVersion = archiveResult.Release.TagName
             End If
+            manifest.ArchiveFileName = Path.GetFileName(archiveResult.AssetName)
+            manifest.ArchiveSourceUrl = archiveResult.SourceUrl
+            manifest.ArchiveSizeBytes = GetFileSizeSafe(archivePath)
+            manifest.ArchiveSha256 = ComputeSha256(archivePath)
+            log?.Invoke("Archive fingerprint (SHA-256): " & ShortHash(manifest.ArchiveSha256))
             progress?.Invoke(25)
 
             extractRoot = Path.Combine(tempRoot, "extract_" & Guid.NewGuid().ToString("N"))
@@ -50,6 +83,7 @@ Public Class InstallerService
 
             ' Determine the actual root that contains OptiScaler.dll.
             Dim packageRoot As String = ResolvePackageRoot(extractRoot)
+            manifest.PackageRoot = packageRoot
             Await Task.Run(Sub()
                                log?.Invoke("Copying OptiScaler files to game folder...")
                                CopyDirectory(packageRoot, config.GameFolder, config.ConflictMode, manifest, log)
@@ -282,9 +316,13 @@ Public Class InstallerService
     Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer)) As Task(Of ArchiveResult)
         If config.Source = ReleaseSource.LocalArchive Then
             log?.Invoke("Using local archive: " & config.LocalArchivePath)
+            ValidateArchiveFile(config.LocalArchivePath, 0, log)
             Return New ArchiveResult With {
                 .ArchivePath = config.LocalArchivePath,
-                .Release = Nothing
+                .Release = Nothing,
+                .SourceUrl = "",
+                .ExpectedSize = 0,
+                .AssetName = Path.GetFileName(config.LocalArchivePath)
             }
         End If
 
@@ -309,9 +347,13 @@ Public Class InstallerService
         Dim destination As String = Path.Combine(tempRoot, safeName)
         log?.Invoke("Downloading " & release.TagName & "...")
         Await DownloadFileAsync(release.DownloadUrl, destination, log, progress)
+        ValidateArchiveFile(destination, release.Size, log)
         Return New ArchiveResult With {
             .ArchivePath = destination,
-            .Release = release
+            .Release = release,
+            .SourceUrl = release.DownloadUrl,
+            .ExpectedSize = release.Size,
+            .AssetName = safeName
         }
     End Function
 
@@ -443,7 +485,7 @@ Public Class InstallerService
 
         Dim matches As String() = Directory.GetFiles(extractRoot, "OptiScaler.dll", SearchOption.AllDirectories)
         If matches.Length = 0 Then
-            Return extractRoot
+            Throw New InvalidOperationException("OptiScaler.dll was not found in the extracted archive.")
         End If
 
         If matches.Length = 1 Then
@@ -596,6 +638,7 @@ Public Class InstallerService
 
     Private Shared Sub CopyAddOns(config As InstallerConfig, manifest As InstallManifest, log As Action(Of String))
         ' Copy optional addon files if they are configured and present.
+        Dim bundledRelease As Boolean = IsLikelyBundledComponentRelease(config)
         If Not String.IsNullOrWhiteSpace(config.FakenvapiFolder) Then
             Dim folder As String = config.FakenvapiFolder
             If File.Exists(folder) Then
@@ -610,8 +653,14 @@ Public Class InstallerService
                 CopyFileWithConflict(iniPath, Path.Combine(config.GameFolder, "fakenvapi.ini"), config.ConflictMode, manifest, log)
                 log?.Invoke("Copied Fakenvapi files.")
             Else
-                log?.Invoke("Fakenvapi files not found in selected folder.")
+                If bundledRelease AndAlso File.Exists(Path.Combine(config.GameFolder, "nvapi64.dll")) Then
+                    log?.Invoke("Fakenvapi files not found in selected folder. Using bundled nvapi64.dll from OptiScaler package.")
+                Else
+                    log?.Invoke("Fakenvapi files not found in selected folder.")
+                End If
             End If
+        ElseIf bundledRelease AndAlso config.GpuVendor = GpuVendor.AmdIntel AndAlso File.Exists(Path.Combine(config.GameFolder, "nvapi64.dll")) Then
+            log?.Invoke("Using bundled Fakenvapi/nvapi files for AMD/Intel mode.")
         End If
 
         If Not String.IsNullOrWhiteSpace(config.NukemDllPath) Then
@@ -621,6 +670,13 @@ Public Class InstallerService
                 log?.Invoke("Copied Nukem dlssg_to_fsr3_amd_is_better.dll.")
             Else
                 log?.Invoke("Nukem DLL path not found.")
+            End If
+        ElseIf config.FgType = FgTypeSelection.Nukem Then
+            Dim bundledNukem As String = Path.Combine(config.GameFolder, "dlssg_to_fsr3_amd_is_better.dll")
+            If File.Exists(bundledNukem) Then
+                log?.Invoke("Using bundled Nukem dlssg_to_fsr3_amd_is_better.dll.")
+            Else
+                log?.Invoke("Nukem frame generation selected but dll was not found after install.")
             End If
         End If
 
@@ -779,6 +835,256 @@ Public Class InstallerService
         Dim json As String = JsonSerializer.Serialize(manifest, New JsonSerializerOptions With {.WriteIndented = True})
         File.WriteAllText(manifestPath, json)
     End Sub
+
+    Public Shared Function VerifyInstall(config As InstallerConfig, manifest As InstallManifest) As InstallVerificationReport
+        Dim report As New InstallVerificationReport()
+        If config Is Nothing Then
+            report.Errors.Add("Installer configuration was missing for verification.")
+            Return report
+        End If
+
+        Dim gameFolder As String = config.GameFolder
+        If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            report.Errors.Add("Game folder is missing after install.")
+            Return report
+        End If
+
+        Dim hookPath As String = Path.Combine(gameFolder, config.HookName)
+        If File.Exists(hookPath) Then
+            report.Passed.Add("Hook file present: " & config.HookName)
+        Else
+            report.Errors.Add("Hook file missing: " & config.HookName)
+        End If
+
+        Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+        If File.Exists(iniPath) Then
+            report.Passed.Add("OptiScaler.ini present.")
+        Else
+            report.Errors.Add("OptiScaler.ini missing.")
+        End If
+
+        Dim manifestPath As String = Path.Combine(gameFolder, ManifestName)
+        If File.Exists(manifestPath) Then
+            report.Passed.Add("Installer manifest written.")
+        Else
+            report.Warnings.Add("Installer manifest was not found after install.")
+        End If
+
+        If Not String.IsNullOrWhiteSpace(manifest?.ArchiveSha256) Then
+            report.Passed.Add("Archive fingerprint recorded: " & ShortHash(manifest.ArchiveSha256))
+        End If
+
+        If File.Exists(iniPath) Then
+            Dim iniValues As Dictionary(Of String, String) = ReadIniMap(iniPath)
+            ValidateIniExpectation(iniValues, "FrameGen", "FGType", ExpectedFgType(config), report)
+
+            Dim expectedDxgi As String = "auto"
+            If config.GpuVendor = GpuVendor.AmdIntel Then
+                expectedDxgi = If(config.EnableDlssInputs, "auto", "false")
+            End If
+            ValidateIniExpectation(iniValues, "Spoofing", "Dxgi", expectedDxgi, report)
+            ValidateIniExpectation(iniValues, "Plugins", "LoadAsiPlugins", ToIniBool(config.LoadAsiPlugins), report)
+            ValidateIniExpectation(iniValues, "Plugins", "LoadReshade", ToIniBool(config.EnableReshade), report)
+            ValidateIniExpectation(iniValues, "Plugins", "LoadSpecialK", ToIniBool(config.EnableSpecialK), report)
+        End If
+
+        If config.FgType = FgTypeSelection.Nukem Then
+            Dim nukemPath As String = Path.Combine(gameFolder, "dlssg_to_fsr3_amd_is_better.dll")
+            If File.Exists(nukemPath) Then
+                report.Passed.Add("Nukem DLL present.")
+            Else
+                report.Warnings.Add("Nukem frame generation selected but dlssg_to_fsr3_amd_is_better.dll was not found.")
+            End If
+        End If
+
+        If config.EnableReshade Then
+            Dim reshadePath As String = Path.Combine(gameFolder, "ReShade64.dll")
+            If File.Exists(reshadePath) Then
+                report.Passed.Add("ReShade64.dll present.")
+            Else
+                report.Warnings.Add("ReShade integration enabled but ReShade64.dll was not found.")
+            End If
+        End If
+
+        If config.EnableSpecialK Then
+            Dim specialKPath As String = Path.Combine(gameFolder, "SpecialK64.dll")
+            If File.Exists(specialKPath) Then
+                report.Passed.Add("SpecialK64.dll present.")
+            Else
+                report.Warnings.Add("Special K enabled but SpecialK64.dll was not found.")
+            End If
+        End If
+
+        If config.LoadAsiPlugins AndAlso String.IsNullOrWhiteSpace(config.PluginsPath) Then
+            report.Warnings.Add("ASI plugins enabled with an empty plugin path.")
+        End If
+
+        If report.Errors.Count = 0 Then
+            report.Passed.Add("Post-install verification passed.")
+        End If
+
+        Return report
+    End Function
+
+    Private Shared Function ReadIniMap(path As String) As Dictionary(Of String, String)
+        Dim map As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)
+        Dim values As List(Of IniUpdate) = IniFile.ReadValues(path)
+        For Each update As IniUpdate In values
+            If update Is Nothing OrElse String.IsNullOrWhiteSpace(update.Section) OrElse String.IsNullOrWhiteSpace(update.Key) Then
+                Continue For
+            End If
+
+            Dim mapKey As String = update.Section.Trim() & "|" & update.Key.Trim()
+            map(mapKey) = If(update.Value, "")
+        Next
+
+        Return map
+    End Function
+
+    Private Shared Sub ValidateIniExpectation(map As Dictionary(Of String, String),
+                                              section As String,
+                                              key As String,
+                                              expected As String,
+                                              report As InstallVerificationReport)
+        If map Is Nothing OrElse report Is Nothing Then
+            Return
+        End If
+
+        Dim mapKey As String = section & "|" & key
+        Dim actual As String = ""
+        If Not map.TryGetValue(mapKey, actual) Then
+            report.Warnings.Add($"INI key missing: [{section}] {key}")
+            Return
+        End If
+
+        If String.Equals(actual, expected, StringComparison.OrdinalIgnoreCase) Then
+            report.Passed.Add($"INI [{section}] {key}={actual}")
+        Else
+            report.Warnings.Add($"INI [{section}] {key} expected '{expected}' but found '{actual}'.")
+        End If
+    End Sub
+
+    Private Shared Function ExpectedFgType(config As InstallerConfig) As String
+        Select Case config.FgType
+            Case FgTypeSelection.None
+                Return "nofg"
+            Case FgTypeSelection.OptiFg
+                Return "optifg"
+            Case FgTypeSelection.Nukem
+                Return "nukems"
+            Case Else
+                Return "auto"
+        End Select
+    End Function
+
+    Private Shared Sub ValidateArchiveFile(filePath As String, expectedSize As Long, log As Action(Of String))
+        If String.IsNullOrWhiteSpace(filePath) OrElse Not File.Exists(filePath) Then
+            Throw New FileNotFoundException("OptiScaler archive file was not found.")
+        End If
+
+        Dim extension As String = Path.GetExtension(filePath).ToLowerInvariant()
+        Dim supported As String() = {".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".lz"}
+        If Not supported.Contains(extension, StringComparer.OrdinalIgnoreCase) Then
+            Throw New InvalidOperationException("Unsupported archive extension: " & extension)
+        End If
+
+        Dim actualSize As Long = GetFileSizeSafe(filePath)
+        If actualSize <= 0 Then
+            Throw New InvalidOperationException("Downloaded archive is empty.")
+        End If
+
+        If expectedSize > 0 AndAlso actualSize <> expectedSize Then
+            Throw New InvalidOperationException($"Archive size mismatch. Expected {expectedSize} bytes, got {actualSize} bytes.")
+        End If
+
+        log?.Invoke("Archive size: " & actualSize.ToString() & " bytes")
+    End Sub
+
+    Private Shared Function GetFileSizeSafe(path As String) As Long
+        Try
+            If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then
+                Return 0
+            End If
+
+            Dim info As New FileInfo(path)
+            Return info.Length
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.GetFileSizeSafe")
+            Return 0
+        End Try
+    End Function
+
+    Private Shared Function ComputeSha256(path As String) As String
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then
+            Return ""
+        End If
+
+        Using stream As FileStream = File.OpenRead(path)
+            Using sha As SHA256 = SHA256.Create()
+                Dim hash As Byte() = sha.ComputeHash(stream)
+                Return Convert.ToHexString(hash).ToLowerInvariant()
+            End Using
+        End Using
+    End Function
+
+    Private Shared Function ShortHash(hash As String) As String
+        If String.IsNullOrWhiteSpace(hash) Then
+            Return "n/a"
+        End If
+
+        If hash.Length <= 12 Then
+            Return hash
+        End If
+
+        Return hash.Substring(0, 12)
+    End Function
+
+    Private Shared Function GetSelectedRelease(config As InstallerConfig) As ReleaseInfo
+        If config Is Nothing Then
+            Return Nothing
+        End If
+
+        If config.Source = ReleaseSource.Stable Then
+            Return config.StableRelease
+        End If
+        If config.Source = ReleaseSource.Nightly Then
+            Return config.NightlyRelease
+        End If
+
+        Return Nothing
+    End Function
+
+    Private Shared Function ParseOptiScalerVersion(text As String) As Version
+        If String.IsNullOrWhiteSpace(text) Then
+            Return Nothing
+        End If
+
+        Dim cleaned As String = text.Trim()
+        Dim match As Match = Regex.Match(cleaned, "(?<version>\d+(\.\d+){1,3})")
+        If Not match.Success Then
+            Return Nothing
+        End If
+
+        Dim versionText As String = match.Groups("version").Value
+        Dim parts As String() = versionText.Split("."c)
+        Dim major As Integer = SafeParseVersionPart(parts, 0)
+        Dim minor As Integer = SafeParseVersionPart(parts, 1)
+        Dim build As Integer = SafeParseVersionPart(parts, 2)
+        Dim revision As Integer = SafeParseVersionPart(parts, 3)
+        Return New Version(major, minor, build, revision)
+    End Function
+
+    Private Shared Function SafeParseVersionPart(parts As String(), index As Integer) As Integer
+        If parts Is Nothing OrElse index < 0 OrElse index >= parts.Length Then
+            Return 0
+        End If
+
+        Dim value As Integer
+        If Integer.TryParse(parts(index), value) Then
+            Return value
+        End If
+        Return 0
+    End Function
 
     Private Shared Function ToIniBool(value As Boolean) As String
         Return If(value, "true", "false")

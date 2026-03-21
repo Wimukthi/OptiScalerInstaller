@@ -9,17 +9,21 @@ Imports System.Text
 Imports System.Text.Json
 Imports System.Net
 Imports System.Net.Http
+Imports System.Linq
 
 Public Class MainForm
     ' Main UI surface for detection, install, add-ons, settings, and logging.
     Private allCompatibilityEntries As List(Of CompatibilityEntry) = New List(Of CompatibilityEntry)()
     Private stableRelease As ReleaseInfo
     Private nightlyRelease As ReleaseInfo
+    Private componentRelease As ReleaseInfo
     Private _settingThemeState As Boolean
     Private _settingDefaultsPreset As Boolean
     Private detectedGames As List(Of DetectedGame) = New List(Of DetectedGame)()
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
+    Private compatibilityChangedNames As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+    Private compatibilityBaseNoteText As String = "List shows tested games only. Detected column is best-effort and may be incomplete."
     Private lastNormalBounds As Rectangle?
     Private windowSettingsApplied As Boolean
     Private windowSaveTimer As Timer
@@ -48,6 +52,10 @@ Public Class MainForm
     Private Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         UpdateWindowTitle()
         InitializeDefaults()
+        If lblCompatibilityNote IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(lblCompatibilityNote.Text) Then
+            compatibilityBaseNoteText = lblCompatibilityNote.Text
+        End If
+        UpdateCompatibilityNote()
         UpdateInstallStatus()
         LoadCompatibility()
         _settingThemeState = True
@@ -257,12 +265,20 @@ Public Class MainForm
     Private Sub LoadCompatibility()
         ' Load cached or bundled compatibility data for the detection list.
         allCompatibilityEntries = CompatibilityService.LoadCompatibilityList()
+        compatibilityChangedNames.Clear()
+        UpdateCompatibilityNote()
         AppendLog("Loaded compatibility list: " & allCompatibilityEntries.Count & " entries.")
         ApplyCompatibilityFilter()
     End Sub
 
     Private Sub ApplyCompatibilityFilter()
         Dim filter As String = txtGameSearch.Text.Trim()
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim highlightChanges As Boolean = True
+        If settings IsNot Nothing AndAlso settings.HighlightCompatibilityChanges.HasValue Then
+            highlightChanges = settings.HighlightCompatibilityChanges.Value
+        End If
+
         lvCompatibility.BeginUpdate()
         lvCompatibility.Items.Clear()
 
@@ -284,8 +300,9 @@ Public Class MainForm
                 item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
-                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo}
-                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count)
+                Dim isChanged As Boolean = highlightChanges AndAlso compatibilityChangedNames.Contains(normalizedKey)
+                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .IsRecentlyChanged = isChanged}
+                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged)
                 lvCompatibility.Items.Add(item)
             End If
         Next
@@ -451,8 +468,10 @@ Public Class MainForm
 
         Dim stableOk As Boolean = False
         Dim nightlyOk As Boolean = False
+        Dim componentOk As Boolean = False
         Dim settings As AppSettingsModel = AppSettings.Load()
         Dim alternateUrl As String = If(settings Is Nothing, "", settings.NightlyReleaseUrl)
+        Dim componentUrl As String = If(settings Is Nothing, "", settings.ComponentReleaseUrl)
 
         Try
             stableRelease = Await ReleaseService.GetStableReleaseAsync()
@@ -483,12 +502,31 @@ Public Class MainForm
             End Try
         End If
 
+        If String.IsNullOrWhiteSpace(componentUrl) Then
+            componentRelease = Nothing
+        Else
+            Try
+                componentRelease = Await ReleaseService.GetComponentReleaseAsync()
+                componentOk = componentRelease IsNot Nothing
+                If componentOk Then
+                    AppendLog("Component source loaded: " & componentRelease.TagName)
+                End If
+            Catch ex As HttpRequestException When ex.StatusCode.HasValue AndAlso ex.StatusCode.Value = HttpStatusCode.NotFound
+                componentRelease = Nothing
+                AppendLog("Component source not found (404). Check component URL in settings.json.")
+            Catch ex As Exception
+                componentRelease = Nothing
+                AppendLog("Failed to fetch component source release: " & ex.Message)
+                ErrorLogger.Log(ex, "MainForm.RefreshReleases.Component")
+            End Try
+        End If
+
         UpdateReleaseLabels()
         If String.IsNullOrWhiteSpace(alternateUrl) Then
             lblNightlyInfo.Text = "Alternate: not configured"
         End If
 
-        If stableOk OrElse nightlyOk Then
+        If stableOk OrElse nightlyOk OrElse componentOk Then
             If reportStatus Then
                 SetStatus("Release info updated.")
             End If
@@ -563,9 +601,29 @@ Public Class MainForm
                 Return
             End If
 
-            Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+            Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
+            If manifest IsNot Nothing Then
+                manifest.VerificationTimeUtc = DateTime.UtcNow
+            End If
 
-            MessageBox.Show(Me, "OptiScaler installed successfully.", "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            LogVerificationReport(verification)
+
+            If verification IsNot Nothing AndAlso verification.Errors.Count > 0 Then
+                MessageBox.Show(Me,
+                                "Install finished with verification errors." & Environment.NewLine &
+                                "Open diagnostics/log output for details.",
+                                "Install Completed With Issues",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning)
+            Else
+                Dim warningCount As Integer = If(verification Is Nothing, 0, verification.Warnings.Count)
+                Dim message As String = "OptiScaler installed successfully."
+                If warningCount > 0 Then
+                    message &= Environment.NewLine & warningCount.ToString() & " verification warning(s) were reported."
+                End If
+                MessageBox.Show(Me, message, "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
             AppendLog("Install completed.")
         Catch ex As Exception
             AppendLog("Install failed: " & ex.Message)
@@ -638,13 +696,94 @@ Public Class MainForm
         If config.Source = ReleaseSource.LocalArchive Then
             If String.IsNullOrWhiteSpace(config.LocalArchivePath) OrElse Not File.Exists(config.LocalArchivePath) Then
                 errors.Add("Local OptiScaler archive not found.")
+            Else
+                Dim extension As String = Path.GetExtension(config.LocalArchivePath).ToLowerInvariant()
+                If extension <> ".7z" AndAlso extension <> ".zip" Then
+                    warnings.Add("Local archive extension is unusual (" & extension & ").")
+                End If
+
+                Try
+                    Dim size As Long = New FileInfo(config.LocalArchivePath).Length
+                    If size <= 0 Then
+                        errors.Add("Local OptiScaler archive is empty.")
+                    End If
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "MainForm.RunInstallPreflight.LocalArchive")
+                End Try
             End If
         End If
 
+        Dim bundledRelease As Boolean = InstallerService.IsLikelyBundledComponentRelease(config)
         If config.FgType = FgTypeSelection.Nukem Then
             If String.IsNullOrWhiteSpace(config.NukemDllPath) OrElse Not File.Exists(config.NukemDllPath) Then
-                errors.Add("Nukem frame generation selected but DLL is missing.")
+                If bundledRelease Then
+                    warnings.Add("Nukem DLL not supplied. This release is expected to bundle frame generation components.")
+                Else
+                    errors.Add("Nukem frame generation selected but DLL is missing.")
+                End If
+            ElseIf Not Path.GetExtension(config.NukemDllPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                errors.Add("Nukem path must be a DLL file.")
+            ElseIf Not Path.GetFileName(config.NukemDllPath).Equals("dlssg_to_fsr3_amd_is_better.dll", StringComparison.OrdinalIgnoreCase) Then
+                warnings.Add("Nukem DLL filename is unexpected. Expected: dlssg_to_fsr3_amd_is_better.dll.")
             End If
+        End If
+
+        If Not String.IsNullOrWhiteSpace(config.FakenvapiFolder) Then
+            Dim fakenvapiRoot As String = config.FakenvapiFolder
+            If File.Exists(fakenvapiRoot) Then
+                fakenvapiRoot = Path.GetDirectoryName(fakenvapiRoot)
+            End If
+
+            If String.IsNullOrWhiteSpace(fakenvapiRoot) OrElse Not Directory.Exists(fakenvapiRoot) Then
+                errors.Add("Fakenvapi folder is invalid.")
+            Else
+                Dim nvapiPath As String = Path.Combine(fakenvapiRoot, "nvapi64.dll")
+                Dim iniPath As String = Path.Combine(fakenvapiRoot, "fakenvapi.ini")
+                If Not File.Exists(nvapiPath) OrElse Not File.Exists(iniPath) Then
+                    warnings.Add("Fakenvapi folder is missing nvapi64.dll or fakenvapi.ini.")
+                End If
+            End If
+        End If
+
+        If Not String.IsNullOrWhiteSpace(config.NvngxDllPath) Then
+            If Not File.Exists(config.NvngxDllPath) Then
+                errors.Add("nvngx_dlss.dll path was set but file was not found.")
+            ElseIf Not Path.GetFileName(config.NvngxDllPath).Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase) Then
+                warnings.Add("nvngx override filename is unexpected. Expected: nvngx_dlss.dll.")
+            End If
+        End If
+
+        If config.EnableReshade Then
+            If String.IsNullOrWhiteSpace(config.ReshadeDllPath) OrElse Not File.Exists(config.ReshadeDllPath) Then
+                errors.Add("ReShade is enabled but DLL path is missing.")
+            ElseIf Not Path.GetExtension(config.ReshadeDllPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                errors.Add("ReShade path must be a DLL file.")
+            End If
+        End If
+
+        If config.EnableSpecialK Then
+            If String.IsNullOrWhiteSpace(config.SpecialKDllPath) OrElse Not File.Exists(config.SpecialKDllPath) Then
+                errors.Add("Special K is enabled but SpecialK64.dll path is missing.")
+            ElseIf Not Path.GetExtension(config.SpecialKDllPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                errors.Add("Special K path must be a DLL file.")
+            ElseIf Not Path.GetFileName(config.SpecialKDllPath).Equals("SpecialK64.dll", StringComparison.OrdinalIgnoreCase) Then
+                warnings.Add("Special K DLL filename is unexpected. Expected: SpecialK64.dll.")
+            End If
+        End If
+
+        If config.LoadAsiPlugins Then
+            If String.IsNullOrWhiteSpace(config.PluginsPath) OrElse Not Directory.Exists(config.PluginsPath) Then
+                errors.Add("ASI plugins are enabled but plugins path is missing.")
+            Else
+                Dim pluginCount As Integer = Directory.GetFiles(config.PluginsPath, "*.asi", SearchOption.TopDirectoryOnly).Length
+                If pluginCount = 0 Then
+                    warnings.Add("ASI plugin loading is enabled but no *.asi files were found in the selected folder.")
+                End If
+            End If
+        End If
+
+        If ShouldSkipExecutable(Path.GetFileNameWithoutExtension(config.GameExePath)) Then
+            warnings.Add("Selected executable looks like a launcher/helper tool. Prefer the main game executable.")
         End If
 
         If errors.Count > 0 Then
@@ -735,7 +874,32 @@ Public Class MainForm
         AppendLog("Refreshing compatibility list...")
 
         Try
-            allCompatibilityEntries = Await CompatibilityService.UpdateCompatibilityListAsync()
+            Dim updateResult As CompatibilityUpdateResult = Await CompatibilityService.UpdateCompatibilityListWithDiffAsync()
+            allCompatibilityEntries = If(updateResult?.Entries, New List(Of CompatibilityEntry)())
+            compatibilityChangedNames.Clear()
+
+            If updateResult IsNot Nothing Then
+                For Each name As String In updateResult.AddedNames
+                    compatibilityChangedNames.Add(NameNormalization.NormalizeRelaxedName(name))
+                Next
+                For Each name As String In updateResult.ChangedNames
+                    compatibilityChangedNames.Add(NameNormalization.NormalizeRelaxedName(name))
+                Next
+
+                AppendLog($"Compatibility sync: +{updateResult.AddedNames.Count} added, -{updateResult.RemovedNames.Count} removed, ~{updateResult.ChangedNames.Count} changed.")
+
+                If updateResult.AddedNames.Count > 0 Then
+                    AppendLog("Added entries: " & String.Join(", ", updateResult.AddedNames.Take(8)))
+                End If
+                If updateResult.ChangedNames.Count > 0 Then
+                    AppendLog("Changed entries: " & String.Join(", ", updateResult.ChangedNames.Take(8)))
+                End If
+                If updateResult.RemovedNames.Count > 0 Then
+                    AppendLog("Removed entries: " & String.Join(", ", updateResult.RemovedNames.Take(8)))
+                End If
+            End If
+
+            UpdateCompatibilityNote()
             ApplyCompatibilityFilter()
             SetStatus("List updated.")
             AppendLog("List updated.")
@@ -834,6 +998,20 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Sub UpdateCompatibilityNote()
+        If lblCompatibilityNote Is Nothing Then
+            Return
+        End If
+
+        Dim changedCount As Integer = If(compatibilityChangedNames Is Nothing, 0, compatibilityChangedNames.Count)
+        If changedCount <= 0 Then
+            lblCompatibilityNote.Text = compatibilityBaseNoteText
+            Return
+        End If
+
+        lblCompatibilityNote.Text = $"{compatibilityBaseNoteText} Recently changed entries: {changedCount}."
+    End Sub
+
     Private Function GetInstallStatusText(isDetected As Boolean, info As OptiScalerInstallInfo) As String
         If Not isDetected Then
             Return ""
@@ -850,8 +1028,12 @@ Public Class MainForm
         Return "Yes (" & info.Version & ")"
     End Function
 
-    Private Sub ApplyInstallRowColors(item As ListViewItem, info As OptiScalerInstallInfo, isDetected As Boolean, rowIndex As Integer)
-        If item Is Nothing OrElse Not isDetected Then
+    Private Sub ApplyInstallRowColors(item As ListViewItem,
+                                      info As OptiScalerInstallInfo,
+                                      isDetected As Boolean,
+                                      rowIndex As Integer,
+                                      isRecentlyChanged As Boolean)
+        If item Is Nothing Then
             Return
         End If
 
@@ -859,14 +1041,25 @@ Public Class MainForm
         Dim mode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
         Dim tintAlpha As Integer = If(mode = SystemColorMode.Dark, 60, 35)
 
+        If isRecentlyChanged Then
+            Dim changedTint As Color = Color.FromArgb(65, 95, 150)
+            baseColor = BlendColors(baseColor, changedTint, If(mode = SystemColorMode.Dark, 55, 40))
+        End If
+
+        item.BackColor = baseColor
+
+        If Not isDetected Then
+            Return
+        End If
+
         If info Is Nothing OrElse Not info.IsInstalled Then
             Dim missingTint As Color = Color.FromArgb(160, 70, 70)
-            item.BackColor = BlendColors(baseColor, missingTint, tintAlpha)
+            item.BackColor = BlendColors(item.BackColor, missingTint, tintAlpha)
             Return
         End If
 
         Dim installedTint As Color = Color.FromArgb(70, 140, 90)
-        item.BackColor = BlendColors(baseColor, installedTint, tintAlpha)
+        item.BackColor = BlendColors(item.BackColor, installedTint, tintAlpha)
     End Sub
 
     Private Function BlendColors(baseColor As Color, overlay As Color, alpha As Integer) As Color
@@ -908,7 +1101,70 @@ Public Class MainForm
         End If
 
         ApplyDefaultInstallOptionsFromUi(False)
+        ApplyGameTemplate(game)
         tabMain.SelectedTab = tabInstall
+    End Sub
+
+    Private Sub ApplyGameTemplate(game As DetectedGame)
+        If game Is Nothing Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        If settings IsNot Nothing AndAlso settings.EnableGameTemplates.HasValue AndAlso Not settings.EnableGameTemplates.Value Then
+            Return
+        End If
+
+        Dim template As GameWorkaroundTemplate = GameTemplateService.FindTemplate(game.DisplayName)
+        If template Is Nothing Then
+            Return
+        End If
+
+        Dim appliedParts As New List(Of String)()
+
+        If Not String.IsNullOrWhiteSpace(template.HookName) Then
+            Dim hookIndex As Integer = GetHookIndex(cmbHookName, template.HookName)
+            If hookIndex >= 0 Then
+                cmbHookName.SelectedIndex = hookIndex
+                appliedParts.Add("hook=" & template.HookName)
+            End If
+        End If
+
+        If Not String.IsNullOrWhiteSpace(template.GpuVendor) Then
+            Select Case GetDefaultGpuVendorIndex(template.GpuVendor)
+                Case 1
+                    rbGpuNvidia.Checked = True
+                    appliedParts.Add("gpu=NVIDIA")
+                Case 2
+                    rbGpuAmdIntel.Checked = True
+                    appliedParts.Add("gpu=AMD/Intel")
+            End Select
+        End If
+
+        If template.DlssInputs.HasValue Then
+            chkDlssInputs.Checked = template.DlssInputs.Value
+            appliedParts.Add("dlssInputs=" & If(template.DlssInputs.Value, "on", "off"))
+        End If
+
+        If Not String.IsNullOrWhiteSpace(template.FrameGeneration) Then
+            cmbFgType.SelectedIndex = GetDefaultFrameGenerationIndex(template.FrameGeneration)
+            appliedParts.Add("fg=" & template.FrameGeneration)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(template.ConflictMode) Then
+            cmbConflictMode.SelectedIndex = GetDefaultConflictModeIndex(template.ConflictMode)
+            appliedParts.Add("conflict=" & template.ConflictMode)
+        End If
+
+        If appliedParts.Count > 0 Then
+            AppendLog("Applied game template: " & template.Name & " (" & String.Join(", ", appliedParts) & ")")
+        Else
+            AppendLog("Matched game template: " & template.Name)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(template.Notes) Then
+            AppendLog("Template note: " & template.Notes)
+        End If
     End Sub
 
     Private Sub UpdateEngineWarningByFolder(folder As String)
@@ -1226,10 +1482,6 @@ Public Class MainForm
                 fgSelection = FgTypeSelection.Nukem
         End Select
 
-        If fgSelection = FgTypeSelection.Nukem AndAlso String.IsNullOrWhiteSpace(txtNukemDll.Text) Then
-            Throw New InvalidOperationException("Nukem FG selected but dlssg_to_fsr3_amd_is_better.dll was not provided.")
-        End If
-
         Dim conflict As ConflictMode = ConflictMode.BackupAndOverwrite
         Select Case cmbConflictMode.SelectedIndex
             Case 1
@@ -1251,6 +1503,7 @@ Public Class MainForm
             .Source = source,
             .StableRelease = stableRelease,
             .NightlyRelease = nightlyRelease,
+            .ComponentRelease = componentRelease,
             .LocalArchivePath = txtLocalArchive.Text,
             .GpuVendor = gpu,
             .EnableDlssInputs = chkDlssInputs.Checked,
@@ -1596,6 +1849,25 @@ Public Class MainForm
         Return sb.ToString()
     End Function
 
+    Private Sub LogVerificationReport(report As InstallVerificationReport)
+        If report Is Nothing Then
+            AppendLog("Post-install verification skipped.")
+            Return
+        End If
+
+        AppendLog($"Post-install verification: {report.Passed.Count} passed, {report.Warnings.Count} warnings, {report.Errors.Count} errors.")
+
+        For Each message As String In report.Passed
+            AppendLog("  [OK] " & message)
+        Next
+        For Each message As String In report.Warnings
+            AppendLog("  [WARN] " & message)
+        Next
+        For Each message As String In report.Errors
+            AppendLog("  [ERR] " & message)
+        Next
+    End Sub
+
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then
             statusStrip.BeginInvoke(New Action(Of String)(AddressOf SetStatus), message)
@@ -1638,7 +1910,7 @@ Public Class MainForm
         toolTip.SetToolTip(rbLocal, "Install from a local OptiScaler .7z archive.")
         toolTip.SetToolTip(txtLocalArchive, "Path to the local OptiScaler archive.")
         toolTip.SetToolTip(btnBrowseArchive, "Browse for a local OptiScaler .7z archive.")
-        toolTip.SetToolTip(btnRefreshReleases, "Fetch latest release info for stable and nightly.")
+        toolTip.SetToolTip(btnRefreshReleases, "Fetch latest release info for stable and alternate sources (and optional component feed).")
         toolTip.SetToolTip(cmbHookName, "DLL filename OptiScaler will use (renames OptiScaler.dll). Choose the hook the game loads.")
         toolTip.SetToolTip(rbGpuNvidia, "Target NVIDIA GPUs. Default DLSS path.")
         toolTip.SetToolTip(rbGpuAmdIntel, "Target AMD/Intel GPUs and allow DLSS input spoofing.")
@@ -2154,5 +2426,6 @@ Public Class MainForm
         Public Property Entry As CompatibilityEntry
         Public Property Detected As DetectedGame
         Public Property InstallInfo As OptiScalerInstallInfo
+        Public Property IsRecentlyChanged As Boolean
     End Class
 End Class

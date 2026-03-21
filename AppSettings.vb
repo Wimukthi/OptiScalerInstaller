@@ -106,7 +106,10 @@ Friend Class AppSettingsModel
     Public Property WikiBaseUrl As String
     Public Property StableReleaseUrl As String
     Public Property NightlyReleaseUrl As String
+    Public Property ComponentReleaseUrl As String
     Public Property InstallerReleaseUrl As String
+    Public Property EnableGameTemplates As Boolean?
+    Public Property HighlightCompatibilityChanges As Boolean?
     Public Property DefaultIniMode As String
     Public Property DefaultIniPath As String
     Public Property DefaultPreset As String
@@ -143,8 +146,20 @@ Friend Class AppSettingsModel
             NightlyReleaseUrl = defaults.NightlyReleaseUrl
             changed = True
         End If
+        If String.IsNullOrWhiteSpace(ComponentReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.ComponentReleaseUrl) Then
+            ComponentReleaseUrl = defaults.ComponentReleaseUrl
+            changed = True
+        End If
         If String.IsNullOrWhiteSpace(InstallerReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.InstallerReleaseUrl) Then
             InstallerReleaseUrl = defaults.InstallerReleaseUrl
+            changed = True
+        End If
+        If Not EnableGameTemplates.HasValue AndAlso defaults.EnableGameTemplates.HasValue Then
+            EnableGameTemplates = defaults.EnableGameTemplates
+            changed = True
+        End If
+        If Not HighlightCompatibilityChanges.HasValue AndAlso defaults.HighlightCompatibilityChanges.HasValue Then
+            HighlightCompatibilityChanges = defaults.HighlightCompatibilityChanges
             changed = True
         End If
         If String.IsNullOrWhiteSpace(DefaultIniMode) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniMode) Then

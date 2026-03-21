@@ -23,17 +23,27 @@ Public Class CompatibilityService
     End Function
 
     Public Shared Async Function UpdateCompatibilityListAsync() As Task(Of List(Of CompatibilityEntry))
+        Dim result As CompatibilityUpdateResult = Await UpdateCompatibilityListWithDiffAsync()
+        If result Is Nothing OrElse result.Entries Is Nothing Then
+            Return New List(Of CompatibilityEntry)()
+        End If
+
+        Return result.Entries
+    End Function
+
+    Public Shared Async Function UpdateCompatibilityListWithDiffAsync() As Task(Of CompatibilityUpdateResult)
         Dim listUrl As String = GetCompatibilityListUrl()
         If String.IsNullOrWhiteSpace(listUrl) Then
             Throw New InvalidOperationException("Compatibility list URL is not set. Update it in Settings.")
         End If
 
+        Dim previousEntries As List(Of CompatibilityEntry) = LoadCompatibilityList()
         Using client As New HttpClient()
             client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
             Dim content As String = Await client.GetStringAsync(listUrl)
             Dim entries As List(Of CompatibilityEntry) = ParseCompatibilityList(content)
             SaveCache(entries)
-            Return entries
+            Return BuildUpdateResult(previousEntries, entries)
         End Using
     End Function
 
@@ -97,5 +107,74 @@ Public Class CompatibilityService
         Next
 
         Return entries
+    End Function
+
+    Private Shared Function BuildUpdateResult(previousEntries As List(Of CompatibilityEntry),
+                                              newEntries As List(Of CompatibilityEntry)) As CompatibilityUpdateResult
+        If previousEntries Is Nothing Then
+            previousEntries = New List(Of CompatibilityEntry)()
+        End If
+        If newEntries Is Nothing Then
+            newEntries = New List(Of CompatibilityEntry)()
+        End If
+
+        Dim previousByName As New Dictionary(Of String, CompatibilityEntry)(StringComparer.OrdinalIgnoreCase)
+        For Each entry As CompatibilityEntry In previousEntries
+            If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.Name) Then
+                Continue For
+            End If
+
+            If Not previousByName.ContainsKey(entry.Name) Then
+                previousByName(entry.Name) = entry
+            End If
+        Next
+
+        Dim newByName As New Dictionary(Of String, CompatibilityEntry)(StringComparer.OrdinalIgnoreCase)
+        For Each entry As CompatibilityEntry In newEntries
+            If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.Name) Then
+                Continue For
+            End If
+
+            If Not newByName.ContainsKey(entry.Name) Then
+                newByName(entry.Name) = entry
+            End If
+        Next
+
+        Dim added As New List(Of String)()
+        Dim removed As New List(Of String)()
+        Dim changed As New List(Of String)()
+
+        For Each kvp As KeyValuePair(Of String, CompatibilityEntry) In newByName
+            If Not previousByName.ContainsKey(kvp.Key) Then
+                added.Add(kvp.Key)
+                Continue For
+            End If
+
+            Dim oldEntry As CompatibilityEntry = previousByName(kvp.Key)
+            If oldEntry Is Nothing Then
+                Continue For
+            End If
+
+            If Not String.Equals(oldEntry.Slug, kvp.Value.Slug, StringComparison.OrdinalIgnoreCase) Then
+                changed.Add(kvp.Key)
+            End If
+        Next
+
+        For Each kvp As KeyValuePair(Of String, CompatibilityEntry) In previousByName
+            If Not newByName.ContainsKey(kvp.Key) Then
+                removed.Add(kvp.Key)
+            End If
+        Next
+
+        added.Sort(StringComparer.OrdinalIgnoreCase)
+        removed.Sort(StringComparer.OrdinalIgnoreCase)
+        changed.Sort(StringComparer.OrdinalIgnoreCase)
+
+        Return New CompatibilityUpdateResult With {
+            .Entries = newEntries,
+            .AddedNames = added,
+            .RemovedNames = removed,
+            .ChangedNames = changed
+        }
     End Function
 End Class

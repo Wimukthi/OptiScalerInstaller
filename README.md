@@ -12,6 +12,11 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Global OptiScaler.ini defaults (merge or replace) during install.
 - Default install option presets (hook, GPU, DLSS inputs, frame generation, conflict mode).
 - Detect existing OptiScaler installs and offer update/reinstall/uninstall.
+- Compatibility refresh diff tracking (+added/-removed/~changed) with row highlighting.
+- Per-game workaround template auto-apply on detected game selection.
+- Version-aware add-on behavior for newer OptiScaler builds (0.9+ bundled component handling).
+- Post-install verification report with INI and file checks.
+- Archive provenance metadata (source URL, size, SHA-256 fingerprint) in install manifest/log.
 - Built-in installer update checker.
 - Diagnostics export bundle (logs, settings, detection snapshot).
 - Configurable URLs for lists and releases.
@@ -60,6 +65,7 @@ Run (Debug):
 
 - Update list URLs and release endpoints.
 - Configure installer update URL.
+- Optional component feed URL can be set in `OptiScalerInstaller.settings.json` (`ComponentReleaseUrl`).
 - Set default OptiScaler.ini template and behavior.
 - Configure default install options and apply them to the Install tab.
 - Export diagnostics bundles for support/debugging.
@@ -105,6 +111,7 @@ Settings:
 
 ## Version History
 
+- v1.0.4.2 - Add compatibility diff/highlight, game workaround templates, stronger preflight validation, archive SHA provenance, and post-install verification reporting.
 - v1.0.3.9 - Rename nightly to alternate source, skip checks when unset, and keep update notice aligned.
 - v1.0.3.8 - Handle missing OptiScaler release URLs (404) without blocking other release data.
 - v1.0.3.7 - Default install presets, diagnostics export, EA/Ubisoft detection, and updater rollback safety.

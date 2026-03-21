@@ -7,6 +7,7 @@ Public Class InstallerConfig
     Public Property Source As ReleaseSource
     Public Property StableRelease As ReleaseInfo
     Public Property NightlyRelease As ReleaseInfo
+    Public Property ComponentRelease As ReleaseInfo
     Public Property LocalArchivePath As String
     Public Property GpuVendor As GpuVendor
     Public Property EnableDlssInputs As Boolean

@@ -1,0 +1,36 @@
+[
+  {
+    "Name": "Luma Unreal Engine - Luma UE",
+    "Aliases": [
+      "Luma UE"
+    ],
+    "Notes": "Use the actual game Win64 executable folder. Avoid launchers and root installer folders."
+  },
+  {
+    "Name": "Control Ultimate Edition",
+    "Aliases": [
+      "Control"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "Notes": "If the game fails to load, try selecting the native game executable in the install folder and reinstall."
+  },
+  {
+    "Name": "Cyberpunk 2077",
+    "Aliases": [
+      "Cyberpunk"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "Notes": "Use the main game binary, not launcher/helper executables."
+  },
+  {
+    "Name": "Dead Space (2023)",
+    "Aliases": [
+      "Dead Space 2023"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "Notes": "If anti-cheat or launcher updates reset files, reinstall after the game update."
+  }
+]
