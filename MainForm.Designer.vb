@@ -28,6 +28,7 @@ Partial Class MainForm
         colCompatDetected = New ColumnHeader()
         colCompatInstalled = New ColumnHeader()
         colCompatPlatform = New ColumnHeader()
+        colCompatAntiCheat = New ColumnHeader()
         colCompatPath = New ColumnHeader()
         compatFooterPanel = New Panel()
         lblCompatibilityNote = New Label()
@@ -130,6 +131,10 @@ Partial Class MainForm
         txtNightlyReleaseUrl = New ThemedTextBox()
         lblInstallerReleaseUrl = New Label()
         txtInstallerReleaseUrl = New ThemedTextBox()
+        chkAutoRefreshCompatibilityOnStartup = New CheckBox()
+        lblCustomScanFolder = New Label()
+        txtCustomScanFolder = New ThemedTextBox()
+        btnBrowseCustomScanFolder = New Button()
         lblDefaultIniPath = New Label()
         txtDefaultIniPath = New ThemedTextBox()
         btnBrowseDefaultIni = New Button()
@@ -154,6 +159,7 @@ Partial Class MainForm
         btnLoadDefaults = New Button()
         btnOpenSettingsFile = New Button()
         btnCheckForUpdates = New Button()
+        btnAbout = New Button()
         btnExportDiagnostics = New Button()
         lblUpdateNotice = New Label()
         lblSettingsPath = New Label()
@@ -241,7 +247,7 @@ Partial Class MainForm
         ' 
         ' lvCompatibility
         ' 
-        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatPath})
+        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatAntiCheat, colCompatPath})
         lvCompatibility.Dock = DockStyle.Fill
         lvCompatibility.FullRowSelect = True
         lvCompatibility.Location = New Point(3, 47)
@@ -273,10 +279,15 @@ Partial Class MainForm
         colCompatPlatform.Text = "Platform"
         colCompatPlatform.Width = 110
         ' 
+        ' colCompatAntiCheat
+        ' 
+        colCompatAntiCheat.Text = "Anti-cheat"
+        colCompatAntiCheat.Width = 130
+        ' 
         ' colCompatPath
         ' 
         colCompatPath.Text = "Install Path"
-        colCompatPath.Width = 420
+        colCompatPath.Width = 360
         ' 
         ' compatFooterPanel
         ' 
@@ -292,9 +303,9 @@ Partial Class MainForm
         lblCompatibilityNote.AutoSize = True
         lblCompatibilityNote.Location = New Point(12, 4)
         lblCompatibilityNote.Name = "lblCompatibilityNote"
-        lblCompatibilityNote.Size = New Size(458, 15)
+        lblCompatibilityNote.Size = New Size(532, 15)
         lblCompatibilityNote.TabIndex = 8
-        lblCompatibilityNote.Text = "List shows tested games only. Detected column is best-effort and may be incomplete."
+        lblCompatibilityNote.Text = "List shows tested games only. Detected/Anti-cheat columns are best-effort and may be incomplete."
         ' 
         ' compatHeaderPanel
         ' 
@@ -1313,6 +1324,10 @@ Partial Class MainForm
         grpSettings.Controls.Add(txtNightlyReleaseUrl)
         grpSettings.Controls.Add(lblInstallerReleaseUrl)
         grpSettings.Controls.Add(txtInstallerReleaseUrl)
+        grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
+        grpSettings.Controls.Add(lblCustomScanFolder)
+        grpSettings.Controls.Add(txtCustomScanFolder)
+        grpSettings.Controls.Add(btnBrowseCustomScanFolder)
         grpSettings.Controls.Add(lblDefaultIniPath)
         grpSettings.Controls.Add(txtDefaultIniPath)
         grpSettings.Controls.Add(btnBrowseDefaultIni)
@@ -1324,6 +1339,7 @@ Partial Class MainForm
         grpSettings.Controls.Add(btnLoadDefaults)
         grpSettings.Controls.Add(btnOpenSettingsFile)
         grpSettings.Controls.Add(btnCheckForUpdates)
+        grpSettings.Controls.Add(btnAbout)
         grpSettings.Controls.Add(btnExportDiagnostics)
         grpSettings.Controls.Add(lblUpdateNotice)
         grpSettings.Controls.Add(lblSettingsPath)
@@ -1442,13 +1458,54 @@ Partial Class MainForm
         txtInstallerReleaseUrl.Size = New Size(1018, 24)
         txtInstallerReleaseUrl.TabIndex = 13
         ' 
+        ' chkAutoRefreshCompatibilityOnStartup
+        ' 
+        chkAutoRefreshCompatibilityOnStartup.AutoSize = True
+        chkAutoRefreshCompatibilityOnStartup.Location = New Point(180, 191)
+        chkAutoRefreshCompatibilityOnStartup.Name = "chkAutoRefreshCompatibilityOnStartup"
+        chkAutoRefreshCompatibilityOnStartup.Size = New Size(268, 19)
+        chkAutoRefreshCompatibilityOnStartup.TabIndex = 14
+        chkAutoRefreshCompatibilityOnStartup.Text = "Auto-refresh compatibility list on application start"
+        chkAutoRefreshCompatibilityOnStartup.UseVisualStyleBackColor = True
+        ' 
+        ' lblCustomScanFolder
+        ' 
+        lblCustomScanFolder.AutoSize = True
+        lblCustomScanFolder.Location = New Point(12, 226)
+        lblCustomScanFolder.Name = "lblCustomScanFolder"
+        lblCustomScanFolder.Size = New Size(106, 15)
+        lblCustomScanFolder.TabIndex = 15
+        lblCustomScanFolder.Text = "Custom scan folder"
+        ' 
+        ' txtCustomScanFolder
+        ' 
+        txtCustomScanFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtCustomScanFolder.BackColor = SystemColors.Window
+        txtCustomScanFolder.ForeColor = SystemColors.WindowText
+        txtCustomScanFolder.Location = New Point(180, 222)
+        txtCustomScanFolder.MinimumSize = New Size(0, 24)
+        txtCustomScanFolder.Name = "txtCustomScanFolder"
+        txtCustomScanFolder.Padding = New Padding(6, 3, 6, 3)
+        txtCustomScanFolder.Size = New Size(910, 24)
+        txtCustomScanFolder.TabIndex = 16
+        ' 
+        ' btnBrowseCustomScanFolder
+        ' 
+        btnBrowseCustomScanFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnBrowseCustomScanFolder.Location = New Point(1098, 222)
+        btnBrowseCustomScanFolder.Name = "btnBrowseCustomScanFolder"
+        btnBrowseCustomScanFolder.Size = New Size(100, 24)
+        btnBrowseCustomScanFolder.TabIndex = 17
+        btnBrowseCustomScanFolder.Text = "Browse"
+        btnBrowseCustomScanFolder.UseVisualStyleBackColor = True
+        ' 
         ' lblDefaultIniPath
         ' 
         lblDefaultIniPath.AutoSize = True
-        lblDefaultIniPath.Location = New Point(12, 192)
+        lblDefaultIniPath.Location = New Point(12, 262)
         lblDefaultIniPath.Name = "lblDefaultIniPath"
         lblDefaultIniPath.Size = New Size(113, 15)
-        lblDefaultIniPath.TabIndex = 14
+        lblDefaultIniPath.TabIndex = 18
         lblDefaultIniPath.Text = "Default INI template"
         ' 
         ' txtDefaultIniPath
@@ -1456,30 +1513,30 @@ Partial Class MainForm
         txtDefaultIniPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtDefaultIniPath.BackColor = SystemColors.Window
         txtDefaultIniPath.ForeColor = SystemColors.WindowText
-        txtDefaultIniPath.Location = New Point(180, 188)
+        txtDefaultIniPath.Location = New Point(180, 258)
         txtDefaultIniPath.MinimumSize = New Size(0, 24)
         txtDefaultIniPath.Name = "txtDefaultIniPath"
         txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
         txtDefaultIniPath.Size = New Size(910, 24)
-        txtDefaultIniPath.TabIndex = 15
+        txtDefaultIniPath.TabIndex = 19
         ' 
         ' btnBrowseDefaultIni
         ' 
         btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseDefaultIni.Location = New Point(1098, 188)
+        btnBrowseDefaultIni.Location = New Point(1098, 258)
         btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
         btnBrowseDefaultIni.Size = New Size(100, 24)
-        btnBrowseDefaultIni.TabIndex = 16
+        btnBrowseDefaultIni.TabIndex = 20
         btnBrowseDefaultIni.Text = "Browse"
         btnBrowseDefaultIni.UseVisualStyleBackColor = True
         ' 
         ' lblDefaultIniMode
         ' 
         lblDefaultIniMode.AutoSize = True
-        lblDefaultIniMode.Location = New Point(12, 224)
+        lblDefaultIniMode.Location = New Point(12, 294)
         lblDefaultIniMode.Name = "lblDefaultIniMode"
         lblDefaultIniMode.Size = New Size(112, 15)
-        lblDefaultIniMode.TabIndex = 17
+        lblDefaultIniMode.TabIndex = 21
         lblDefaultIniMode.Text = "Default INI behavior"
         ' 
         ' cmbDefaultIniMode
@@ -1487,10 +1544,10 @@ Partial Class MainForm
         cmbDefaultIniMode.DropDownStyle = ComboBoxStyle.DropDownList
         cmbDefaultIniMode.FormattingEnabled = True
         cmbDefaultIniMode.Items.AddRange(New Object() {"Off", "Merge", "Replace"})
-        cmbDefaultIniMode.Location = New Point(180, 220)
+        cmbDefaultIniMode.Location = New Point(180, 290)
         cmbDefaultIniMode.Name = "cmbDefaultIniMode"
         cmbDefaultIniMode.Size = New Size(220, 23)
-        cmbDefaultIniMode.TabIndex = 18
+        cmbDefaultIniMode.TabIndex = 22
         ' 
         ' grpDefaultInstall
         ' 
@@ -1508,10 +1565,10 @@ Partial Class MainForm
         grpDefaultInstall.Controls.Add(lblDefaultConflictMode)
         grpDefaultInstall.Controls.Add(cmbDefaultConflictMode)
         grpDefaultInstall.Controls.Add(btnApplyDefaults)
-        grpDefaultInstall.Location = New Point(12, 288)
+        grpDefaultInstall.Location = New Point(12, 334)
         grpDefaultInstall.Name = "grpDefaultInstall"
         grpDefaultInstall.Size = New Size(1186, 250)
-        grpDefaultInstall.TabIndex = 19
+        grpDefaultInstall.TabIndex = 23
         grpDefaultInstall.TabStop = False
         grpDefaultInstall.Text = "Default Install Options"
         ' 
@@ -1694,13 +1751,23 @@ Partial Class MainForm
         btnCheckForUpdates.Text = "Check for updates"
         btnCheckForUpdates.UseVisualStyleBackColor = True
         ' 
+        ' btnAbout
+        ' 
+        btnAbout.Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
+        btnAbout.Location = New Point(892, 597)
+        btnAbout.Name = "btnAbout"
+        btnAbout.Size = New Size(138, 30)
+        btnAbout.TabIndex = 24
+        btnAbout.Text = "About"
+        btnAbout.UseVisualStyleBackColor = True
+        ' 
         ' btnExportDiagnostics
         ' 
         btnExportDiagnostics.Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
         btnExportDiagnostics.Location = New Point(1038, 597)
         btnExportDiagnostics.Name = "btnExportDiagnostics"
         btnExportDiagnostics.Size = New Size(160, 30)
-        btnExportDiagnostics.TabIndex = 24
+        btnExportDiagnostics.TabIndex = 25
         btnExportDiagnostics.Text = "Export diagnostics"
         btnExportDiagnostics.UseVisualStyleBackColor = True
         ' 
@@ -1727,11 +1794,12 @@ Partial Class MainForm
         ' 
         ' DarkThemeCheckBox
         ' 
+        DarkThemeCheckBox.Anchor = AnchorStyles.Top Or AnchorStyles.Right
         DarkThemeCheckBox.AutoSize = True
-        DarkThemeCheckBox.Location = New Point(12, 256)
+        DarkThemeCheckBox.Location = New Point(1111, 191)
         DarkThemeCheckBox.Name = "DarkThemeCheckBox"
         DarkThemeCheckBox.Size = New Size(87, 19)
-        DarkThemeCheckBox.TabIndex = 5
+        DarkThemeCheckBox.TabIndex = 26
         DarkThemeCheckBox.Text = "Dark theme"
         DarkThemeCheckBox.UseVisualStyleBackColor = True
         ' 
@@ -1874,6 +1942,10 @@ Partial Class MainForm
     Friend WithEvents txtNightlyReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblInstallerReleaseUrl As System.Windows.Forms.Label
     Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
+    Friend WithEvents lblCustomScanFolder As System.Windows.Forms.Label
+    Friend WithEvents txtCustomScanFolder As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents btnBrowseCustomScanFolder As System.Windows.Forms.Button
     Friend WithEvents lblDefaultIniPath As System.Windows.Forms.Label
     Friend WithEvents txtDefaultIniPath As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents btnBrowseDefaultIni As System.Windows.Forms.Button
@@ -1898,6 +1970,7 @@ Partial Class MainForm
     Friend WithEvents btnLoadDefaults As System.Windows.Forms.Button
     Friend WithEvents btnOpenSettingsFile As System.Windows.Forms.Button
     Friend WithEvents btnCheckForUpdates As System.Windows.Forms.Button
+    Friend WithEvents btnAbout As System.Windows.Forms.Button
     Friend WithEvents btnExportDiagnostics As System.Windows.Forms.Button
     Friend WithEvents lblUpdateNotice As System.Windows.Forms.Label
     Friend WithEvents lblSettingsPath As System.Windows.Forms.Label
@@ -1987,6 +2060,7 @@ Partial Class MainForm
     Friend WithEvents colCompatName As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatDetected As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPlatform As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colCompatAntiCheat As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPath As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatInstalled As System.Windows.Forms.ColumnHeader
     Friend WithEvents txtGameSearch As OptiScalerInstaller.ThemedTextBox

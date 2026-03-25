@@ -19,6 +19,7 @@ Public Class UpdateReleaseInfo
     Public Property Title As String
     Public Property Notes As String
     Public Property HtmlUrl As String
+    Public Property PublishedAtUtc As DateTime?
     Public Property Assets As List(Of UpdateAssetInfo)
 End Class
 
@@ -69,6 +70,7 @@ Public Module UpdateService
                 release.Title = GetJsonString(root, "name")
                 release.Notes = GetJsonString(root, "body")
                 release.HtmlUrl = GetJsonString(root, "html_url")
+                release.PublishedAtUtc = ParsePublishedDate(GetJsonString(root, "published_at"))
                 release.Version = ParseVersionSafe(release.TagName)
 
                 Dim assets As New List(Of UpdateAssetInfo)()
@@ -279,5 +281,18 @@ Public Module UpdateService
             End If
         End If
         Return 0
+    End Function
+
+    Private Function ParsePublishedDate(text As String) As DateTime?
+        If String.IsNullOrWhiteSpace(text) Then
+            Return Nothing
+        End If
+
+        Dim value As DateTime
+        If DateTime.TryParse(text, Globalization.CultureInfo.InvariantCulture, Globalization.DateTimeStyles.AdjustToUniversal Or Globalization.DateTimeStyles.AssumeUniversal, value) Then
+            Return value
+        End If
+
+        Return Nothing
     End Function
 End Module

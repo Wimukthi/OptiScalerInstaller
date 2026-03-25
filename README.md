@@ -18,8 +18,11 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Post-install verification report with INI and file checks.
 - Archive provenance metadata (source URL, size, SHA-256 fingerprint) in install manifest/log.
 - Built-in installer update checker.
+- About window with current/latest installer version, release date, repository link, and author.
 - Diagnostics export bundle (logs, settings, detection snapshot).
 - Configurable URLs for lists and releases.
+- Anti-cheat signature hints in detection results with install-time warning prompts.
+- Optional custom folder scan source and startup compatibility auto-refresh toggle.
 
 ## Requirements
 
@@ -111,6 +114,7 @@ Settings:
 
 ## Version History
 
+- v1.0.4.7 - Add About dialog metadata view, anti-cheat detection/warnings, startup compatibility auto-refresh option, custom scan folder support, and settings/ui stabilization updates.
 - v1.0.4.2 - Add compatibility diff/highlight, game workaround templates, stronger preflight validation, archive SHA provenance, and post-install verification reporting.
 - v1.0.3.9 - Rename nightly to alternate source, skip checks when unset, and keep update notice aligned.
 - v1.0.3.8 - Handle missing OptiScaler release URLs (404) without blocking other release data.

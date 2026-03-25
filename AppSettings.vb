@@ -108,6 +108,8 @@ Friend Class AppSettingsModel
     Public Property NightlyReleaseUrl As String
     Public Property ComponentReleaseUrl As String
     Public Property InstallerReleaseUrl As String
+    Public Property AutoRefreshCompatibilityOnStartup As Boolean?
+    Public Property CustomScanFolder As String
     Public Property EnableGameTemplates As Boolean?
     Public Property HighlightCompatibilityChanges As Boolean?
     Public Property DefaultIniMode As String
@@ -152,6 +154,14 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(InstallerReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.InstallerReleaseUrl) Then
             InstallerReleaseUrl = defaults.InstallerReleaseUrl
+            changed = True
+        End If
+        If Not AutoRefreshCompatibilityOnStartup.HasValue AndAlso defaults.AutoRefreshCompatibilityOnStartup.HasValue Then
+            AutoRefreshCompatibilityOnStartup = defaults.AutoRefreshCompatibilityOnStartup
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(CustomScanFolder) AndAlso Not String.IsNullOrWhiteSpace(defaults.CustomScanFolder) Then
+            CustomScanFolder = defaults.CustomScanFolder
             changed = True
         End If
         If Not EnableGameTemplates.HasValue AndAlso defaults.EnableGameTemplates.HasValue Then

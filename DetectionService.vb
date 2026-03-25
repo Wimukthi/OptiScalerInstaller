@@ -1,11 +1,14 @@
 Imports System.IO
 Imports System.Text.Json
 Imports System.Text.RegularExpressions
+Imports System.Linq
 Imports Microsoft.Win32
 
 Public Class DetectionService
     ' Scans known launchers and matches installs against the compatibility list.
-    Public Shared Function DetectSupportedGames(entries As IEnumerable(Of CompatibilityEntry), log As Action(Of String)) As List(Of DetectedGame)
+    Public Shared Function DetectSupportedGames(entries As IEnumerable(Of CompatibilityEntry),
+                                                log As Action(Of String),
+                                                Optional customScanFolders As IEnumerable(Of String) = Nothing) As List(Of DetectedGame)
         Dim results As New List(Of DetectedGame)()
         If entries Is Nothing Then
             Return results
@@ -19,6 +22,7 @@ Public Class DetectionService
         AddGogGames(matcher, results, seenPaths, log)
         AddEaGames(matcher, results, seenPaths, log)
         AddUbisoftGames(matcher, results, seenPaths, log)
+        AddCustomFolderGames(matcher, results, seenPaths, customScanFolders, log)
 
         results.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName))
         Return results
@@ -252,15 +256,128 @@ Public Class DetectionService
             Return
         End If
 
+        Dim antiCheat As AntiCheatScanResult = AntiCheatService.Detect(trimmedPath)
+        Dim antiCheatProvider As String = ""
+        If antiCheat IsNot Nothing AndAlso antiCheat.Detected Then
+            antiCheatProvider = antiCheat.Provider
+        End If
+
         results.Add(New DetectedGame With {
             .DisplayName = match.Name,
             .Platform = platform,
             .InstallDir = trimmedPath,
             .MatchedEntry = match,
-            .SourceName = displayName
+            .SourceName = displayName,
+            .AntiCheat = antiCheatProvider
         })
         seenPaths.Add(trimmedPath)
     End Sub
+
+    Private Shared Sub AddCustomFolderGames(matcher As CompatibilityMatcher,
+                                            results As List(Of DetectedGame),
+                                            seenPaths As HashSet(Of String),
+                                            customScanFolders As IEnumerable(Of String),
+                                            log As Action(Of String))
+        If customScanFolders Is Nothing Then
+            Return
+        End If
+
+        For Each folder As String In customScanFolders
+            Dim root As String = NormalizeInstallPath(folder)
+            If String.IsNullOrWhiteSpace(root) Then
+                Continue For
+            End If
+            If Not Directory.Exists(root) Then
+                Continue For
+            End If
+
+            If log IsNot Nothing Then
+                log("Scanning custom folder: " & root)
+            End If
+
+            ScanCustomRoot(matcher, results, seenPaths, root)
+        Next
+    End Sub
+
+    Private Shared Sub ScanCustomRoot(matcher As CompatibilityMatcher,
+                                      results As List(Of DetectedGame),
+                                      seenPaths As HashSet(Of String),
+                                      root As String)
+        Dim queue As New Queue(Of ScanNode)()
+        queue.Enqueue(New ScanNode With {.FolderPath = root, .Depth = 0})
+        Dim visited As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim maxDepth As Integer = 3
+        Dim maxFolders As Integer = 2500
+        Dim scanned As Integer = 0
+
+        While queue.Count > 0 AndAlso scanned < maxFolders
+            Dim node As ScanNode = queue.Dequeue()
+            scanned += 1
+
+            Dim normalized As String = NormalizeInstallPath(node.FolderPath)
+            If String.IsNullOrWhiteSpace(normalized) OrElse visited.Contains(normalized) Then
+                Continue While
+            End If
+            visited.Add(normalized)
+
+            Dim folderName As String = Path.GetFileName(normalized)
+            If Not String.IsNullOrWhiteSpace(folderName) Then
+                AddIfSupported(matcher, results, seenPaths, folderName, normalized, "Custom")
+            End If
+
+            Dim executables As IEnumerable(Of String) = Enumerable.Empty(Of String)()
+            Try
+                executables = Directory.EnumerateFiles(normalized, "*.exe", SearchOption.TopDirectoryOnly)
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.ScanCustomRoot.EnumerateExe")
+            End Try
+
+            For Each exePath As String In executables
+                Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
+                If ShouldSkipExecutable(exeName) Then
+                    Continue For
+                End If
+
+                AddIfSupported(matcher, results, seenPaths, exeName, normalized, "Custom")
+            Next
+
+            If node.Depth >= maxDepth Then
+                Continue While
+            End If
+
+            Dim children As IEnumerable(Of String) = Enumerable.Empty(Of String)()
+            Try
+                children = Directory.EnumerateDirectories(normalized, "*", SearchOption.TopDirectoryOnly)
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.ScanCustomRoot.EnumerateDirs")
+            End Try
+
+            For Each child As String In children
+                queue.Enqueue(New ScanNode With {.FolderPath = child, .Depth = node.Depth + 1})
+            Next
+        End While
+    End Sub
+
+    Private Shared Function ShouldSkipExecutable(exeName As String) As Boolean
+        If String.IsNullOrWhiteSpace(exeName) Then
+            Return True
+        End If
+
+        Dim lower As String = exeName.ToLowerInvariant()
+        Dim skipTokens As String() = {
+            "unins", "uninstall", "setup", "launcher", "crashreport", "crashreportclient",
+            "redist", "vc_redist", "installer", "update", "updater", "patch", "easyanticheat",
+            "eac", "battleye", "unitycrashhandler"
+        }
+
+        For Each token As String In skipTokens
+            If lower.Contains(token) Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
 
     Private Shared Function NormalizeInstallPath(value As String) As String
         ' Normalize separators and resolve to a full path when possible.
@@ -441,5 +558,10 @@ Public Class DetectionService
         Private Shared Function NormalizeRelaxedName(value As String) As String
             Return NameNormalization.NormalizeRelaxedName(value)
         End Function
+    End Class
+
+    Private Class ScanNode
+        Public Property FolderPath As String
+        Public Property Depth As Integer
     End Class
 End Class

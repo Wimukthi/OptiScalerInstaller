@@ -23,7 +23,7 @@ Public Class MainForm
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
     Private compatibilityChangedNames As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-    Private compatibilityBaseNoteText As String = "List shows tested games only. Detected column is best-effort and may be incomplete."
+    Private compatibilityBaseNoteText As String = "List shows tested games only. Detected/Anti-cheat columns are best-effort and may be incomplete."
     Private lastNormalBounds As Rectangle?
     Private windowSettingsApplied As Boolean
     Private windowSaveTimer As Timer
@@ -65,17 +65,24 @@ Public Class MainForm
         ThemeManager.ApplyTheme(Me, preferredMode)
         InitializeToolTips()
         LoadSettingsUi()
+        PositionSettingsControls()
         ApplyWindowSettings()
         InitializeWindowSaveTimer()
         AppendLog("OptiScaler Installer started.")
         BeginInvoke(New Action(AddressOf StartBackgroundTasks))
-        BeginInvoke(New Action(AddressOf StartAutoDetection))
     End Sub
 
     ' Run background refreshes after the UI is ready.
     Private Async Sub StartBackgroundTasks()
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
+        If refreshOnStartup Then
+            Await RefreshCompatibilityAsync(False, True)
+        End If
+
         Await RefreshReleaseInfoAsync(False)
         Await CheckForUpdatesSilentAsync()
+        Await RunDetectionAsync(True)
     End Sub
 
     Private Sub UpdateWindowTitle()
@@ -112,6 +119,11 @@ Public Class MainForm
 
     Private Sub MainForm_SizeChanged(sender As Object, e As EventArgs) Handles MyBase.SizeChanged
         CaptureNormalBounds()
+        PositionSettingsControls()
+    End Sub
+
+    Private Sub grpSettings_Resize(sender As Object, e As EventArgs) Handles grpSettings.Resize
+        PositionSettingsControls()
     End Sub
 
     Private Sub InitializeDefaults()
@@ -133,6 +145,7 @@ Public Class MainForm
         chkDefaultDlssInputs.Checked = True
         cmbDefaultFgType.SelectedIndex = 0
         cmbDefaultConflictMode.SelectedIndex = 0
+        chkAutoRefreshCompatibilityOnStartup.Checked = True
         ToggleLocalArchive()
         ApplyDetectedGpuVendor()
         UpdateGpuControls()
@@ -140,6 +153,26 @@ Public Class MainForm
         chkEnableSpecialK_CheckedChanged(Me, EventArgs.Empty)
         chkLoadAsiPlugins_CheckedChanged(Me, EventArgs.Empty)
         btnUseDetected.Enabled = False
+    End Sub
+
+    Private Sub PositionSettingsControls()
+        If grpSettings Is Nothing OrElse DarkThemeCheckBox Is Nothing Then
+            Return
+        End If
+
+        Dim targetY As Integer = 191
+        If chkAutoRefreshCompatibilityOnStartup IsNot Nothing Then
+            targetY = chkAutoRefreshCompatibilityOnStartup.Top
+        End If
+
+        Dim targetX As Integer = grpSettings.ClientSize.Width - DarkThemeCheckBox.Width - 24
+        If targetX < 12 Then
+            targetX = 12
+        End If
+
+        DarkThemeCheckBox.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        DarkThemeCheckBox.Location = New Point(targetX, targetY)
+        DarkThemeCheckBox.BringToFront()
     End Sub
 
     Private Sub ApplyDetectedGpuVendor()
@@ -299,10 +332,11 @@ Public Class MainForm
                 item.SubItems.Add(If(isDetected, "Yes", ""))
                 item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
+                item.SubItems.Add(If(isDetected, GetAntiCheatStatusText(detected), ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
                 Dim isChanged As Boolean = highlightChanges AndAlso compatibilityChangedNames.Contains(normalizedKey)
                 item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .IsRecentlyChanged = isChanged}
-                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged)
+                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged, isDetected AndAlso Not String.IsNullOrWhiteSpace(detected.AntiCheat))
                 lvCompatibility.Items.Add(item)
             End If
         Next
@@ -370,6 +404,17 @@ Public Class MainForm
             If dialog.ShowDialog(Me) = DialogResult.OK Then
                 txtDefaultIniPath.Text = dialog.FileName
                 AppendLog("Selected default OptiScaler.ini: " & dialog.FileName)
+            End If
+        End Using
+    End Sub
+
+    Private Sub btnBrowseCustomScanFolder_Click(sender As Object, e As EventArgs) Handles btnBrowseCustomScanFolder.Click
+        AppendLog("Browsing for custom scan folder.")
+        Using dialog As New FolderBrowserDialog()
+            dialog.Description = "Select an additional folder to scan for supported games"
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                txtCustomScanFolder.Text = dialog.SelectedPath
+                AppendLog("Selected custom scan folder: " & dialog.SelectedPath)
             End If
         End Using
     End Sub
@@ -808,6 +853,11 @@ Public Class MainForm
             warnings.Add("Engine folder detected. Unreal Engine games should target the Win64/WinGDK binaries folder.")
         End If
 
+        Dim antiCheat As AntiCheatScanResult = AntiCheatService.Detect(config.GameFolder)
+        If antiCheat IsNot Nothing AndAlso antiCheat.Detected Then
+            warnings.Add("Anti-cheat appears to be present (" & antiCheat.Provider & "). Using OptiScaler with anti-cheat protected online games can cause bans.")
+        End If
+
         If Not IsFolderWritable(config.GameFolder) Then
             warnings.Add("Game folder is not writable. Installation may require admin rights.")
         End If
@@ -870,8 +920,15 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnRefreshCompatibility_Click(sender As Object, e As EventArgs) Handles btnRefreshCompatibility.Click
-        SetStatus("Updating lists...")
-        AppendLog("Refreshing compatibility list...")
+        Await RefreshCompatibilityAsync(True, False)
+    End Sub
+
+    Private Async Function RefreshCompatibilityAsync(reportStatus As Boolean, isAuto As Boolean) As Task
+        If reportStatus Then
+            SetStatus("Updating lists...")
+        End If
+
+        AppendLog(If(isAuto, "Auto-refreshing compatibility list...", "Refreshing compatibility list..."))
 
         Try
             Dim updateResult As CompatibilityUpdateResult = Await CompatibilityService.UpdateCompatibilityListWithDiffAsync()
@@ -901,14 +958,18 @@ Public Class MainForm
 
             UpdateCompatibilityNote()
             ApplyCompatibilityFilter()
-            SetStatus("List updated.")
+            If reportStatus Then
+                SetStatus("List updated.")
+            End If
             AppendLog("List updated.")
         Catch ex As Exception
             AppendLog("Failed to update compatibility list: " & ex.Message)
-            SetStatus("List update failed.")
+            If reportStatus Then
+                SetStatus("List update failed.")
+            End If
             ErrorLogger.Log(ex, "MainForm.RefreshCompatibility")
         End Try
-    End Sub
+    End Function
 
     Private Async Sub btnScanDetected_Click(sender As Object, e As EventArgs) Handles btnScanDetected.Click
         Await RunDetectionAsync(False)
@@ -970,6 +1031,43 @@ Public Class MainForm
         Return map
     End Function
 
+    Private Function GetConfiguredCustomScanFolders() As List(Of String)
+        Dim folders As New List(Of String)()
+        Dim rawValue As String = ""
+
+        If txtCustomScanFolder IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(txtCustomScanFolder.Text) Then
+            rawValue = txtCustomScanFolder.Text
+        Else
+            Dim settings As AppSettingsModel = AppSettings.Load()
+            rawValue = If(settings Is Nothing, "", settings.CustomScanFolder)
+        End If
+
+        If String.IsNullOrWhiteSpace(rawValue) Then
+            Return folders
+        End If
+
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim parts As String() = rawValue.Split(New Char() {";"c, "|"c}, StringSplitOptions.RemoveEmptyEntries)
+        For Each part As String In parts
+            Dim trimmed As String = part.Trim()
+            If String.IsNullOrWhiteSpace(trimmed) Then
+                Continue For
+            End If
+
+            Dim normalized As String = NormalizePathSafe(trimmed)
+            If String.IsNullOrWhiteSpace(normalized) Then
+                Continue For
+            End If
+
+            If Directory.Exists(normalized) AndAlso Not seen.Contains(normalized) Then
+                folders.Add(normalized)
+                seen.Add(normalized)
+            End If
+        Next
+
+        Return folders
+    End Function
+
     Private Function BuildInstallStatusLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, OptiScalerInstallInfo)
         Dim map As New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
         For Each game As DetectedGame In results
@@ -1028,11 +1126,24 @@ Public Class MainForm
         Return "Yes (" & info.Version & ")"
     End Function
 
+    Private Function GetAntiCheatStatusText(game As DetectedGame) As String
+        If game Is Nothing Then
+            Return ""
+        End If
+
+        If String.IsNullOrWhiteSpace(game.AntiCheat) Then
+            Return "No"
+        End If
+
+        Return game.AntiCheat
+    End Function
+
     Private Sub ApplyInstallRowColors(item As ListViewItem,
                                       info As OptiScalerInstallInfo,
                                       isDetected As Boolean,
                                       rowIndex As Integer,
-                                      isRecentlyChanged As Boolean)
+                                      isRecentlyChanged As Boolean,
+                                      antiCheatDetected As Boolean)
         If item Is Nothing Then
             Return
         End If
@@ -1044,6 +1155,11 @@ Public Class MainForm
         If isRecentlyChanged Then
             Dim changedTint As Color = Color.FromArgb(65, 95, 150)
             baseColor = BlendColors(baseColor, changedTint, If(mode = SystemColorMode.Dark, 55, 40))
+        End If
+
+        If antiCheatDetected Then
+            Dim antiCheatTint As Color = Color.FromArgb(170, 120, 40)
+            baseColor = BlendColors(baseColor, antiCheatTint, If(mode = SystemColorMode.Dark, 70, 50))
         End If
 
         item.BackColor = baseColor
@@ -1585,6 +1701,8 @@ Public Class MainForm
         settings.StableReleaseUrl = txtStableReleaseUrl.Text.Trim()
         settings.NightlyReleaseUrl = txtNightlyReleaseUrl.Text.Trim()
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
+        settings.AutoRefreshCompatibilityOnStartup = chkAutoRefreshCompatibilityOnStartup.Checked
+        settings.CustomScanFolder = txtCustomScanFolder.Text.Trim()
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
         settings.DefaultPreset = GetDefaultPresetValue()
@@ -1628,6 +1746,29 @@ Public Class MainForm
 
     Private Async Sub btnCheckForUpdates_Click(sender As Object, e As EventArgs) Handles btnCheckForUpdates.Click
         Await CheckForUpdatesAsync(True)
+    End Sub
+
+    Private Async Sub btnAbout_Click(sender As Object, e As EventArgs) Handles btnAbout.Click
+        Dim release As UpdateReleaseInfo = latestUpdateRelease
+        If release Is Nothing Then
+            Try
+                release = Await UpdateService.GetLatestReleaseAsync()
+                latestUpdateRelease = release
+            Catch ex As Exception
+                AppendLog("About info refresh failed: " & ex.Message)
+                ErrorLogger.Log(ex, "MainForm.btnAbout_Click")
+            End Try
+        End If
+
+        Dim currentVersion As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+        If currentVersion Is Nothing Then
+            currentVersion = New Version(0, 0)
+        End If
+
+        Dim repositoryUrl As String = ResolveInstallerRepositoryUrl(release)
+        Using dlg As New frmAbout(currentVersion, release, repositoryUrl, "Wimukthi")
+            dlg.ShowDialog(Me)
+        End Using
     End Sub
 
     Private Async Sub btnExportDiagnostics_Click(sender As Object, e As EventArgs) Handles btnExportDiagnostics.Click
@@ -1737,6 +1878,62 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Function ResolveInstallerRepositoryUrl(release As UpdateReleaseInfo) As String
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim repoUrl As String = ConvertApiReleaseUrlToRepo(If(settings IsNot Nothing, settings.InstallerReleaseUrl, String.Empty))
+        If String.IsNullOrWhiteSpace(repoUrl) AndAlso release IsNot Nothing Then
+            repoUrl = ConvertHtmlReleaseUrlToRepo(release.HtmlUrl)
+        End If
+        If String.IsNullOrWhiteSpace(repoUrl) Then
+            repoUrl = "https://github.com/Wimukthi/OptiScalerInstaller"
+        End If
+        Return repoUrl
+    End Function
+
+    Private Function ConvertApiReleaseUrlToRepo(url As String) As String
+        If String.IsNullOrWhiteSpace(url) Then
+            Return String.Empty
+        End If
+
+        Try
+            Dim uri As New Uri(url)
+            If Not uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase) Then
+                Return ConvertHtmlReleaseUrlToRepo(url)
+            End If
+
+            Dim parts As String() = uri.AbsolutePath.Trim("/"c).Split("/"c)
+            If parts.Length >= 3 AndAlso parts(0).Equals("repos", StringComparison.OrdinalIgnoreCase) Then
+                Return $"https://github.com/{parts(1)}/{parts(2)}"
+            End If
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.ConvertApiReleaseUrlToRepo")
+        End Try
+
+        Return String.Empty
+    End Function
+
+    Private Function ConvertHtmlReleaseUrlToRepo(url As String) As String
+        If String.IsNullOrWhiteSpace(url) Then
+            Return String.Empty
+        End If
+
+        Try
+            Dim uri As New Uri(url)
+            If Not uri.Host.EndsWith("github.com", StringComparison.OrdinalIgnoreCase) Then
+                Return String.Empty
+            End If
+
+            Dim parts As String() = uri.AbsolutePath.Trim("/"c).Split("/"c)
+            If parts.Length >= 2 Then
+                Return $"https://github.com/{parts(0)}/{parts(1)}"
+            End If
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.ConvertHtmlReleaseUrlToRepo")
+        End Try
+
+        Return String.Empty
+    End Function
+
     Private Async Function ExportDiagnosticsAsync() As Task
         Dim dialog As New SaveFileDialog() With {
             .Filter = "Diagnostics zip (*.zip)|*.zip|All files (*.*)|*.*",
@@ -1821,6 +2018,7 @@ Public Class MainForm
                 .Platform = game.Platform,
                 .InstallDir = game.InstallDir,
                 .SourceName = game.SourceName,
+                .AntiCheat = game.AntiCheat,
                 .OptiScalerInstalled = If(info IsNot Nothing, info.IsInstalled, False),
                 .OptiScalerVersion = If(info IsNot Nothing, info.Version, ""),
                 .OptiScalerSource = If(info IsNot Nothing, info.Source, "")
@@ -1900,7 +2098,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnUseDetected, "Use the selected detected game and prefill the Install tab. You can still change settings before installing.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the wiki and refresh the table.")
         toolTip.SetToolTip(btnOpenWiki, "Open the selected game's wiki page in your browser.")
-        toolTip.SetToolTip(lvCompatibility, "Compatibility list with detection info. Double-click a detected row to prefill the Install tab.")
+        toolTip.SetToolTip(lvCompatibility, "Compatibility list with detection info, install state, and anti-cheat hints. Double-click a detected row to prefill the Install tab.")
 
         toolTip.SetToolTip(txtGameExe, "Path to the game's main executable. Avoid launchers, uninstallers, or setup tools.")
         toolTip.SetToolTip(btnBrowseGameExe, "Browse for the game's executable (.exe).")
@@ -1951,6 +2149,9 @@ Public Class MainForm
         toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API URL for the latest stable release.")
         toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the alternate release source.")
         toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
+        toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "When enabled, the compatibility list is auto-refreshed on startup.")
+        toolTip.SetToolTip(txtCustomScanFolder, "Optional custom folder root to scan for supported games. Use ';' to separate multiple folders.")
+        toolTip.SetToolTip(btnBrowseCustomScanFolder, "Browse for an additional custom scan folder.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
         toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for a default OptiScaler.ini template.")
         toolTip.SetToolTip(cmbDefaultIniMode, "Choose how to apply the default OptiScaler.ini.")
@@ -1966,6 +2167,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnLoadDefaults, "Load defaults from the bundled settings file.")
         toolTip.SetToolTip(btnOpenSettingsFile, "Open the settings file in your default editor.")
         toolTip.SetToolTip(btnCheckForUpdates, "Check for OptiScaler Installer updates.")
+        toolTip.SetToolTip(btnAbout, "Show current version, latest release date, repository link, and author details.")
         toolTip.SetToolTip(btnExportDiagnostics, "Export logs, settings, and detection data to a diagnostics zip.")
         toolTip.SetToolTip(lblInstalledStatus, "Shows detected OptiScaler installation status for the selected game folder.")
     End Sub
@@ -2145,10 +2347,6 @@ Public Class MainForm
         Return New Rectangle(x, y, bounds.Width, bounds.Height)
     End Function
 
-    Private Async Sub StartAutoDetection()
-        Await RunDetectionAsync(True)
-    End Sub
-
     Private Async Function RunDetectionAsync(isAuto As Boolean) As Task
         Dim label As String = If(isAuto, "Auto detection", "Detection")
         Try
@@ -2165,19 +2363,31 @@ Public Class MainForm
                 Return
             End If
 
-            Dim results As List(Of DetectedGame) = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog))
+            Dim customScanFolders As List(Of String) = GetConfiguredCustomScanFolders()
+            If customScanFolders.Count > 0 Then
+                AppendLog("Custom scan roots: " & String.Join("; ", customScanFolders))
+            End If
+
+            Dim results As List(Of DetectedGame) = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog, customScanFolders))
             detectedGames = results
             detectedLookup = BuildDetectedLookup(results)
             detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
             ApplyCompatibilityFilter()
             UpdateDetectedStatus()
             Dim installedCount As Integer = 0
+            Dim antiCheatCount As Integer = 0
             For Each info As OptiScalerInstallInfo In detectedInstallLookup.Values
                 If info IsNot Nothing AndAlso info.IsInstalled Then
                     installedCount += 1
                 End If
             Next
+            For Each game As DetectedGame In detectedGames
+                If game IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(game.AntiCheat) Then
+                    antiCheatCount += 1
+                End If
+            Next
             AppendLog("OptiScaler installed in " & installedCount & " detected game(s).")
+            AppendLog("Anti-cheat flagged in " & antiCheatCount & " detected game(s).")
             AppendLog(label & " finished: " & detectedLookup.Count & " supported game(s) detected.")
         Catch ex As Exception
             AppendLog(label & " failed: " & ex.Message)
@@ -2198,6 +2408,8 @@ Public Class MainForm
         txtStableReleaseUrl.Text = settings.StableReleaseUrl
         txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
         txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
+        chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
+        txtCustomScanFolder.Text = If(settings.CustomScanFolder, "")
         txtDefaultIniPath.Text = settings.DefaultIniPath
         cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
         _settingDefaultsPreset = True
@@ -2417,6 +2629,7 @@ Public Class MainForm
         Public Property Platform As String
         Public Property InstallDir As String
         Public Property SourceName As String
+        Public Property AntiCheat As String
         Public Property OptiScalerInstalled As Boolean
         Public Property OptiScalerVersion As String
         Public Property OptiScalerSource As String

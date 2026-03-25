@@ -5,4 +5,5 @@ Public Class DetectedGame
     Public Property InstallDir As String
     Public Property MatchedEntry As CompatibilityEntry
     Public Property SourceName As String
+    Public Property AntiCheat As String
 End Class
