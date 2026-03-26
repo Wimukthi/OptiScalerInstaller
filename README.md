@@ -114,6 +114,7 @@ Settings:
 
 ## Version History
 
+- v1.0.5.0 - Improve startup crash handling: fatal initialization errors now show an explicit dialog and terminate cleanly instead of silently running as a background process.
 - v1.0.4.9 - Fix install-status detection for games that load from nested binary folders (for example `Binaries\\Win64`) so existing OptiScaler installs are correctly reported.
 - v1.0.4.8 - Fix false-positive OptiScaler detection by requiring strong install markers or OptiScaler metadata before generic hook DLLs (like stock dbghelp.dll) are treated as installed.
 - v1.0.4.7 - Add About dialog metadata view, anti-cheat detection/warnings, startup compatibility auto-refresh option, custom scan folder support, and settings/ui stabilization updates.
