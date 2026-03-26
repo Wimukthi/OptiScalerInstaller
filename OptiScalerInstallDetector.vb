@@ -9,6 +9,7 @@ Public Class OptiScalerInstallInfo
     Public Property Source As String
     Public Property Manifest As InstallManifest
     Public Property HookFilePath As String
+    Public Property InstallFolder As String
 End Class
 
 Public Module OptiScalerInstallDetector
@@ -42,17 +43,51 @@ Public Module OptiScalerInstallDetector
     }
 
     Public Function Detect(gameFolder As String) As OptiScalerInstallInfo
-        Dim info As New OptiScalerInstallInfo()
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Return New OptiScalerInstallInfo()
+        End If
+
+        Dim direct As OptiScalerInstallInfo = DetectInFolder(gameFolder)
+        If direct IsNot Nothing AndAlso direct.IsInstalled Then
+            Return direct
+        End If
+
+        For Each nestedFolder As String In GetNestedProbeFolders(gameFolder)
+            Dim nested As OptiScalerInstallInfo = DetectInFolder(nestedFolder)
+            If nested IsNot Nothing AndAlso nested.IsInstalled Then
+                If String.IsNullOrWhiteSpace(nested.InstallFolder) Then
+                    nested.InstallFolder = nestedFolder
+                End If
+
+                Dim relative As String = TryGetRelativeFolder(gameFolder, nested.InstallFolder)
+                If Not String.IsNullOrWhiteSpace(relative) Then
+                    If String.IsNullOrWhiteSpace(nested.Source) Then
+                        nested.Source = relative
+                    Else
+                        nested.Source &= " @ " & relative
+                    End If
+                End If
+                Return nested
+            End If
+        Next
+
+        Return direct
+    End Function
+
+    Private Function DetectInFolder(folderPath As String) As OptiScalerInstallInfo
+        Dim info As New OptiScalerInstallInfo()
+        info.InstallFolder = folderPath
+
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
             Return info
         End If
 
-        Dim manifest As InstallManifest = TryLoadManifest(gameFolder)
+        Dim manifest As InstallManifest = TryLoadManifest(folderPath)
         If manifest IsNot Nothing Then
             info.IsInstalled = True
             info.Manifest = manifest
             info.Source = "Manifest"
-            info.HookFilePath = GetHookFilePath(gameFolder, manifest.HookName, True)
+            info.HookFilePath = GetHookFilePath(folderPath, manifest.HookName, True)
             info.Version = If(String.IsNullOrWhiteSpace(manifest.OptiScalerVersion), "", manifest.OptiScalerVersion)
             If String.IsNullOrWhiteSpace(info.Version) Then
                 info.Version = TryGetFileVersion(info.HookFilePath)
@@ -60,10 +95,10 @@ Public Module OptiScalerInstallDetector
             Return info
         End If
 
-        Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+        Dim iniPath As String = Path.Combine(folderPath, "OptiScaler.ini")
         Dim hasIni As Boolean = File.Exists(iniPath)
-        Dim hasStrongMarkers As Boolean = HasStrongInstallMarkers(gameFolder)
-        Dim hookPath As String = GetHookFilePath(gameFolder, Nothing, hasIni OrElse hasStrongMarkers)
+        Dim hasStrongMarkers As Boolean = HasStrongInstallMarkers(folderPath)
+        Dim hookPath As String = GetHookFilePath(folderPath, Nothing, hasIni OrElse hasStrongMarkers)
 
         If Not hasIni AndAlso Not hasStrongMarkers AndAlso String.IsNullOrWhiteSpace(hookPath) Then
             Return info
@@ -80,6 +115,59 @@ Public Module OptiScalerInstallDetector
         info.HookFilePath = hookPath
         info.Version = TryGetFileVersion(hookPath)
         Return info
+    End Function
+
+    Private Function GetNestedProbeFolders(gameFolder As String) As IEnumerable(Of String)
+        Dim folders As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        AddKnownProbePaths(folders, gameFolder)
+
+        Try
+            For Each child As String In Directory.EnumerateDirectories(gameFolder, "*", SearchOption.TopDirectoryOnly)
+                AddKnownProbePaths(folders, child)
+            Next
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.GetNestedProbeFolders")
+        End Try
+
+        Return folders
+    End Function
+
+    Private Sub AddKnownProbePaths(target As HashSet(Of String), baseFolder As String)
+        If String.IsNullOrWhiteSpace(baseFolder) OrElse target Is Nothing Then
+            Return
+        End If
+
+        Dim candidates As String() = {
+            Path.Combine(baseFolder, "Binaries", "Win64"),
+            Path.Combine(baseFolder, "Engine", "Binaries", "Win64"),
+            Path.Combine(baseFolder, "bin"),
+            Path.Combine(baseFolder, "bin", "x64"),
+            Path.Combine(baseFolder, "x64"),
+            Path.Combine(baseFolder, "Win64")
+        }
+
+        For Each candidate As String In candidates
+            If Directory.Exists(candidate) Then
+                target.Add(candidate)
+            End If
+        Next
+    End Sub
+
+    Private Function TryGetRelativeFolder(rootFolder As String, childFolder As String) As String
+        If String.IsNullOrWhiteSpace(rootFolder) OrElse String.IsNullOrWhiteSpace(childFolder) Then
+            Return String.Empty
+        End If
+
+        Try
+            Dim relative As String = IO.Path.GetRelativePath(rootFolder, childFolder)
+            If String.IsNullOrWhiteSpace(relative) OrElse relative = "." Then
+                Return String.Empty
+            End If
+            Return relative
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.TryGetRelativeFolder")
+            Return String.Empty
+        End Try
     End Function
 
     Private Function TryLoadManifest(gameFolder As String) As InstallManifest
