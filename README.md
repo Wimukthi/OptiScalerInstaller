@@ -114,6 +114,7 @@ Settings:
 
 ## Version History
 
+- v1.0.4.8 - Fix false-positive OptiScaler detection by requiring strong install markers or OptiScaler metadata before generic hook DLLs (like stock dbghelp.dll) are treated as installed.
 - v1.0.4.7 - Add About dialog metadata view, anti-cheat detection/warnings, startup compatibility auto-refresh option, custom scan folder support, and settings/ui stabilization updates.
 - v1.0.4.2 - Add compatibility diff/highlight, game workaround templates, stronger preflight validation, archive SHA provenance, and post-install verification reporting.
 - v1.0.3.9 - Rename nightly to alternate source, skip checks when unset, and keep update notice aligned.
