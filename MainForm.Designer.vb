@@ -132,6 +132,7 @@ Partial Class MainForm
         lblInstallerReleaseUrl = New Label()
         txtInstallerReleaseUrl = New ThemedTextBox()
         chkAutoRefreshCompatibilityOnStartup = New CheckBox()
+        chkAutoCheckInstallerUpdates = New CheckBox()
         lblCustomScanFolder = New Label()
         txtCustomScanFolder = New ThemedTextBox()
         btnBrowseCustomScanFolder = New Button()
@@ -1325,6 +1326,7 @@ Partial Class MainForm
         grpSettings.Controls.Add(lblInstallerReleaseUrl)
         grpSettings.Controls.Add(txtInstallerReleaseUrl)
         grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
+        grpSettings.Controls.Add(chkAutoCheckInstallerUpdates)
         grpSettings.Controls.Add(lblCustomScanFolder)
         grpSettings.Controls.Add(txtCustomScanFolder)
         grpSettings.Controls.Add(btnBrowseCustomScanFolder)
@@ -1467,6 +1469,16 @@ Partial Class MainForm
         chkAutoRefreshCompatibilityOnStartup.TabIndex = 14
         chkAutoRefreshCompatibilityOnStartup.Text = "Auto-refresh compatibility list on application start"
         chkAutoRefreshCompatibilityOnStartup.UseVisualStyleBackColor = True
+        ' 
+        ' chkAutoCheckInstallerUpdates
+        ' 
+        chkAutoCheckInstallerUpdates.AutoSize = True
+        chkAutoCheckInstallerUpdates.Location = New Point(470, 191)
+        chkAutoCheckInstallerUpdates.Name = "chkAutoCheckInstallerUpdates"
+        chkAutoCheckInstallerUpdates.Size = New Size(227, 19)
+        chkAutoCheckInstallerUpdates.TabIndex = 15
+        chkAutoCheckInstallerUpdates.Text = "Auto-check installer updates on startup"
+        chkAutoCheckInstallerUpdates.UseVisualStyleBackColor = True
         ' 
         ' lblCustomScanFolder
         ' 
@@ -1943,6 +1955,7 @@ Partial Class MainForm
     Friend WithEvents lblInstallerReleaseUrl As System.Windows.Forms.Label
     Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
+    Friend WithEvents chkAutoCheckInstallerUpdates As System.Windows.Forms.CheckBox
     Friend WithEvents lblCustomScanFolder As System.Windows.Forms.Label
     Friend WithEvents txtCustomScanFolder As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents btnBrowseCustomScanFolder As System.Windows.Forms.Button

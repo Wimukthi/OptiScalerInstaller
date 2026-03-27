@@ -29,18 +29,16 @@ Public Module OptiScalerInstallDetector
         "winhttp.dll"
     }
 
-    Private ReadOnly StrongMarkerFiles As String() = {
-        "OptiScaler.ini",
-        "OptiScaler.log",
-        "Remove OptiScaler.bat",
-        "OptiScalerInstaller.manifest.json"
+    Private ReadOnly SupportMarkerFiles As String() = {
+        "OptiScaler.log"
     }
 
-    Private ReadOnly StrongMarkerDirectories As String() = {
+    Private ReadOnly SupportMarkerDirectories As String() = {
         "D3D12_Optiscaler",
-        "DlssOverrides",
-        "Licenses"
+        "DlssOverrides"
     }
+
+    Private Const ManifestFileName As String = "OptiScalerInstaller.manifest.json"
 
     Public Function Detect(gameFolder As String) As OptiScalerInstallInfo
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
@@ -87,7 +85,7 @@ Public Module OptiScalerInstallDetector
             info.IsInstalled = True
             info.Manifest = manifest
             info.Source = "Manifest"
-            info.HookFilePath = GetHookFilePath(folderPath, manifest.HookName, True)
+            info.HookFilePath = GetPreferredHookPath(folderPath, manifest.HookName, True)
             info.Version = If(String.IsNullOrWhiteSpace(manifest.OptiScalerVersion), "", manifest.OptiScalerVersion)
             If String.IsNullOrWhiteSpace(info.Version) Then
                 info.Version = TryGetFileVersion(info.HookFilePath)
@@ -95,20 +93,46 @@ Public Module OptiScalerInstallDetector
             Return info
         End If
 
-        Dim iniPath As String = Path.Combine(folderPath, "OptiScaler.ini")
-        Dim hasIni As Boolean = File.Exists(iniPath)
-        Dim hasStrongMarkers As Boolean = HasStrongInstallMarkers(folderPath)
-        Dim hookPath As String = GetHookFilePath(folderPath, Nothing, hasIni OrElse hasStrongMarkers)
+        Dim hasIni As Boolean = File.Exists(Path.Combine(folderPath, "OptiScaler.ini"))
+        Dim hasRemoveBat As Boolean = File.Exists(Path.Combine(folderPath, "Remove OptiScaler.bat"))
+        Dim hasSupportMarkers As Boolean = HasSupportInstallMarkers(folderPath)
+        Dim specificHookPath As String = GetSpecificHookPath(folderPath, Nothing)
+        Dim genericHookPath As String = GetVerifiedGenericHookPath(folderPath, Nothing, hasIni OrElse hasRemoveBat OrElse hasSupportMarkers)
+        Dim hookPath As String = If(Not String.IsNullOrWhiteSpace(specificHookPath), specificHookPath, genericHookPath)
 
-        If Not hasIni AndAlso Not hasStrongMarkers AndAlso String.IsNullOrWhiteSpace(hookPath) Then
+        ' Confidence score tuned to avoid false positives from stock game files.
+        Dim score As Integer = 0
+        If hasIni Then
+            score += 70
+        End If
+        If hasRemoveBat Then
+            score += 70
+        End If
+        If Not String.IsNullOrWhiteSpace(specificHookPath) Then
+            score += 70
+        End If
+        If Not String.IsNullOrWhiteSpace(genericHookPath) Then
+            score += 75
+        End If
+        If hasSupportMarkers Then
+            score += 25
+        End If
+
+        If score < 70 Then
             Return info
         End If
 
         info.IsInstalled = True
         If hasIni Then
             info.Source = "OptiScaler.ini"
-        ElseIf hasStrongMarkers Then
-            info.Source = "OptiScaler files"
+        ElseIf hasRemoveBat Then
+            info.Source = "Remove OptiScaler.bat"
+        ElseIf Not String.IsNullOrWhiteSpace(specificHookPath) Then
+            info.Source = "OptiScaler hook"
+        ElseIf Not String.IsNullOrWhiteSpace(genericHookPath) Then
+            info.Source = "Verified hook file"
+        ElseIf hasSupportMarkers Then
+            info.Source = "OptiScaler support files"
         Else
             info.Source = "Hook file"
         End If
@@ -124,6 +148,10 @@ Public Module OptiScalerInstallDetector
         Try
             For Each child As String In Directory.EnumerateDirectories(gameFolder, "*", SearchOption.TopDirectoryOnly)
                 AddKnownProbePaths(folders, child)
+
+                For Each grandChild As String In Directory.EnumerateDirectories(child, "*", SearchOption.TopDirectoryOnly)
+                    AddKnownProbePaths(folders, grandChild)
+                Next
             Next
         Catch ex As Exception
             ErrorLogger.Log(ex, "OptiScalerInstallDetector.GetNestedProbeFolders")
@@ -139,11 +167,16 @@ Public Module OptiScalerInstallDetector
 
         Dim candidates As String() = {
             Path.Combine(baseFolder, "Binaries", "Win64"),
+            Path.Combine(baseFolder, "Binaries", "Win32"),
+            Path.Combine(baseFolder, "Binaries", "WinGDK"),
             Path.Combine(baseFolder, "Engine", "Binaries", "Win64"),
             Path.Combine(baseFolder, "bin"),
             Path.Combine(baseFolder, "bin", "x64"),
+            Path.Combine(baseFolder, "bin", "Win64"),
             Path.Combine(baseFolder, "x64"),
-            Path.Combine(baseFolder, "Win64")
+            Path.Combine(baseFolder, "Win64"),
+            Path.Combine(baseFolder, "Win32"),
+            Path.Combine(baseFolder, "WinGDK")
         }
 
         For Each candidate As String In candidates
@@ -171,7 +204,7 @@ Public Module OptiScalerInstallDetector
     End Function
 
     Private Function TryLoadManifest(gameFolder As String) As InstallManifest
-        Dim manifestPath As String = Path.Combine(gameFolder, "OptiScalerInstaller.manifest.json")
+        Dim manifestPath As String = Path.Combine(gameFolder, ManifestFileName)
         If Not File.Exists(manifestPath) Then
             Return Nothing
         End If
@@ -179,24 +212,60 @@ Public Module OptiScalerInstallDetector
         Try
             Dim json As String = File.ReadAllText(manifestPath)
             Dim manifest As InstallManifest = JsonSerializer.Deserialize(Of InstallManifest)(json)
-            If manifest IsNot Nothing Then
+            If IsManifestValid(gameFolder, manifest) Then
                 Return manifest
             End If
         Catch ex As Exception
             ErrorLogger.Log(ex, "OptiScalerInstallDetector.TryLoadManifest")
         End Try
 
-        Return New InstallManifest()
+        Return Nothing
     End Function
 
-    Private Function HasStrongInstallMarkers(gameFolder As String) As Boolean
-        For Each fileName As String In StrongMarkerFiles
+    Private Function IsManifestValid(gameFolder As String, manifest As InstallManifest) As Boolean
+        If manifest Is Nothing OrElse String.IsNullOrWhiteSpace(gameFolder) Then
+            Return False
+        End If
+
+        If Not String.IsNullOrWhiteSpace(manifest.HookName) Then
+            Dim hookPath As String = Path.Combine(gameFolder, manifest.HookName)
+            If File.Exists(hookPath) Then
+                Return True
+            End If
+        End If
+
+        If manifest.InstalledFiles IsNot Nothing Then
+            For Each installedPath As String In manifest.InstalledFiles
+                If String.IsNullOrWhiteSpace(installedPath) Then
+                    Continue For
+                End If
+
+                Try
+                    Dim fullPath As String = Path.GetFullPath(installedPath)
+                    If File.Exists(fullPath) OrElse Directory.Exists(fullPath) Then
+                        Return True
+                    End If
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "OptiScalerInstallDetector.IsManifestValid.Path")
+                End Try
+            Next
+        End If
+
+        Dim hasIni As Boolean = File.Exists(Path.Combine(gameFolder, "OptiScaler.ini"))
+        Dim hasRemoveBat As Boolean = File.Exists(Path.Combine(gameFolder, "Remove OptiScaler.bat"))
+        Dim hasSpecificHook As Boolean = Not String.IsNullOrWhiteSpace(GetSpecificHookPath(gameFolder, Nothing))
+        Dim hasVerifiedGenericHook As Boolean = Not String.IsNullOrWhiteSpace(GetVerifiedGenericHookPath(gameFolder, Nothing, False))
+        Return hasIni OrElse hasRemoveBat OrElse hasSpecificHook OrElse hasVerifiedGenericHook
+    End Function
+
+    Private Function HasSupportInstallMarkers(gameFolder As String) As Boolean
+        For Each fileName As String In SupportMarkerFiles
             If File.Exists(Path.Combine(gameFolder, fileName)) Then
                 Return True
             End If
         Next
 
-        For Each folderName As String In StrongMarkerDirectories
+        For Each folderName As String In SupportMarkerDirectories
             If Directory.Exists(Path.Combine(gameFolder, folderName)) Then
                 Return True
             End If
@@ -205,12 +274,26 @@ Public Module OptiScalerInstallDetector
         Return False
     End Function
 
-    Private Function GetHookFilePath(gameFolder As String, preferredHook As String, allowGenericFallback As Boolean) As String
+    Private Function GetPreferredHookPath(gameFolder As String, preferredHook As String, allowGenericFallback As Boolean) As String
+        Dim specificHook As String = GetSpecificHookPath(gameFolder, preferredHook)
+        If Not String.IsNullOrWhiteSpace(specificHook) Then
+            Return specificHook
+        End If
+
+        Return GetVerifiedGenericHookPath(gameFolder, preferredHook, allowGenericFallback)
+    End Function
+
+    Private Function GetSpecificHookPath(gameFolder As String, preferredHook As String) As String
         If Not String.IsNullOrWhiteSpace(preferredHook) Then
-            Dim preferredPath As String = Path.Combine(gameFolder, preferredHook)
-            If File.Exists(preferredPath) AndAlso (allowGenericFallback OrElse IsLikelyOptiScalerBinary(preferredPath)) Then
-                Return preferredPath
-            End If
+            For Each name As String In SpecificHookNames
+                If preferredHook.Equals(name, StringComparison.OrdinalIgnoreCase) Then
+                    Dim preferredSpecific As String = Path.Combine(gameFolder, preferredHook)
+                    If File.Exists(preferredSpecific) Then
+                        Return preferredSpecific
+                    End If
+                    Exit For
+                End If
+            Next
         End If
 
         For Each name As String In SpecificHookNames
@@ -219,6 +302,22 @@ Public Module OptiScalerInstallDetector
                 Return candidate
             End If
         Next
+
+        Return ""
+    End Function
+
+    Private Function GetVerifiedGenericHookPath(gameFolder As String, preferredHook As String, allowGenericFallback As Boolean) As String
+        If Not String.IsNullOrWhiteSpace(preferredHook) Then
+            For Each name As String In GenericHookNames
+                If preferredHook.Equals(name, StringComparison.OrdinalIgnoreCase) Then
+                    Dim preferredPath As String = Path.Combine(gameFolder, preferredHook)
+                    If File.Exists(preferredPath) AndAlso (allowGenericFallback OrElse IsLikelyOptiScalerBinary(preferredPath)) Then
+                        Return preferredPath
+                    End If
+                    Exit For
+                End If
+            Next
+        End If
 
         For Each name As String In GenericHookNames
             Dim candidate As String = Path.Combine(gameFolder, name)

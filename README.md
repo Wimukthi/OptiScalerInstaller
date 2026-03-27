@@ -17,8 +17,8 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Version-aware add-on behavior for newer OptiScaler builds (0.9+ bundled component handling).
 - Post-install verification report with INI and file checks.
 - Archive provenance metadata (source URL, size, SHA-256 fingerprint) in install manifest/log.
-- Built-in installer update checker.
-- About window with current/latest installer version, release date, repository link, and author.
+- Built-in installer update checker with optional startup auto-check and non-intrusive in-app notice.
+- About window with current/latest installer version, release date, installer repo link, OptiScaler repo link, and author.
 - Diagnostics export bundle (logs, settings, detection snapshot).
 - Configurable URLs for lists and releases.
 - Anti-cheat signature hints in detection results with install-time warning prompts.
@@ -114,6 +114,7 @@ Settings:
 
 ## Version History
 
+- v1.0.5.2 - Harden OptiScaler detection and executable resolution (fewer false positives, stronger manifest validation, improved nested binary probing), add startup auto-update-check toggle, and include OptiScaler project link in About.
 - v1.0.5.0 - Improve startup crash handling: fatal initialization errors now show an explicit dialog and terminate cleanly instead of silently running as a background process.
 - v1.0.4.9 - Fix install-status detection for games that load from nested binary folders (for example `Binaries\\Win64`) so existing OptiScaler installs are correctly reported.
 - v1.0.4.8 - Fix false-positive OptiScaler detection by requiring strong install markers or OptiScaler metadata before generic hook DLLs (like stock dbghelp.dll) are treated as installed.

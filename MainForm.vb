@@ -30,6 +30,9 @@ Public Class MainForm
     Private windowSavePending As Boolean
     Private lastInstallStatusKey As String
     Private latestUpdateRelease As UpdateReleaseInfo
+    Private gpuDetectionInitialized As Boolean
+    Private gpuDetectionVendor As GpuVendor = GpuVendor.Unknown
+    Private gpuDetectionCandidates As List(Of String) = New List(Of String)()
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -76,12 +79,18 @@ Public Class MainForm
     Private Async Sub StartBackgroundTasks()
         Dim settings As AppSettingsModel = AppSettings.Load()
         Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
+        Dim checkUpdatesOnStartup As Boolean = settings Is Nothing OrElse Not settings.AutoCheckInstallerUpdates.HasValue OrElse settings.AutoCheckInstallerUpdates.Value
         If refreshOnStartup Then
             Await RefreshCompatibilityAsync(False, True)
         End If
 
         Await RefreshReleaseInfoAsync(False)
-        Await CheckForUpdatesSilentAsync()
+        If checkUpdatesOnStartup Then
+            Await CheckForUpdatesSilentAsync()
+        Else
+            SetUpdateNoticeVisible(False, "")
+            AppendLog("Installer update auto-check disabled.")
+        End If
         Await RunDetectionAsync(True)
     End Sub
 
@@ -146,6 +155,7 @@ Public Class MainForm
         cmbDefaultFgType.SelectedIndex = 0
         cmbDefaultConflictMode.SelectedIndex = 0
         chkAutoRefreshCompatibilityOnStartup.Checked = True
+        chkAutoCheckInstallerUpdates.Checked = True
         ToggleLocalArchive()
         ApplyDetectedGpuVendor()
         UpdateGpuControls()
@@ -173,30 +183,63 @@ Public Class MainForm
         DarkThemeCheckBox.Anchor = AnchorStyles.Top Or AnchorStyles.Right
         DarkThemeCheckBox.Location = New Point(targetX, targetY)
         DarkThemeCheckBox.BringToFront()
+        PositionUpdateNotice()
     End Sub
 
-    Private Sub ApplyDetectedGpuVendor()
+    Private Sub PositionUpdateNotice()
+        If grpSettings Is Nothing OrElse btnCheckForUpdates Is Nothing OrElse lblUpdateNotice Is Nothing Then
+            Return
+        End If
+
+        lblUpdateNotice.Anchor = AnchorStyles.Bottom Or AnchorStyles.Left
+        Dim x As Integer = btnCheckForUpdates.Left - lblUpdateNotice.Width - 8
+        Dim y As Integer = btnCheckForUpdates.Top + CInt((btnCheckForUpdates.Height - lblUpdateNotice.Height) / 2)
+
+        If x < 12 Then
+            x = btnCheckForUpdates.Right + 10
+        End If
+        If x + lblUpdateNotice.Width > grpSettings.ClientSize.Width - 10 Then
+            x = grpSettings.ClientSize.Width - lblUpdateNotice.Width - 10
+        End If
+        If y < 12 Then
+            y = 12
+        End If
+
+        lblUpdateNotice.Location = New Point(x, y)
+    End Sub
+
+    Private Sub ApplyDetectedGpuVendor(Optional logAction As Boolean = True)
         ' Auto-select GPU vendor based on detected adapters.
         If rbGpuNvidia Is Nothing OrElse rbGpuAmdIntel Is Nothing Then
             Return
         End If
 
-        Dim adapterNames As List(Of String) = GetGpuAdapterNames()
-        If adapterNames.Count > 0 Then
-            AppendLog("GPU detection candidates: " & String.Join("; ", adapterNames))
+        If Not gpuDetectionInitialized Then
+            gpuDetectionCandidates = GetGpuAdapterNames()
+            gpuDetectionVendor = DetectGpuVendor(gpuDetectionCandidates)
+            gpuDetectionInitialized = True
         End If
 
-        Dim vendor As GpuVendor = DetectGpuVendor(adapterNames)
-        Select Case vendor
+        If logAction AndAlso gpuDetectionCandidates.Count > 0 Then
+            AppendLog("GPU detection candidates: " & String.Join("; ", gpuDetectionCandidates))
+        End If
+
+        Select Case gpuDetectionVendor
             Case GpuVendor.Nvidia
                 rbGpuNvidia.Checked = True
-                AppendLog("Detected GPU vendor: NVIDIA.")
+                If logAction Then
+                    AppendLog("Detected GPU vendor: NVIDIA.")
+                End If
             Case GpuVendor.AmdIntel
                 rbGpuAmdIntel.Checked = True
-                AppendLog("Detected GPU vendor: AMD/Intel.")
+                If logAction Then
+                    AppendLog("Detected GPU vendor: AMD/Intel.")
+                End If
             Case Else
                 rbGpuNvidia.Checked = True
-                AppendLog("GPU vendor detection failed; defaulting to NVIDIA.")
+                If logAction Then
+                    AppendLog("GPU vendor detection failed; defaulting to NVIDIA.")
+                End If
         End Select
     End Sub
 
@@ -325,7 +368,7 @@ Public Class MainForm
 
                 Dim installInfo As OptiScalerInstallInfo = Nothing
                 If isDetected Then
-                    detectedInstallLookup.TryGetValue(normalizedKey, installInfo)
+                    detectedInstallLookup.TryGetValue(GetDetectedInstallLookupKey(detected), installInfo)
                 End If
 
                 Dim item As New ListViewItem(entry.Name)
@@ -1075,7 +1118,7 @@ Public Class MainForm
                 Continue For
             End If
 
-            Dim key As String = NameNormalization.NormalizeRelaxedName(game.DisplayName)
+            Dim key As String = GetDetectedInstallLookupKey(game)
             If String.IsNullOrWhiteSpace(key) Then
                 Continue For
             End If
@@ -1086,6 +1129,20 @@ Public Class MainForm
         Next
 
         Return map
+    End Function
+
+    Private Function GetDetectedInstallLookupKey(game As DetectedGame) As String
+        If game Is Nothing Then
+            Return ""
+        End If
+
+        Dim nameKey As String = NameNormalization.NormalizeRelaxedName(game.DisplayName)
+        If String.IsNullOrWhiteSpace(nameKey) Then
+            Return ""
+        End If
+
+        Dim pathKey As String = NormalizePathSafe(game.InstallDir)
+        Return nameKey & "|" & pathKey
     End Function
 
     Private Sub UpdateDetectedStatus()
@@ -1197,7 +1254,7 @@ Public Class MainForm
         txtGameFolder.Text = game.InstallDir
         UpdateEngineWarningByFolder(game.InstallDir)
 
-        Dim exePath As String = FindPreferredExecutable(game.InstallDir, game.DisplayName)
+        Dim exePath As String = FindPreferredExecutable(game.InstallDir, game.DisplayName, game.SourceName)
         If String.IsNullOrWhiteSpace(exePath) Then
             Using dialog As New OpenFileDialog()
                 dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
@@ -1391,78 +1448,299 @@ Public Class MainForm
         Return InstallAction.Cancel
     End Function
 
-    Private Function FindPreferredExecutable(installDir As String, displayName As String) As String
+    Private Function FindPreferredExecutable(installDir As String, displayName As String, Optional sourceName As String = "") As String
         If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
             Return Nothing
         End If
 
-        Dim candidates As New List(Of String)()
+        Dim candidates As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each folder As String In GetCandidateExeFolders(installDir)
-            If Not Directory.Exists(folder) Then
-                Continue For
-            End If
+            AddExecutablesFromFolder(folder, candidates)
+        Next
 
-            For Each exePath As String In Directory.GetFiles(folder, "*.exe", SearchOption.TopDirectoryOnly)
-                Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
-                If ShouldSkipExecutable(exeName) Then
-                    Continue For
-                End If
+        If candidates.Count = 0 Then
+            For Each exePath As String In FindExecutablesRecursively(installDir, 4, 1200)
                 candidates.Add(exePath)
             Next
-        Next
+        End If
 
         If candidates.Count = 0 Then
             Return Nothing
         End If
 
-        Dim normalizedGame As String = NameNormalization.NormalizeRelaxedName(displayName)
-        If Not String.IsNullOrWhiteSpace(normalizedGame) Then
-            For Each exePath As String In candidates
+        Dim bestPath As String = ""
+        Dim bestScore As Integer = Integer.MinValue
+        For Each exePath As String In candidates
+            Dim score As Integer = ScoreExecutableCandidate(exePath, displayName, sourceName)
+            If score > bestScore Then
+                bestScore = score
+                bestPath = exePath
+            End If
+        Next
+
+        If String.IsNullOrWhiteSpace(bestPath) Then
+            Return Nothing
+        End If
+
+        Return bestPath
+    End Function
+
+    Private Sub AddExecutablesFromFolder(folder As String, candidates As HashSet(Of String))
+        If candidates Is Nothing OrElse String.IsNullOrWhiteSpace(folder) OrElse Not Directory.Exists(folder) Then
+            Return
+        End If
+
+        Try
+            For Each exePath As String In Directory.GetFiles(folder, "*.exe", SearchOption.TopDirectoryOnly)
                 Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
-                Dim normalizedExe As String = NameNormalization.NormalizeRelaxedName(exeName)
-                If normalizedExe = normalizedGame Then
-                    Return exePath
+                If ShouldSkipExecutable(exeName) Then
+                    Continue For
                 End If
+
+                candidates.Add(exePath)
             Next
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.AddExecutablesFromFolder")
+        End Try
+    End Sub
+
+    Private Function FindExecutablesRecursively(rootFolder As String, maxDepth As Integer, maxFolders As Integer) As List(Of String)
+        Dim results As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        If String.IsNullOrWhiteSpace(rootFolder) OrElse Not Directory.Exists(rootFolder) Then
+            Return results.ToList()
         End If
 
-        If candidates.Count = 1 Then
-            Return candidates(0)
-        End If
+        Dim queue As New Queue(Of Tuple(Of String, Integer))()
+        Dim visited As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        queue.Enqueue(Tuple.Create(rootFolder, 0))
+        Dim scanned As Integer = 0
 
-        If Not String.IsNullOrWhiteSpace(displayName) Then
-            For Each exePath As String In candidates
-                Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
-                If exeName.IndexOf(displayName, StringComparison.OrdinalIgnoreCase) >= 0 Then
-                    Return exePath
+        While queue.Count > 0 AndAlso scanned < maxFolders
+            Dim current As Tuple(Of String, Integer) = queue.Dequeue()
+            Dim folder As String = current.Item1
+            Dim depth As Integer = current.Item2
+
+            Dim normalized As String = NormalizePathSafe(folder)
+            If String.IsNullOrWhiteSpace(normalized) OrElse visited.Contains(normalized) Then
+                Continue While
+            End If
+            visited.Add(normalized)
+            scanned += 1
+
+            AddExecutablesFromFolder(normalized, results)
+
+            If depth >= maxDepth Then
+                Continue While
+            End If
+
+            Dim children As IEnumerable(Of String) = Enumerable.Empty(Of String)()
+            Try
+                children = Directory.EnumerateDirectories(normalized, "*", SearchOption.TopDirectoryOnly)
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "MainForm.FindExecutablesRecursively.EnumerateDirs")
+            End Try
+
+            For Each child As String In children
+                If ShouldSkipFolderForExeSearch(child) Then
+                    Continue For
                 End If
+                queue.Enqueue(Tuple.Create(child, depth + 1))
             Next
+        End While
+
+        Return results.ToList()
+    End Function
+
+    Private Function ShouldSkipFolderForExeSearch(folderPath As String) As Boolean
+        Dim folderName As String = Path.GetFileName(folderPath)
+        If String.IsNullOrWhiteSpace(folderName) Then
+            Return False
         End If
 
-        Return Nothing
+        Dim lower As String = folderName.ToLowerInvariant()
+        Dim skipTokens As String() = {
+            "$recycle.bin", "installer", "install", "support", "docs", "doc", "manual",
+            "redist", "redistributable", "prereq", "prerequisite", "benchmark", "tool",
+            "tools", "crash", "eac", "easyanticheat", "battleye"
+        }
+
+        For Each token As String In skipTokens
+            If lower.Contains(token) Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
+
+    Private Function ScoreExecutableCandidate(exePath As String, displayName As String, sourceName As String) As Integer
+        If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
+            Return Integer.MinValue
+        End If
+
+        Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
+        If ShouldSkipExecutable(exeName) Then
+            Return -1000
+        End If
+
+        Dim score As Integer = 0
+        Dim normalizedExe As String = NameNormalization.NormalizeRelaxedName(exeName)
+        Dim normalizedDisplay As String = NameNormalization.NormalizeRelaxedName(displayName)
+        Dim normalizedSource As String = NameNormalization.NormalizeRelaxedName(sourceName)
+
+        If Not String.IsNullOrWhiteSpace(normalizedDisplay) Then
+            If normalizedExe = normalizedDisplay Then
+                score += 220
+            ElseIf normalizedExe.Contains(normalizedDisplay, StringComparison.OrdinalIgnoreCase) Then
+                score += 130
+            End If
+            score += ScoreTokenMatches(exeName, displayName, 12)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(normalizedSource) Then
+            If normalizedExe = normalizedSource Then
+                score += 180
+            ElseIf normalizedExe.Contains(normalizedSource, StringComparison.OrdinalIgnoreCase) Then
+                score += 95
+            End If
+            score += ScoreTokenMatches(exeName, sourceName, 10)
+        End If
+
+        Dim lowerPath As String = exePath.ToLowerInvariant()
+        If lowerPath.Contains("\binaries\wingdk\") Then
+            score += 55
+        End If
+        If lowerPath.Contains("\binaries\win64\") Then
+            score += 50
+        End If
+        If lowerPath.Contains("\win64\") OrElse lowerPath.Contains("\x64\") Then
+            score += 40
+        End If
+        If lowerPath.Contains("\binaries\") OrElse lowerPath.Contains("\bin\") Then
+            score += 25
+        End If
+
+        Try
+            Dim length As Long = New FileInfo(exePath).Length
+            If length >= 40L * 1024L * 1024L Then
+                score += 20
+            ElseIf length <= 2L * 1024L * 1024L Then
+                score -= 10
+            End If
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.ScoreExecutableCandidate.FileInfo")
+        End Try
+
+        Return score
+    End Function
+
+    Private Function ScoreTokenMatches(exeName As String, reference As String, pointsPerHit As Integer) As Integer
+        If String.IsNullOrWhiteSpace(exeName) OrElse String.IsNullOrWhiteSpace(reference) Then
+            Return 0
+        End If
+
+        Dim score As Integer = 0
+        Dim hitCount As Integer = 0
+        Dim parts As String() = reference.Split(New Char() {" "c, "_"c, "-"c, "."c, ":"c, "'"c, "("c, ")"c, "["c, "]"c, "/"c, "\"c}, StringSplitOptions.RemoveEmptyEntries)
+        For Each part As String In parts
+            Dim token As String = part.Trim()
+            If token.Length < 3 Then
+                Continue For
+            End If
+
+            If exeName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0 Then
+                hitCount += 1
+            End If
+        Next
+
+        score = hitCount * pointsPerHit
+        If score > 80 Then
+            score = 80
+        End If
+
+        Return score
     End Function
 
     Private Function GetCandidateExeFolders(installDir As String) As List(Of String)
         Dim folders As New List(Of String)()
         Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-        Dim candidates As String() = {
+        Dim baseCandidates As String() = {
             installDir,
             Path.Combine(installDir, "Binaries"),
             Path.Combine(installDir, "Binaries", "Win64"),
             Path.Combine(installDir, "Binaries", "Win32"),
+            Path.Combine(installDir, "Binaries", "WinGDK"),
             Path.Combine(installDir, "bin"),
             Path.Combine(installDir, "Bin"),
+            Path.Combine(installDir, "bin", "x64"),
+            Path.Combine(installDir, "bin", "Win64"),
             Path.Combine(installDir, "Win64"),
-            Path.Combine(installDir, "Win32")
+            Path.Combine(installDir, "Win32"),
+            Path.Combine(installDir, "x64"),
+            Path.Combine(installDir, "WinGDK")
         }
 
-        For Each folder As String In candidates
+        For Each folder As String In baseCandidates
             If seen.Contains(folder) Then
                 Continue For
             End If
             folders.Add(folder)
             seen.Add(folder)
         Next
+
+        Try
+            For Each child As String In Directory.EnumerateDirectories(installDir, "*", SearchOption.TopDirectoryOnly)
+                Dim childCandidates As String() = {
+                    child,
+                    Path.Combine(child, "Binaries"),
+                    Path.Combine(child, "Binaries", "Win64"),
+                    Path.Combine(child, "Binaries", "Win32"),
+                    Path.Combine(child, "Binaries", "WinGDK"),
+                    Path.Combine(child, "bin"),
+                    Path.Combine(child, "bin", "x64"),
+                    Path.Combine(child, "bin", "Win64"),
+                    Path.Combine(child, "Win64"),
+                    Path.Combine(child, "Win32"),
+                    Path.Combine(child, "x64"),
+                    Path.Combine(child, "WinGDK")
+                }
+
+                For Each folder As String In childCandidates
+                    If seen.Contains(folder) Then
+                        Continue For
+                    End If
+                    folders.Add(folder)
+                    seen.Add(folder)
+                Next
+
+                For Each grandChild As String In Directory.EnumerateDirectories(child, "*", SearchOption.TopDirectoryOnly)
+                    Dim grandChildCandidates As String() = {
+                        grandChild,
+                        Path.Combine(grandChild, "Binaries"),
+                        Path.Combine(grandChild, "Binaries", "Win64"),
+                        Path.Combine(grandChild, "Binaries", "Win32"),
+                        Path.Combine(grandChild, "Binaries", "WinGDK"),
+                        Path.Combine(grandChild, "bin"),
+                        Path.Combine(grandChild, "bin", "x64"),
+                        Path.Combine(grandChild, "bin", "Win64"),
+                        Path.Combine(grandChild, "Win64"),
+                        Path.Combine(grandChild, "Win32"),
+                        Path.Combine(grandChild, "x64"),
+                        Path.Combine(grandChild, "WinGDK")
+                    }
+
+                    For Each folder As String In grandChildCandidates
+                        If seen.Contains(folder) Then
+                            Continue For
+                        End If
+                        folders.Add(folder)
+                        seen.Add(folder)
+                    Next
+                Next
+            Next
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.GetCandidateExeFolders")
+        End Try
 
         Return folders
     End Function
@@ -1702,6 +1980,7 @@ Public Class MainForm
         settings.NightlyReleaseUrl = txtNightlyReleaseUrl.Text.Trim()
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
         settings.AutoRefreshCompatibilityOnStartup = chkAutoRefreshCompatibilityOnStartup.Checked
+        settings.AutoCheckInstallerUpdates = chkAutoCheckInstallerUpdates.Checked
         settings.CustomScanFolder = txtCustomScanFolder.Text.Trim()
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
@@ -1876,6 +2155,8 @@ Public Class MainForm
         If btnCheckForUpdates IsNot Nothing Then
             btnCheckForUpdates.Text = If(isVisible, "Update now", "Check for updates")
         End If
+
+        PositionUpdateNotice()
     End Sub
 
     Private Function ResolveInstallerRepositoryUrl(release As UpdateReleaseInfo) As String
@@ -2150,6 +2431,7 @@ Public Class MainForm
         toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the alternate release source.")
         toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
         toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "When enabled, the compatibility list is auto-refreshed on startup.")
+        toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "When enabled, the installer checks for updates at startup and shows a subtle in-app notice.")
         toolTip.SetToolTip(txtCustomScanFolder, "Optional custom folder root to scan for supported games. Use ';' to separate multiple folders.")
         toolTip.SetToolTip(btnBrowseCustomScanFolder, "Browse for an additional custom scan folder.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
@@ -2409,6 +2691,7 @@ Public Class MainForm
         txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
         txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
         chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
+        chkAutoCheckInstallerUpdates.Checked = If(settings.AutoCheckInstallerUpdates.HasValue, settings.AutoCheckInstallerUpdates.Value, True)
         txtCustomScanFolder.Text = If(settings.CustomScanFolder, "")
         txtDefaultIniPath.Text = settings.DefaultIniPath
         cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
@@ -2461,7 +2744,7 @@ Public Class MainForm
             Case 2
                 rbGpuAmdIntel.Checked = True
             Case Else
-                ApplyDetectedGpuVendor()
+                ApplyDetectedGpuVendor(logAction)
         End Select
 
         If dlssInputs.HasValue Then

@@ -7,6 +7,7 @@
   "ComponentReleaseUrl": "",
   "InstallerReleaseUrl": "https://api.github.com/repos/Wimukthi/OptiScalerInstaller/releases/latest",
   "AutoRefreshCompatibilityOnStartup": true,
+  "AutoCheckInstallerUpdates": true,
   "CustomScanFolder": "",
   "EnableGameTemplates": true,
   "HighlightCompatibilityChanges": true,

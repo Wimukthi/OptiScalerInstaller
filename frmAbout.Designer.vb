@@ -28,6 +28,8 @@ Partial Class frmAbout
         lblReleaseDateValue = New Label()
         lblRepoTitle = New Label()
         linkRepo = New LinkLabel()
+        lblOptiScalerTitle = New Label()
+        linkOptiScaler = New LinkLabel()
         lblAuthorTitle = New Label()
         lblAuthorValue = New Label()
         btnClose = New Button()
@@ -77,13 +79,16 @@ Partial Class frmAbout
         tableDetails.Controls.Add(lblReleaseDateValue, 1, 2)
         tableDetails.Controls.Add(lblRepoTitle, 0, 3)
         tableDetails.Controls.Add(linkRepo, 1, 3)
-        tableDetails.Controls.Add(lblAuthorTitle, 0, 4)
-        tableDetails.Controls.Add(lblAuthorValue, 1, 4)
+        tableDetails.Controls.Add(lblOptiScalerTitle, 0, 4)
+        tableDetails.Controls.Add(linkOptiScaler, 1, 4)
+        tableDetails.Controls.Add(lblAuthorTitle, 0, 5)
+        tableDetails.Controls.Add(lblAuthorValue, 1, 5)
         tableDetails.Dock = DockStyle.Fill
         tableDetails.Location = New Point(16, 49)
         tableDetails.Margin = New Padding(0, 0, 0, 12)
         tableDetails.Name = "tableDetails"
-        tableDetails.RowCount = 5
+        tableDetails.RowCount = 6
+        tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -173,25 +178,47 @@ Partial Class frmAbout
         linkRepo.TabIndex = 7
         linkRepo.TabStop = True
         linkRepo.Text = "N/A"
-        '
+        ' 
+        ' lblOptiScalerTitle
+        ' 
+        lblOptiScalerTitle.AutoSize = True
+        lblOptiScalerTitle.Location = New Point(0, 100)
+        lblOptiScalerTitle.Margin = New Padding(0, 0, 12, 10)
+        lblOptiScalerTitle.Name = "lblOptiScalerTitle"
+        lblOptiScalerTitle.Size = New Size(89, 15)
+        lblOptiScalerTitle.TabIndex = 8
+        lblOptiScalerTitle.Text = "OptiScaler repo"
+        ' 
+        ' linkOptiScaler
+        ' 
+        linkOptiScaler.AutoEllipsis = True
+        linkOptiScaler.AutoSize = True
+        linkOptiScaler.Location = New Point(98, 100)
+        linkOptiScaler.Margin = New Padding(0, 0, 0, 10)
+        linkOptiScaler.Name = "linkOptiScaler"
+        linkOptiScaler.Size = New Size(28, 15)
+        linkOptiScaler.TabIndex = 9
+        linkOptiScaler.TabStop = True
+        linkOptiScaler.Text = "N/A"
+        ' 
         ' lblAuthorTitle
-        '
+        ' 
         lblAuthorTitle.AutoSize = True
-        lblAuthorTitle.Location = New Point(0, 100)
+        lblAuthorTitle.Location = New Point(0, 125)
         lblAuthorTitle.Margin = New Padding(0, 0, 12, 0)
         lblAuthorTitle.Name = "lblAuthorTitle"
         lblAuthorTitle.Size = New Size(44, 15)
-        lblAuthorTitle.TabIndex = 8
+        lblAuthorTitle.TabIndex = 10
         lblAuthorTitle.Text = "Author"
-        '
+        ' 
         ' lblAuthorValue
-        '
+        ' 
         lblAuthorValue.AutoSize = True
-        lblAuthorValue.Location = New Point(98, 100)
+        lblAuthorValue.Location = New Point(98, 125)
         lblAuthorValue.Margin = New Padding(0)
         lblAuthorValue.Name = "lblAuthorValue"
         lblAuthorValue.Size = New Size(28, 15)
-        lblAuthorValue.TabIndex = 9
+        lblAuthorValue.TabIndex = 11
         lblAuthorValue.Text = "N/A"
         '
         ' btnClose
@@ -236,6 +263,8 @@ Partial Class frmAbout
     Friend WithEvents lblReleaseDateValue As Label
     Friend WithEvents lblRepoTitle As Label
     Friend WithEvents linkRepo As LinkLabel
+    Friend WithEvents lblOptiScalerTitle As Label
+    Friend WithEvents linkOptiScaler As LinkLabel
     Friend WithEvents lblAuthorTitle As Label
     Friend WithEvents lblAuthorValue As Label
     Friend WithEvents btnClose As Button

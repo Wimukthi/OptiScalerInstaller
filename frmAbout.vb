@@ -8,6 +8,7 @@ Imports System.Globalization
 Friend Partial Class frmAbout
     Inherits Form
 
+    Private Const OptiScalerRepositoryUrl As String = "https://github.com/optiscaler/OptiScaler"
     Private ReadOnly _currentVersion As Version
     Private ReadOnly _latestRelease As UpdateReleaseInfo
     Private ReadOnly _repositoryUrl As String
@@ -39,10 +40,16 @@ Friend Partial Class frmAbout
             linkRepo.LinkColor = Color.DeepSkyBlue
             linkRepo.ActiveLinkColor = Color.CornflowerBlue
             linkRepo.VisitedLinkColor = Color.DodgerBlue
+            linkOptiScaler.LinkColor = Color.DeepSkyBlue
+            linkOptiScaler.ActiveLinkColor = Color.CornflowerBlue
+            linkOptiScaler.VisitedLinkColor = Color.DodgerBlue
         Else
             linkRepo.LinkColor = Color.RoyalBlue
             linkRepo.ActiveLinkColor = Color.MediumBlue
             linkRepo.VisitedLinkColor = Color.Purple
+            linkOptiScaler.LinkColor = Color.RoyalBlue
+            linkOptiScaler.ActiveLinkColor = Color.MediumBlue
+            linkOptiScaler.VisitedLinkColor = Color.Purple
         End If
     End Sub
 
@@ -74,6 +81,11 @@ Friend Partial Class frmAbout
             linkRepo.Links.Add(0, repo.Length, repo)
             linkRepo.Enabled = True
         End If
+
+        linkOptiScaler.Text = OptiScalerRepositoryUrl
+        linkOptiScaler.Links.Clear()
+        linkOptiScaler.Links.Add(0, OptiScalerRepositoryUrl.Length, OptiScalerRepositoryUrl)
+        linkOptiScaler.Enabled = True
     End Sub
 
     Private Function FormatVersionDisplay(version As Version, fallbackTag As String) As String
@@ -107,6 +119,24 @@ Friend Partial Class frmAbout
         Catch ex As Exception
             ErrorLogger.Log(ex, "frmAbout.OpenRepository")
             MessageBox.Show(Me, "Unable to open the repository link.", "About", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        End Try
+    End Sub
+
+    Private Sub linkOptiScaler_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles linkOptiScaler.LinkClicked
+        Dim target As String = TryCast(e.Link.LinkData, String)
+        If String.IsNullOrWhiteSpace(target) Then
+            target = OptiScalerRepositoryUrl
+        End If
+
+        If String.IsNullOrWhiteSpace(target) Then
+            Return
+        End If
+
+        Try
+            Process.Start(New ProcessStartInfo(target) With {.UseShellExecute = True})
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmAbout.OpenOptiScalerRepository")
+            MessageBox.Show(Me, "Unable to open the OptiScaler repository link.", "About", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 
