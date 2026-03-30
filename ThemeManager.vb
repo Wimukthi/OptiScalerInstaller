@@ -69,7 +69,12 @@ Friend Module ThemeManager
             End If
         ElseIf TypeOf control Is CheckBox OrElse TypeOf control Is RadioButton Then
             control.ForeColor = If(control.Enabled, palette.Text, palette.MutedText)
-        ElseIf TypeOf control Is TabControl OrElse TypeOf control Is TabPage OrElse TypeOf control Is Panel OrElse
+        ElseIf TypeOf control Is TabPage Then
+            Dim tabPage As TabPage = DirectCast(control, TabPage)
+            tabPage.UseVisualStyleBackColor = Not palette.IsDark
+            control.BackColor = palette.Surface
+            control.ForeColor = palette.Text
+        ElseIf TypeOf control Is TabControl OrElse TypeOf control Is Panel OrElse
             TypeOf control Is TableLayoutPanel OrElse TypeOf control Is FlowLayoutPanel OrElse TypeOf control Is SplitContainer Then
             control.BackColor = palette.Surface
             control.ForeColor = palette.Text

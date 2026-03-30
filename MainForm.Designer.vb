@@ -119,6 +119,34 @@ Partial Class MainForm
         txtPluginsPath = New ThemedTextBox()
         btnBrowsePluginsPath = New Button()
         lblAsiHint = New Label()
+        tabExperimental = New TabPage()
+        experimentalLayout = New TableLayoutPanel()
+        grpFsr4Package = New ThemedGroupBox()
+        lblFsr4PackageFolder = New Label()
+        txtFsr4PackageFolder = New ThemedTextBox()
+        btnBrowseFsr4PackageFolder = New Button()
+        lblFsr4PackageHint = New Label()
+        grpFsr4Options = New ThemedGroupBox()
+        chkFsr4EnableUpdate = New CheckBox()
+        chkFsr4EnableAgility = New CheckBox()
+        lblFsr4OptionsHint = New Label()
+        grpFsr4Actions = New ThemedGroupBox()
+        lblFsr4TargetGame = New Label()
+        txtFsr4TargetGameFolder = New ThemedTextBox()
+        btnFsr4PickGame = New Button()
+        btnFsr4Apply = New Button()
+        btnFsr4Remove = New Button()
+        btnFsr4RefreshStatus = New Button()
+        lblFsr4Status = New Label()
+        lblFsr4ActionHint = New Label()
+        lblFsr4DetectedGames = New Label()
+        btnFsr4ScanDetectedGames = New Button()
+        btnFsr4UseSelectedGame = New Button()
+        btnFsr4BrowseGameExe = New Button()
+        lvFsr4DetectedGames = New ThemedListView()
+        colFsr4Game = New ColumnHeader()
+        colFsr4Platform = New ColumnHeader()
+        colFsr4DetectedPath = New ColumnHeader()
         tabSettings = New TabPage()
         grpSettings = New ThemedGroupBox()
         lblCompatibilityListUrl = New Label()
@@ -133,6 +161,7 @@ Partial Class MainForm
         txtInstallerReleaseUrl = New ThemedTextBox()
         chkAutoRefreshCompatibilityOnStartup = New CheckBox()
         chkAutoCheckInstallerUpdates = New CheckBox()
+        chkShowExperimentalTabOnUnsupportedGpu = New CheckBox()
         lblCustomScanFolder = New Label()
         txtCustomScanFolder = New ThemedTextBox()
         btnBrowseCustomScanFolder = New Button()
@@ -196,6 +225,11 @@ Partial Class MainForm
         grpReshade.SuspendLayout()
         grpSpecialK.SuspendLayout()
         grpAsi.SuspendLayout()
+        tabExperimental.SuspendLayout()
+        experimentalLayout.SuspendLayout()
+        grpFsr4Package.SuspendLayout()
+        grpFsr4Options.SuspendLayout()
+        grpFsr4Actions.SuspendLayout()
         tabSettings.SuspendLayout()
         grpSettings.SuspendLayout()
         grpDefaultInstall.SuspendLayout()
@@ -224,6 +258,7 @@ Partial Class MainForm
         tabMain.Controls.Add(tabCompatibility)
         tabMain.Controls.Add(tabInstall)
         tabMain.Controls.Add(tabAddons)
+        tabMain.Controls.Add(tabExperimental)
         tabMain.Controls.Add(tabSettings)
         tabMain.Dock = DockStyle.Fill
         tabMain.Location = New Point(8, 0)
@@ -1302,6 +1337,302 @@ Partial Class MainForm
         lblAsiHint.TabIndex = 4
         lblAsiHint.Text = "OptiScaler loads *.asi files from the plugins path."
         ' 
+        ' tabExperimental
+        ' 
+        tabExperimental.Controls.Add(experimentalLayout)
+        tabExperimental.Location = New Point(4, 24)
+        tabExperimental.Name = "tabExperimental"
+        tabExperimental.Padding = New Padding(8)
+        tabExperimental.Size = New Size(1246, 679)
+        tabExperimental.TabIndex = 3
+        tabExperimental.Text = "FSR4 INT8 (Experimental)"
+        tabExperimental.UseVisualStyleBackColor = True
+        ' 
+        ' experimentalLayout
+        ' 
+        experimentalLayout.ColumnCount = 1
+        experimentalLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100F))
+        experimentalLayout.Controls.Add(grpFsr4Package, 0, 0)
+        experimentalLayout.Controls.Add(grpFsr4Options, 0, 1)
+        experimentalLayout.Controls.Add(grpFsr4Actions, 0, 2)
+        experimentalLayout.Dock = DockStyle.Fill
+        experimentalLayout.Location = New Point(8, 8)
+        experimentalLayout.Name = "experimentalLayout"
+        experimentalLayout.RowCount = 3
+        experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 124F))
+        experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 104F))
+        experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100F))
+        experimentalLayout.Size = New Size(1230, 663)
+        experimentalLayout.TabIndex = 0
+        ' 
+        ' grpFsr4Package
+        ' 
+        grpFsr4Package.Controls.Add(lblFsr4PackageFolder)
+        grpFsr4Package.Controls.Add(txtFsr4PackageFolder)
+        grpFsr4Package.Controls.Add(btnBrowseFsr4PackageFolder)
+        grpFsr4Package.Controls.Add(lblFsr4PackageHint)
+        grpFsr4Package.Dock = DockStyle.Fill
+        grpFsr4Package.Location = New Point(0, 0)
+        grpFsr4Package.Margin = New Padding(0, 0, 0, 8)
+        grpFsr4Package.Name = "grpFsr4Package"
+        grpFsr4Package.Size = New Size(1230, 116)
+        grpFsr4Package.TabIndex = 0
+        grpFsr4Package.TabStop = False
+        grpFsr4Package.Text = "FSR4 INT8 Package (experimental)"
+        ' 
+        ' lblFsr4PackageFolder
+        ' 
+        lblFsr4PackageFolder.AutoSize = True
+        lblFsr4PackageFolder.Location = New Point(12, 32)
+        lblFsr4PackageFolder.Name = "lblFsr4PackageFolder"
+        lblFsr4PackageFolder.Size = New Size(87, 15)
+        lblFsr4PackageFolder.TabIndex = 0
+        lblFsr4PackageFolder.Text = "Package folder"
+        ' 
+        ' txtFsr4PackageFolder
+        ' 
+        txtFsr4PackageFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtFsr4PackageFolder.BackColor = SystemColors.Window
+        txtFsr4PackageFolder.ForeColor = SystemColors.WindowText
+        txtFsr4PackageFolder.Location = New Point(120, 28)
+        txtFsr4PackageFolder.MinimumSize = New Size(0, 24)
+        txtFsr4PackageFolder.Name = "txtFsr4PackageFolder"
+        txtFsr4PackageFolder.Padding = New Padding(6, 3, 6, 3)
+        txtFsr4PackageFolder.Size = New Size(1002, 24)
+        txtFsr4PackageFolder.TabIndex = 1
+        ' 
+        ' btnBrowseFsr4PackageFolder
+        ' 
+        btnBrowseFsr4PackageFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnBrowseFsr4PackageFolder.Location = New Point(1128, 28)
+        btnBrowseFsr4PackageFolder.Name = "btnBrowseFsr4PackageFolder"
+        btnBrowseFsr4PackageFolder.Size = New Size(90, 24)
+        btnBrowseFsr4PackageFolder.TabIndex = 2
+        btnBrowseFsr4PackageFolder.Text = "Browse"
+        btnBrowseFsr4PackageFolder.UseVisualStyleBackColor = True
+        ' 
+        ' lblFsr4PackageHint
+        ' 
+        lblFsr4PackageHint.AutoSize = True
+        lblFsr4PackageHint.Location = New Point(12, 68)
+        lblFsr4PackageHint.Name = "lblFsr4PackageHint"
+        lblFsr4PackageHint.Size = New Size(622, 15)
+        lblFsr4PackageHint.TabIndex = 3
+        lblFsr4PackageHint.Text = "Select a local folder that contains FSR4 INT8 files (for example amdxcffx64.dll). Files are copied with the selected install conflict behavior."
+        ' 
+        ' grpFsr4Options
+        ' 
+        grpFsr4Options.Controls.Add(chkFsr4EnableUpdate)
+        grpFsr4Options.Controls.Add(chkFsr4EnableAgility)
+        grpFsr4Options.Controls.Add(lblFsr4OptionsHint)
+        grpFsr4Options.Dock = DockStyle.Fill
+        grpFsr4Options.Location = New Point(0, 124)
+        grpFsr4Options.Margin = New Padding(0, 0, 0, 8)
+        grpFsr4Options.Name = "grpFsr4Options"
+        grpFsr4Options.Size = New Size(1230, 96)
+        grpFsr4Options.TabIndex = 1
+        grpFsr4Options.TabStop = False
+        grpFsr4Options.Text = "INI Options"
+        ' 
+        ' chkFsr4EnableUpdate
+        ' 
+        chkFsr4EnableUpdate.AutoSize = True
+        chkFsr4EnableUpdate.Location = New Point(12, 24)
+        chkFsr4EnableUpdate.Name = "chkFsr4EnableUpdate"
+        chkFsr4EnableUpdate.Size = New Size(235, 19)
+        chkFsr4EnableUpdate.TabIndex = 0
+        chkFsr4EnableUpdate.Text = "Set Fsr4Update=true in OptiScaler.ini"
+        chkFsr4EnableUpdate.UseVisualStyleBackColor = True
+        ' 
+        ' chkFsr4EnableAgility
+        ' 
+        chkFsr4EnableAgility.AutoSize = True
+        chkFsr4EnableAgility.Location = New Point(12, 49)
+        chkFsr4EnableAgility.Name = "chkFsr4EnableAgility"
+        chkFsr4EnableAgility.Size = New Size(300, 19)
+        chkFsr4EnableAgility.TabIndex = 1
+        chkFsr4EnableAgility.Text = "Set FsrAgilitySDKUpgrade=true (helps some Win10 titles)"
+        chkFsr4EnableAgility.UseVisualStyleBackColor = True
+        ' 
+        ' lblFsr4OptionsHint
+        ' 
+        lblFsr4OptionsHint.AutoSize = True
+        lblFsr4OptionsHint.Location = New Point(330, 50)
+        lblFsr4OptionsHint.Name = "lblFsr4OptionsHint"
+        lblFsr4OptionsHint.Size = New Size(381, 15)
+        lblFsr4OptionsHint.TabIndex = 2
+        lblFsr4OptionsHint.Text = "Keys are restored on remove when this feature was applied by the installer."
+        ' 
+        ' grpFsr4Actions
+        ' 
+        grpFsr4Actions.Controls.Add(lblFsr4TargetGame)
+        grpFsr4Actions.Controls.Add(txtFsr4TargetGameFolder)
+        grpFsr4Actions.Controls.Add(btnFsr4PickGame)
+        grpFsr4Actions.Controls.Add(btnFsr4Apply)
+        grpFsr4Actions.Controls.Add(btnFsr4Remove)
+        grpFsr4Actions.Controls.Add(btnFsr4RefreshStatus)
+        grpFsr4Actions.Controls.Add(lblFsr4Status)
+        grpFsr4Actions.Controls.Add(lblFsr4ActionHint)
+        grpFsr4Actions.Controls.Add(lblFsr4DetectedGames)
+        grpFsr4Actions.Controls.Add(btnFsr4ScanDetectedGames)
+        grpFsr4Actions.Controls.Add(btnFsr4UseSelectedGame)
+        grpFsr4Actions.Controls.Add(btnFsr4BrowseGameExe)
+        grpFsr4Actions.Controls.Add(lvFsr4DetectedGames)
+        grpFsr4Actions.Dock = DockStyle.Fill
+        grpFsr4Actions.Location = New Point(0, 228)
+        grpFsr4Actions.Margin = New Padding(0)
+        grpFsr4Actions.Name = "grpFsr4Actions"
+        grpFsr4Actions.Size = New Size(1230, 435)
+        grpFsr4Actions.TabIndex = 2
+        grpFsr4Actions.TabStop = False
+        grpFsr4Actions.Text = "Apply / Remove"
+        ' 
+        ' lblFsr4TargetGame
+        ' 
+        lblFsr4TargetGame.AutoSize = True
+        lblFsr4TargetGame.Location = New Point(12, 30)
+        lblFsr4TargetGame.Name = "lblFsr4TargetGame"
+        lblFsr4TargetGame.Size = New Size(100, 15)
+        lblFsr4TargetGame.TabIndex = 0
+        lblFsr4TargetGame.Text = "Target game folder"
+        ' 
+        ' txtFsr4TargetGameFolder
+        ' 
+        txtFsr4TargetGameFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtFsr4TargetGameFolder.BackColor = SystemColors.Window
+        txtFsr4TargetGameFolder.ForeColor = SystemColors.WindowText
+        txtFsr4TargetGameFolder.Location = New Point(120, 26)
+        txtFsr4TargetGameFolder.MinimumSize = New Size(0, 24)
+        txtFsr4TargetGameFolder.Name = "txtFsr4TargetGameFolder"
+        txtFsr4TargetGameFolder.Padding = New Padding(6, 3, 6, 3)
+        txtFsr4TargetGameFolder.ReadOnly = True
+        txtFsr4TargetGameFolder.Size = New Size(1002, 24)
+        txtFsr4TargetGameFolder.TabIndex = 1
+        txtFsr4TargetGameFolder.TabStop = False
+        ' 
+        ' btnFsr4PickGame
+        ' 
+        btnFsr4PickGame.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnFsr4PickGame.Location = New Point(1128, 26)
+        btnFsr4PickGame.Name = "btnFsr4PickGame"
+        btnFsr4PickGame.Size = New Size(90, 24)
+        btnFsr4PickGame.TabIndex = 2
+        btnFsr4PickGame.Text = "Pick game"
+        btnFsr4PickGame.UseVisualStyleBackColor = True
+        ' 
+        ' btnFsr4Apply
+        ' 
+        btnFsr4Apply.Location = New Point(12, 64)
+        btnFsr4Apply.Name = "btnFsr4Apply"
+        btnFsr4Apply.Size = New Size(140, 36)
+        btnFsr4Apply.TabIndex = 3
+        btnFsr4Apply.Text = "Apply package"
+        btnFsr4Apply.UseVisualStyleBackColor = True
+        ' 
+        ' btnFsr4Remove
+        ' 
+        btnFsr4Remove.Location = New Point(160, 64)
+        btnFsr4Remove.Name = "btnFsr4Remove"
+        btnFsr4Remove.Size = New Size(140, 36)
+        btnFsr4Remove.TabIndex = 4
+        btnFsr4Remove.Text = "Remove package"
+        btnFsr4Remove.UseVisualStyleBackColor = True
+        ' 
+        ' btnFsr4RefreshStatus
+        ' 
+        btnFsr4RefreshStatus.Location = New Point(308, 64)
+        btnFsr4RefreshStatus.Name = "btnFsr4RefreshStatus"
+        btnFsr4RefreshStatus.Size = New Size(140, 36)
+        btnFsr4RefreshStatus.TabIndex = 5
+        btnFsr4RefreshStatus.Text = "Refresh status"
+        btnFsr4RefreshStatus.UseVisualStyleBackColor = True
+        ' 
+        ' lblFsr4Status
+        ' 
+        lblFsr4Status.AutoSize = True
+        lblFsr4Status.Location = New Point(12, 112)
+        lblFsr4Status.Name = "lblFsr4Status"
+        lblFsr4Status.Size = New Size(180, 15)
+        lblFsr4Status.TabIndex = 6
+        lblFsr4Status.Text = "Experimental package: not installed"
+        ' 
+        ' lblFsr4ActionHint
+        ' 
+        lblFsr4ActionHint.AutoSize = True
+        lblFsr4ActionHint.Location = New Point(12, 136)
+        lblFsr4ActionHint.Name = "lblFsr4ActionHint"
+        lblFsr4ActionHint.Size = New Size(843, 15)
+        lblFsr4ActionHint.TabIndex = 7
+        lblFsr4ActionHint.Text = "Workflow: pick game on Install tab (or from Game Detection -> Use detected), return here, choose package folder, then Apply package."
+        ' 
+        ' lblFsr4DetectedGames
+        ' 
+        lblFsr4DetectedGames.AutoSize = True
+        lblFsr4DetectedGames.Location = New Point(12, 171)
+        lblFsr4DetectedGames.Name = "lblFsr4DetectedGames"
+        lblFsr4DetectedGames.Size = New Size(145, 15)
+        lblFsr4DetectedGames.TabIndex = 8
+        lblFsr4DetectedGames.Text = "Detected supported games"
+        ' 
+        ' btnFsr4ScanDetectedGames
+        ' 
+        btnFsr4ScanDetectedGames.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnFsr4ScanDetectedGames.Location = New Point(827, 166)
+        btnFsr4ScanDetectedGames.Name = "btnFsr4ScanDetectedGames"
+        btnFsr4ScanDetectedGames.Size = New Size(120, 24)
+        btnFsr4ScanDetectedGames.TabIndex = 9
+        btnFsr4ScanDetectedGames.Text = "Scan now"
+        btnFsr4ScanDetectedGames.UseVisualStyleBackColor = True
+        ' 
+        ' btnFsr4UseSelectedGame
+        ' 
+        btnFsr4UseSelectedGame.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnFsr4UseSelectedGame.Location = New Point(953, 166)
+        btnFsr4UseSelectedGame.Name = "btnFsr4UseSelectedGame"
+        btnFsr4UseSelectedGame.Size = New Size(120, 24)
+        btnFsr4UseSelectedGame.TabIndex = 10
+        btnFsr4UseSelectedGame.Text = "Use selected"
+        btnFsr4UseSelectedGame.UseVisualStyleBackColor = True
+        ' 
+        ' btnFsr4BrowseGameExe
+        ' 
+        btnFsr4BrowseGameExe.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnFsr4BrowseGameExe.Location = New Point(1079, 166)
+        btnFsr4BrowseGameExe.Name = "btnFsr4BrowseGameExe"
+        btnFsr4BrowseGameExe.Size = New Size(139, 24)
+        btnFsr4BrowseGameExe.TabIndex = 11
+        btnFsr4BrowseGameExe.Text = "Browse game EXE"
+        btnFsr4BrowseGameExe.UseVisualStyleBackColor = True
+        ' 
+        ' lvFsr4DetectedGames
+        ' 
+        lvFsr4DetectedGames.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
+        lvFsr4DetectedGames.Columns.AddRange(New ColumnHeader() {colFsr4Game, colFsr4Platform, colFsr4DetectedPath})
+        lvFsr4DetectedGames.FullRowSelect = True
+        lvFsr4DetectedGames.Location = New Point(12, 196)
+        lvFsr4DetectedGames.MultiSelect = False
+        lvFsr4DetectedGames.Name = "lvFsr4DetectedGames"
+        lvFsr4DetectedGames.OwnerDraw = True
+        lvFsr4DetectedGames.Size = New Size(1206, 227)
+        lvFsr4DetectedGames.TabIndex = 12
+        lvFsr4DetectedGames.UseCompatibleStateImageBehavior = False
+        lvFsr4DetectedGames.View = View.Details
+        ' 
+        ' colFsr4Game
+        ' 
+        colFsr4Game.Text = "Game"
+        colFsr4Game.Width = 280
+        ' 
+        ' colFsr4Platform
+        ' 
+        colFsr4Platform.Text = "Platform"
+        colFsr4Platform.Width = 120
+        ' 
+        ' colFsr4DetectedPath
+        ' 
+        colFsr4DetectedPath.Text = "Install Path"
+        colFsr4DetectedPath.Width = 760
+        ' 
         ' tabSettings
         ' 
         tabSettings.Controls.Add(grpSettings)
@@ -1309,7 +1640,7 @@ Partial Class MainForm
         tabSettings.Name = "tabSettings"
         tabSettings.Padding = New Padding(8)
         tabSettings.Size = New Size(1246, 679)
-        tabSettings.TabIndex = 3
+        tabSettings.TabIndex = 4
         tabSettings.Text = "Settings"
         tabSettings.UseVisualStyleBackColor = True
         ' 
@@ -1327,6 +1658,7 @@ Partial Class MainForm
         grpSettings.Controls.Add(txtInstallerReleaseUrl)
         grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
         grpSettings.Controls.Add(chkAutoCheckInstallerUpdates)
+        grpSettings.Controls.Add(chkShowExperimentalTabOnUnsupportedGpu)
         grpSettings.Controls.Add(lblCustomScanFolder)
         grpSettings.Controls.Add(txtCustomScanFolder)
         grpSettings.Controls.Add(btnBrowseCustomScanFolder)
@@ -1479,6 +1811,16 @@ Partial Class MainForm
         chkAutoCheckInstallerUpdates.TabIndex = 15
         chkAutoCheckInstallerUpdates.Text = "Auto-check installer updates on startup"
         chkAutoCheckInstallerUpdates.UseVisualStyleBackColor = True
+        ' 
+        ' chkShowExperimentalTabOnUnsupportedGpu
+        ' 
+        chkShowExperimentalTabOnUnsupportedGpu.AutoSize = True
+        chkShowExperimentalTabOnUnsupportedGpu.Location = New Point(720, 191)
+        chkShowExperimentalTabOnUnsupportedGpu.Name = "chkShowExperimentalTabOnUnsupportedGpu"
+        chkShowExperimentalTabOnUnsupportedGpu.Size = New Size(286, 19)
+        chkShowExperimentalTabOnUnsupportedGpu.TabIndex = 16
+        chkShowExperimentalTabOnUnsupportedGpu.Text = "Show FSR4 experimental tab on unsupported GPUs"
+        chkShowExperimentalTabOnUnsupportedGpu.UseVisualStyleBackColor = True
         ' 
         ' lblCustomScanFolder
         ' 
@@ -1921,6 +2263,14 @@ Partial Class MainForm
         grpSpecialK.PerformLayout()
         grpAsi.ResumeLayout(False)
         grpAsi.PerformLayout()
+        tabExperimental.ResumeLayout(False)
+        experimentalLayout.ResumeLayout(False)
+        grpFsr4Package.ResumeLayout(False)
+        grpFsr4Package.PerformLayout()
+        grpFsr4Options.ResumeLayout(False)
+        grpFsr4Options.PerformLayout()
+        grpFsr4Actions.ResumeLayout(False)
+        grpFsr4Actions.PerformLayout()
         tabSettings.ResumeLayout(False)
         grpSettings.ResumeLayout(False)
         grpSettings.PerformLayout()
@@ -1939,9 +2289,11 @@ Partial Class MainForm
     Friend WithEvents tabInstall As System.Windows.Forms.TabPage
     Friend WithEvents tabAddons As System.Windows.Forms.TabPage
     Friend WithEvents tabCompatibility As System.Windows.Forms.TabPage
+    Friend WithEvents tabExperimental As System.Windows.Forms.TabPage
     Friend WithEvents tabSettings As System.Windows.Forms.TabPage
     Friend WithEvents installLayout As System.Windows.Forms.TableLayoutPanel
     Friend WithEvents addonsLayout As System.Windows.Forms.TableLayoutPanel
+    Friend WithEvents experimentalLayout As System.Windows.Forms.TableLayoutPanel
     Friend WithEvents grpLog As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents grpSettings As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblCompatibilityListUrl As System.Windows.Forms.Label
@@ -1956,6 +2308,7 @@ Partial Class MainForm
     Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
     Friend WithEvents chkAutoCheckInstallerUpdates As System.Windows.Forms.CheckBox
+    Friend WithEvents chkShowExperimentalTabOnUnsupportedGpu As System.Windows.Forms.CheckBox
     Friend WithEvents lblCustomScanFolder As System.Windows.Forms.Label
     Friend WithEvents txtCustomScanFolder As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents btnBrowseCustomScanFolder As System.Windows.Forms.Button
@@ -2062,6 +2415,32 @@ Partial Class MainForm
     Friend WithEvents txtPluginsPath As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblPluginsPath As System.Windows.Forms.Label
     Friend WithEvents chkLoadAsiPlugins As System.Windows.Forms.CheckBox
+    Friend WithEvents grpFsr4Package As OptiScalerInstaller.ThemedGroupBox
+    Friend WithEvents lblFsr4PackageFolder As System.Windows.Forms.Label
+    Friend WithEvents txtFsr4PackageFolder As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents btnBrowseFsr4PackageFolder As System.Windows.Forms.Button
+    Friend WithEvents lblFsr4PackageHint As System.Windows.Forms.Label
+    Friend WithEvents grpFsr4Options As OptiScalerInstaller.ThemedGroupBox
+    Friend WithEvents chkFsr4EnableUpdate As System.Windows.Forms.CheckBox
+    Friend WithEvents chkFsr4EnableAgility As System.Windows.Forms.CheckBox
+    Friend WithEvents lblFsr4OptionsHint As System.Windows.Forms.Label
+    Friend WithEvents grpFsr4Actions As OptiScalerInstaller.ThemedGroupBox
+    Friend WithEvents lblFsr4TargetGame As System.Windows.Forms.Label
+    Friend WithEvents txtFsr4TargetGameFolder As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents btnFsr4PickGame As System.Windows.Forms.Button
+    Friend WithEvents btnFsr4Apply As System.Windows.Forms.Button
+    Friend WithEvents btnFsr4Remove As System.Windows.Forms.Button
+    Friend WithEvents btnFsr4RefreshStatus As System.Windows.Forms.Button
+    Friend WithEvents lblFsr4Status As System.Windows.Forms.Label
+    Friend WithEvents lblFsr4ActionHint As System.Windows.Forms.Label
+    Friend WithEvents lblFsr4DetectedGames As System.Windows.Forms.Label
+    Friend WithEvents btnFsr4ScanDetectedGames As System.Windows.Forms.Button
+    Friend WithEvents btnFsr4UseSelectedGame As System.Windows.Forms.Button
+    Friend WithEvents btnFsr4BrowseGameExe As System.Windows.Forms.Button
+    Friend WithEvents lvFsr4DetectedGames As OptiScalerInstaller.ThemedListView
+    Friend WithEvents colFsr4Game As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colFsr4Platform As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colFsr4DetectedPath As System.Windows.Forms.ColumnHeader
     Friend WithEvents compatFooterPanel As System.Windows.Forms.Panel
     Friend WithEvents compatHeaderPanel As System.Windows.Forms.Panel
     Friend WithEvents compatHeaderLeftPanel As System.Windows.Forms.TableLayoutPanel

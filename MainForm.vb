@@ -29,10 +29,14 @@ Public Class MainForm
     Private windowSaveTimer As Timer
     Private windowSavePending As Boolean
     Private lastInstallStatusKey As String
+    Private lastExperimentalStatusKey As String
     Private latestUpdateRelease As UpdateReleaseInfo
+    Private loadingSettingsUi As Boolean
     Private gpuDetectionInitialized As Boolean
     Private gpuDetectionVendor As GpuVendor = GpuVendor.Unknown
+    Private gpuDetectionAdapters As List(Of GpuAdapterInfo) = New List(Of GpuAdapterInfo)()
     Private gpuDetectionCandidates As List(Of String) = New List(Of String)()
+    Private gpuDetectionLogWritten As Boolean
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -48,6 +52,17 @@ Public Class MainForm
         Public DeviceKey As String
     End Structure
 
+    Private Class GpuAdapterInfo
+        Public Property Name As String
+        Public Property AdapterCompatibility As String
+        Public Property PnpDeviceId As String
+        Public Property Source As String
+    End Class
+
+    Private Const NvidiaPciVendorId As String = "10DE"
+    Private Const AmdPciVendorId As String = "1002"
+    Private Const IntelPciVendorId As String = "8086"
+
     <DllImport("user32.dll", CharSet:=CharSet.Unicode)>
     Private Shared Function EnumDisplayDevices(lpDevice As String, iDevNum As Integer, ByRef lpDisplayDevice As DISPLAY_DEVICE, dwFlags As Integer) As Boolean
     End Function
@@ -60,6 +75,8 @@ Public Class MainForm
         End If
         UpdateCompatibilityNote()
         UpdateInstallStatus()
+        UpdateExperimentalStatus()
+        UpdateExperimentalDetectedGamesList()
         LoadCompatibility()
         _settingThemeState = True
         Dim preferredMode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
@@ -104,9 +121,68 @@ Public Class MainForm
         Dim build As Integer = If(version.Build >= 0, version.Build, 0)
         Dim revision As Integer = If(version.Revision >= 0, version.Revision, 0)
         Dim versionText As String = $"{version.Major}.{version.Minor}.{build}.{revision}"
+        Dim title As String = "OptiScaler Installer v" & versionText
+        Dim gpuTitleModel As String = GetPreferredGpuTitleModel()
+        If Not String.IsNullOrWhiteSpace(gpuTitleModel) Then
+            title &= " [" & gpuTitleModel & "]"
+        End If
 
-        Text = "OptiScaler Installer v" & versionText
+        Text = title
     End Sub
+
+    Private Function GetPreferredGpuTitleModel() As String
+        If Not gpuDetectionInitialized OrElse gpuDetectionAdapters Is Nothing OrElse gpuDetectionAdapters.Count = 0 Then
+            Return ""
+        End If
+
+        Dim preferred As GpuAdapterInfo = Nothing
+        Select Case gpuDetectionVendor
+            Case GpuVendor.Nvidia
+                preferred = FindAdapterByVendor(GpuVendor.Nvidia)
+            Case GpuVendor.AmdIntel
+                preferred = FindAdapterByVendor(GpuVendor.AmdIntel)
+        End Select
+
+        If preferred Is Nothing Then
+            preferred = gpuDetectionAdapters.FirstOrDefault(Function(adapter) adapter IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(adapter.Name))
+        End If
+        If preferred Is Nothing Then
+            Return ""
+        End If
+
+        Dim model As String = If(preferred.Name, "").Trim()
+        If String.IsNullOrWhiteSpace(model) Then
+            model = If(preferred.AdapterCompatibility, "").Trim()
+        End If
+        If String.IsNullOrWhiteSpace(model) Then
+            Return ""
+        End If
+
+        Const maxLength As Integer = 42
+        If model.Length > maxLength Then
+            model = model.Substring(0, maxLength - 1).TrimEnd() & "..."
+        End If
+
+        Return model
+    End Function
+
+    Private Function FindAdapterByVendor(vendor As GpuVendor) As GpuAdapterInfo
+        If gpuDetectionAdapters Is Nothing Then
+            Return Nothing
+        End If
+
+        For Each adapter As GpuAdapterInfo In gpuDetectionAdapters
+            If adapter Is Nothing OrElse String.IsNullOrWhiteSpace(adapter.Name) Then
+                Continue For
+            End If
+
+            If DetectVendorFromAdapter(adapter) = vendor Then
+                Return adapter
+            End If
+        Next
+
+        Return Nothing
+    End Function
 
     Private Sub MainForm_FormClosing(sender As Object, e As FormClosingEventArgs) Handles MyBase.FormClosing
         SaveWindowSettings()
@@ -154,10 +230,14 @@ Public Class MainForm
         chkDefaultDlssInputs.Checked = True
         cmbDefaultFgType.SelectedIndex = 0
         cmbDefaultConflictMode.SelectedIndex = 0
+        chkFsr4EnableUpdate.Checked = True
+        chkFsr4EnableAgility.Checked = False
         chkAutoRefreshCompatibilityOnStartup.Checked = True
         chkAutoCheckInstallerUpdates.Checked = True
+        chkShowExperimentalTabOnUnsupportedGpu.Checked = False
         ToggleLocalArchive()
-        ApplyDetectedGpuVendor()
+        ApplyDetectedGpuVendor(False)
+        UpdateExperimentalTabAvailability(False)
         UpdateGpuControls()
         chkEnableReshade_CheckedChanged(Me, EventArgs.Empty)
         chkEnableSpecialK_CheckedChanged(Me, EventArgs.Empty)
@@ -214,61 +294,74 @@ Public Class MainForm
             Return
         End If
 
-        If Not gpuDetectionInitialized Then
-            gpuDetectionCandidates = GetGpuAdapterNames()
-            gpuDetectionVendor = DetectGpuVendor(gpuDetectionCandidates)
-            gpuDetectionInitialized = True
-        End If
-
-        If logAction AndAlso gpuDetectionCandidates.Count > 0 Then
+        EnsureGpuDetectionInitialized()
+        Dim shouldLog As Boolean = logAction AndAlso Not gpuDetectionLogWritten
+        If shouldLog AndAlso gpuDetectionCandidates.Count > 0 Then
             AppendLog("GPU detection candidates: " & String.Join("; ", gpuDetectionCandidates))
         End If
 
         Select Case gpuDetectionVendor
             Case GpuVendor.Nvidia
                 rbGpuNvidia.Checked = True
-                If logAction Then
+                If shouldLog Then
                     AppendLog("Detected GPU vendor: NVIDIA.")
                 End If
             Case GpuVendor.AmdIntel
                 rbGpuAmdIntel.Checked = True
-                If logAction Then
+                If shouldLog Then
                     AppendLog("Detected GPU vendor: AMD/Intel.")
                 End If
             Case Else
                 rbGpuNvidia.Checked = True
-                If logAction Then
+                If shouldLog Then
                     AppendLog("GPU vendor detection failed; defaulting to NVIDIA.")
                 End If
         End Select
+
+        If shouldLog Then
+            gpuDetectionLogWritten = True
+        End If
     End Sub
 
-    Private Function DetectGpuVendor(adapterNames As IEnumerable(Of String)) As GpuVendor
+    Private Sub EnsureGpuDetectionInitialized()
+        If gpuDetectionInitialized Then
+            Return
+        End If
+
+        gpuDetectionAdapters = GetGpuAdapters()
+        gpuDetectionCandidates.Clear()
+
+        Dim seenCandidates As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each adapter As GpuAdapterInfo In gpuDetectionAdapters
+            Dim candidate As String = BuildGpuCandidate(adapter)
+            If Not String.IsNullOrWhiteSpace(candidate) AndAlso seenCandidates.Add(candidate) Then
+                gpuDetectionCandidates.Add(candidate)
+            End If
+        Next
+
+        gpuDetectionVendor = DetectGpuVendor(gpuDetectionAdapters)
+        gpuDetectionInitialized = True
+        UpdateWindowTitle()
+    End Sub
+
+    Private Function DetectGpuVendor(adapters As IEnumerable(Of GpuAdapterInfo)) As GpuVendor
         Try
             Dim hasNvidia As Boolean = False
-            Dim hasAmd As Boolean = False
-            Dim hasIntel As Boolean = False
-            For Each name As String In adapterNames
-                If String.IsNullOrWhiteSpace(name) Then
-                    Continue For
-                End If
+            Dim hasAmdOrIntel As Boolean = False
 
-                Dim upper As String = name.ToUpperInvariant()
-                If upper.Contains("NVIDIA") Then
-                    hasNvidia = True
-                End If
-                If upper.Contains("AMD") OrElse upper.Contains("RADEON") OrElse upper.Contains("ATI") OrElse upper.Contains("ADVANCED MICRO DEVICES") Then
-                    hasAmd = True
-                End If
-                If upper.Contains("INTEL") OrElse upper.Contains("ARC") Then
-                    hasIntel = True
-                End If
+            For Each adapter As GpuAdapterInfo In adapters
+                Select Case DetectVendorFromAdapter(adapter)
+                    Case GpuVendor.Nvidia
+                        hasNvidia = True
+                    Case GpuVendor.AmdIntel
+                        hasAmdOrIntel = True
+                End Select
             Next
 
             If hasNvidia Then
                 Return GpuVendor.Nvidia
             End If
-            If hasAmd OrElse hasIntel Then
+            If hasAmdOrIntel Then
                 Return GpuVendor.AmdIntel
             End If
         Catch ex As Exception
@@ -279,47 +372,186 @@ Public Class MainForm
     End Function
 
     Private Function GetGpuAdapterNames() As List(Of String)
-        Dim names As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        EnsureGpuDetectionInitialized()
+        Return New List(Of String)(gpuDetectionCandidates)
+    End Function
+
+    Private Function GetGpuAdapters() As List(Of GpuAdapterInfo)
+        Dim adapters As New List(Of GpuAdapterInfo)()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
 
         Try
-            Using searcher As New ManagementObjectSearcher("SELECT Name, AdapterCompatibility FROM Win32_VideoController")
+            Using searcher As New ManagementObjectSearcher("SELECT Name, AdapterCompatibility, PNPDeviceID FROM Win32_VideoController")
                 For Each item As ManagementObject In searcher.Get()
-                    Dim name As String = TryCast(item("Name"), String)
-                    If Not IsGenericAdapter(name) Then
-                        names.Add(name.Trim())
-                    End If
-
-                    Dim compat As String = TryCast(item("AdapterCompatibility"), String)
-                    If Not IsGenericAdapter(compat) Then
-                        names.Add(compat.Trim())
-                    End If
+                    Dim adapter As New GpuAdapterInfo With {
+                        .Name = If(TryCast(item("Name"), String), "").Trim(),
+                        .AdapterCompatibility = If(TryCast(item("AdapterCompatibility"), String), "").Trim(),
+                        .PnpDeviceId = If(TryCast(item("PNPDeviceID"), String), "").Trim(),
+                        .Source = "WMI"
+                    }
+                    AddGpuAdapter(adapters, seen, adapter)
                 Next
             End Using
         Catch ex As Exception
-            ErrorLogger.Log(ex, "MainForm.GetGpuAdapterNames.Wmi")
+            ErrorLogger.Log(ex, "MainForm.GetGpuAdapters.Wmi")
         End Try
 
-        If names.Count = 0 Then
+        If adapters.Count = 0 Then
             Try
                 Dim index As Integer = 0
                 Dim device As DISPLAY_DEVICE = New DISPLAY_DEVICE()
                 device.cb = Marshal.SizeOf(device)
 
                 While EnumDisplayDevices(Nothing, index, device, 0)
-                    If Not IsGenericAdapter(device.DeviceString) Then
-                        names.Add(device.DeviceString.Trim())
-                    End If
-
+                    Dim adapter As New GpuAdapterInfo With {
+                        .Name = If(device.DeviceString, "").Trim(),
+                        .AdapterCompatibility = "",
+                        .PnpDeviceId = If(device.DeviceID, "").Trim(),
+                        .Source = "EnumDisplayDevices"
+                    }
+                    AddGpuAdapter(adapters, seen, adapter)
                     index += 1
                     device = New DISPLAY_DEVICE()
                     device.cb = Marshal.SizeOf(device)
                 End While
             Catch ex As Exception
-                ErrorLogger.Log(ex, "MainForm.GetGpuAdapterNames.DisplayDevices")
+                ErrorLogger.Log(ex, "MainForm.GetGpuAdapters.DisplayDevices")
             End Try
         End If
 
-        Return names.ToList()
+        Return adapters
+    End Function
+
+    Private Sub AddGpuAdapter(target As List(Of GpuAdapterInfo), seen As HashSet(Of String), adapter As GpuAdapterInfo)
+        If target Is Nothing OrElse seen Is Nothing OrElse adapter Is Nothing Then
+            Return
+        End If
+
+        If String.IsNullOrWhiteSpace(adapter.Name) AndAlso String.IsNullOrWhiteSpace(adapter.AdapterCompatibility) Then
+            Return
+        End If
+
+        If IsGenericAdapter(adapter.Name) AndAlso IsGenericAdapter(adapter.AdapterCompatibility) Then
+            Return
+        End If
+
+        Dim key As String = adapter.Name & "|" & adapter.AdapterCompatibility & "|" & adapter.PnpDeviceId
+        If seen.Add(key) Then
+            target.Add(adapter)
+        End If
+    End Sub
+
+    Private Function BuildGpuCandidate(adapter As GpuAdapterInfo) As String
+        If adapter Is Nothing Then
+            Return ""
+        End If
+
+        Dim parts As New List(Of String)()
+        If Not String.IsNullOrWhiteSpace(adapter.Name) Then
+            parts.Add(adapter.Name)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(adapter.AdapterCompatibility) AndAlso Not String.Equals(adapter.AdapterCompatibility, adapter.Name, StringComparison.OrdinalIgnoreCase) Then
+            parts.Add(adapter.AdapterCompatibility)
+        End If
+
+        Dim vendorId As String = ExtractVendorId(adapter.PnpDeviceId)
+        If Not String.IsNullOrWhiteSpace(vendorId) Then
+            parts.Add("VEN_" & vendorId)
+        End If
+
+        Return String.Join("; ", parts)
+    End Function
+
+    Private Function ExtractVendorId(pnpDeviceId As String) As String
+        If String.IsNullOrWhiteSpace(pnpDeviceId) Then
+            Return ""
+        End If
+
+        Dim marker As String = "VEN_"
+        Dim upper As String = pnpDeviceId.ToUpperInvariant()
+        Dim markerIndex As Integer = upper.IndexOf(marker, StringComparison.Ordinal)
+        If markerIndex < 0 Then
+            Return ""
+        End If
+
+        markerIndex += marker.Length
+        If markerIndex + 4 > upper.Length Then
+            Return ""
+        End If
+
+        Dim vendorId As String = upper.Substring(markerIndex, 4)
+        For Each ch As Char In vendorId
+            Dim isDigit As Boolean = ch >= "0"c AndAlso ch <= "9"c
+            Dim isHexLetter As Boolean = ch >= "A"c AndAlso ch <= "F"c
+            If Not isDigit AndAlso Not isHexLetter Then
+                Return ""
+            End If
+        Next
+
+        Return vendorId
+    End Function
+
+    Private Function DetectVendorFromAdapter(adapter As GpuAdapterInfo) As GpuVendor
+        If adapter Is Nothing Then
+            Return GpuVendor.Unknown
+        End If
+
+        Dim vendorId As String = ExtractVendorId(adapter.PnpDeviceId)
+        If String.Equals(vendorId, NvidiaPciVendorId, StringComparison.OrdinalIgnoreCase) Then
+            Return GpuVendor.Nvidia
+        End If
+        If String.Equals(vendorId, AmdPciVendorId, StringComparison.OrdinalIgnoreCase) OrElse String.Equals(vendorId, IntelPciVendorId, StringComparison.OrdinalIgnoreCase) Then
+            Return GpuVendor.AmdIntel
+        End If
+
+        Dim combined As String = (If(adapter.Name, "") & " " & If(adapter.AdapterCompatibility, "")).ToUpperInvariant()
+        If ContainsNvidiaHint(combined) Then
+            Return GpuVendor.Nvidia
+        End If
+        If ContainsAmdHint(combined) OrElse ContainsIntelHint(combined) Then
+            Return GpuVendor.AmdIntel
+        End If
+
+        Return GpuVendor.Unknown
+    End Function
+
+    Private Function ContainsNvidiaHint(text As String) As Boolean
+        If String.IsNullOrWhiteSpace(text) Then
+            Return False
+        End If
+
+        Return text.Contains("NVIDIA") OrElse text.Contains("GEFORCE") OrElse text.Contains("RTX") OrElse text.Contains("GTX")
+    End Function
+
+    Private Function ContainsAmdHint(text As String) As Boolean
+        If String.IsNullOrWhiteSpace(text) Then
+            Return False
+        End If
+
+        Return text.Contains("AMD") OrElse text.Contains("RADEON") OrElse text.Contains("ATI") OrElse text.Contains("ADVANCED MICRO DEVICES")
+    End Function
+
+    Private Function ContainsIntelHint(text As String) As Boolean
+        If String.IsNullOrWhiteSpace(text) Then
+            Return False
+        End If
+
+        Return text.Contains("INTEL") OrElse text.Contains("ARC") OrElse text.Contains("IRIS") OrElse text.Contains("UHD")
+    End Function
+
+    Private Function IsAmdAdapter(adapter As GpuAdapterInfo) As Boolean
+        If adapter Is Nothing Then
+            Return False
+        End If
+
+        Dim vendorId As String = ExtractVendorId(adapter.PnpDeviceId)
+        If String.Equals(vendorId, AmdPciVendorId, StringComparison.OrdinalIgnoreCase) Then
+            Return True
+        End If
+
+        Dim combined As String = (If(adapter.Name, "") & " " & If(adapter.AdapterCompatibility, "")).ToUpperInvariant()
+        Return ContainsAmdHint(combined)
     End Function
 
     Private Function IsGenericAdapter(name As String) As Boolean
@@ -328,14 +560,161 @@ Public Class MainForm
         End If
 
         Dim upper As String = name.ToUpperInvariant()
-        If upper.Contains("MICROSOFT") AndAlso (upper.Contains("BASIC") OrElse upper.Contains("RENDER") OrElse upper.Contains("REMOTE") OrElse upper.Contains("HYPER-V")) Then
+        If upper.Contains("MICROSOFT") AndAlso (upper.Contains("BASIC") OrElse upper.Contains("RENDER") OrElse upper.Contains("REMOTE") OrElse upper.Contains("HYPER-V") OrElse upper.Contains("DISPLAY ADAPTER")) Then
             Return True
         End If
-        If upper.Contains("VIRTUAL") OrElse upper.Contains("VMWARE") OrElse upper.Contains("VBOX") Then
+        If upper.Contains("VIRTUAL") OrElse upper.Contains("VMWARE") OrElse upper.Contains("VBOX") OrElse upper.Contains("PARALLELS") OrElse upper.Contains("VIRTIO") Then
             Return True
         End If
 
         Return False
+    End Function
+
+    Private Sub UpdateExperimentalTabAvailability(Optional logAction As Boolean = True)
+        If tabExperimental Is Nothing Then
+            Return
+        End If
+
+        Dim hasAmdRdna As Boolean = IsAmdRdnaDetected()
+        Dim showOnUnsupported As Boolean = chkShowExperimentalTabOnUnsupportedGpu IsNot Nothing AndAlso chkShowExperimentalTabOnUnsupportedGpu.Checked
+        Dim shouldShowTab As Boolean = hasAmdRdna OrElse showOnUnsupported
+
+        If tabMain IsNot Nothing Then
+            Dim containsTab As Boolean = tabMain.TabPages.Contains(tabExperimental)
+            If shouldShowTab Then
+                If Not containsTab Then
+                    Dim insertIndex As Integer = tabMain.TabPages.IndexOf(tabSettings)
+                    If insertIndex < 0 Then
+                        insertIndex = tabMain.TabPages.Count
+                    End If
+                    tabMain.TabPages.Insert(insertIndex, tabExperimental)
+                    ThemeManager.ApplyTheme(tabExperimental, ThemeSettings.GetPreferredColorMode())
+                End If
+                tabExperimental.Enabled = True
+            Else
+                If tabMain.SelectedTab Is tabExperimental Then
+                    tabMain.SelectedTab = tabCompatibility
+                End If
+                If containsTab Then
+                    tabMain.TabPages.Remove(tabExperimental)
+                End If
+            End If
+        End If
+
+        If Not hasAmdRdna AndAlso lblFsr4Status IsNot Nothing Then
+            If showOnUnsupported Then
+                lblFsr4Status.Text = "Experimental package: unsupported GPU (tab manually enabled)."
+            Else
+                lblFsr4Status.Text = "Experimental package: unavailable (AMD RDNA GPU not detected)."
+            End If
+        End If
+
+        If logAction Then
+            If hasAmdRdna Then
+                AppendLog("FSR4 INT8 tab enabled (AMD RDNA GPU detected).")
+            ElseIf showOnUnsupported Then
+                AppendLog("FSR4 INT8 tab shown by settings override (AMD RDNA GPU not detected).")
+            Else
+                AppendLog("FSR4 INT8 tab disabled (no AMD RDNA GPU detected).")
+            End If
+        End If
+    End Sub
+
+    Private Function IsAmdRdnaDetected() As Boolean
+        EnsureGpuDetectionInitialized()
+
+        For Each adapter As GpuAdapterInfo In gpuDetectionAdapters
+            If Not IsAmdAdapter(adapter) Then
+                Continue For
+            End If
+
+            Dim candidate As String = (If(adapter.Name, "") & " " & If(adapter.AdapterCompatibility, "")).Trim()
+            If IsLikelyAmdRdnaAdapter(candidate) Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
+
+    Private Function IsLikelyAmdRdnaAdapter(adapterName As String) As Boolean
+        If String.IsNullOrWhiteSpace(adapterName) Then
+            Return False
+        End If
+
+        Dim upper As String = adapterName.ToUpperInvariant()
+        If Not upper.Contains("AMD") AndAlso Not upper.Contains("RADEON") Then
+            Return False
+        End If
+
+        If upper.Contains("RDNA") Then
+            Return True
+        End If
+
+        Dim rdnaTokens As String() = {
+            "5300", "5500", "5600", "5700",
+            "6400", "6500", "6600", "6650", "6700", "6800", "6900", "6950",
+            "740M", "760M", "780M",
+            "7600", "7700", "7800", "7900", "9070", "9080",
+            "880M", "890M",
+            "RADEON PRO W7", "RADEON PRO W8", "RADEON PRO W9"
+        }
+
+        For Each token As String In rdnaTokens
+            If upper.Contains(token, StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        Next
+
+        Dim searchIndex As Integer = 0
+        While searchIndex < upper.Length
+            Dim rxIndex As Integer = upper.IndexOf("RX", searchIndex, StringComparison.Ordinal)
+            If rxIndex < 0 Then
+                Exit While
+            End If
+
+            If rxIndex = 0 OrElse Not Char.IsLetterOrDigit(upper(rxIndex - 1)) Then
+                Dim modelNumber As Integer = ParseRxModelNumber(upper, rxIndex + 2)
+                If modelNumber >= 5000 Then
+                    Return True
+                End If
+            End If
+
+            searchIndex = rxIndex + 2
+        End While
+
+        Return False
+    End Function
+
+    Private Function ParseRxModelNumber(text As String, startIndex As Integer) As Integer
+        If String.IsNullOrWhiteSpace(text) OrElse startIndex >= text.Length Then
+            Return -1
+        End If
+
+        Dim index As Integer = startIndex
+        While index < text.Length AndAlso (text(index) = " "c OrElse text(index) = "-"c OrElse text(index) = "_"c)
+            index += 1
+        End While
+
+        Dim digits As New StringBuilder()
+        While index < text.Length AndAlso Char.IsDigit(text(index))
+            digits.Append(text(index))
+            index += 1
+            If digits.Length >= 5 Then
+                Exit While
+            End If
+        End While
+
+        If digits.Length < 4 Then
+            Return -1
+        End If
+
+        Dim model As Integer = 0
+        If Integer.TryParse(digits.ToString(), model) Then
+            Return model
+        End If
+
+        Return -1
     End Function
 
     Private Sub LoadCompatibility()
@@ -393,15 +772,7 @@ Public Class MainForm
     End Sub
 
     Private Sub btnBrowseGameExe_Click(sender As Object, e As EventArgs) Handles btnBrowseGameExe.Click
-        AppendLog("Browsing for game executable.")
-        Using dialog As New OpenFileDialog()
-            dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
-            dialog.Title = "Select Game Executable"
-            If dialog.ShowDialog(Me) = DialogResult.OK Then
-                txtGameExe.Text = dialog.FileName
-                AppendLog("Selected game executable: " & dialog.FileName)
-            End If
-        End Using
+        BrowseAndSelectGameExe("Browsing for game executable.")
     End Sub
 
     Private Sub txtGameExe_TextChanged(sender As Object, e As EventArgs) Handles txtGameExe.TextChanged
@@ -416,6 +787,8 @@ Public Class MainForm
     Private Sub txtGameFolder_TextChanged(sender As Object, e As EventArgs) Handles txtGameFolder.TextChanged
         UpdateEngineWarningByFolder(txtGameFolder.Text)
         UpdateInstallStatus()
+        UpdateExperimentalStatus()
+        UpdateExperimentalDetectedGamesList()
     End Sub
 
     Private Sub btnOpenGameFolder_Click(sender As Object, e As EventArgs) Handles btnOpenGameFolder.Click
@@ -460,6 +833,206 @@ Public Class MainForm
                 AppendLog("Selected custom scan folder: " & dialog.SelectedPath)
             End If
         End Using
+    End Sub
+
+    Private Sub btnBrowseFsr4PackageFolder_Click(sender As Object, e As EventArgs) Handles btnBrowseFsr4PackageFolder.Click
+        AppendLog("Browsing for experimental FSR4 package folder.")
+        Using dialog As New FolderBrowserDialog()
+            dialog.Description = "Select a local folder containing FSR4 INT8 files"
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                txtFsr4PackageFolder.Text = dialog.SelectedPath
+                AppendLog("Selected experimental package folder: " & dialog.SelectedPath)
+            End If
+        End Using
+    End Sub
+
+    Private Sub btnFsr4BrowseGameExe_Click(sender As Object, e As EventArgs) Handles btnFsr4BrowseGameExe.Click
+        BrowseAndSelectGameExe("Browsing for game executable from Experimental tab.")
+    End Sub
+
+    Private Sub BrowseAndSelectGameExe(startLogMessage As String)
+        AppendLog(startLogMessage)
+        Using dialog As New OpenFileDialog()
+            dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
+            dialog.Title = "Select Game Executable"
+            If File.Exists(txtGameExe.Text) Then
+                dialog.FileName = txtGameExe.Text
+            ElseIf Directory.Exists(txtGameFolder.Text) Then
+                dialog.InitialDirectory = txtGameFolder.Text
+            End If
+
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                txtGameExe.Text = dialog.FileName
+                AppendLog("Selected game executable: " & dialog.FileName)
+            End If
+        End Using
+    End Sub
+
+    Private Async Sub btnFsr4Apply_Click(sender As Object, e As EventArgs) Handles btnFsr4Apply.Click
+        If String.IsNullOrWhiteSpace(txtGameFolder.Text) OrElse Not Directory.Exists(txtGameFolder.Text) Then
+            MessageBox.Show(Me, "Select a valid game folder on the Install tab first.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If String.IsNullOrWhiteSpace(txtFsr4PackageFolder.Text) OrElse Not Directory.Exists(txtFsr4PackageFolder.Text) Then
+            MessageBox.Show(Me, "Select a valid local package folder first.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        Try
+            SetExperimentalActionButtonsEnabled(False)
+            AppendLog("Applying experimental FSR4 package...")
+
+            Dim options As New ExperimentalFsr4ApplyOptions With {
+                .GameFolder = txtGameFolder.Text,
+                .PackageFolder = txtFsr4PackageFolder.Text.Trim(),
+                .ConflictMode = GetConflictModeFromIndex(cmbConflictMode.SelectedIndex),
+                .EnableFsr4Update = chkFsr4EnableUpdate.Checked,
+                .EnableAgilityUpgrade = chkFsr4EnableAgility.Checked
+            }
+
+            Dim manifest As ExperimentalFsr4Manifest = Await Task.Run(Function() ExperimentalFsr4Service.Apply(options, AddressOf AppendLog))
+            Dim versionText As String = If(manifest Is Nothing OrElse String.IsNullOrWhiteSpace(manifest.PackageVersion), "unknown", manifest.PackageVersion)
+            AppendLog("Experimental FSR4 package applied. Version: " & versionText)
+            MessageBox.Show(Me, "Experimental FSR4 package applied successfully.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Catch ex As Exception
+            AppendLog("Experimental FSR4 apply failed: " & ex.Message)
+            MessageBox.Show(Me, ex.Message, "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ErrorLogger.Log(ex, "MainForm.btnFsr4Apply")
+        Finally
+            SetExperimentalActionButtonsEnabled(True)
+            UpdateExperimentalStatus()
+        End Try
+    End Sub
+
+    Private Async Sub btnFsr4Remove_Click(sender As Object, e As EventArgs) Handles btnFsr4Remove.Click
+        If String.IsNullOrWhiteSpace(txtGameFolder.Text) OrElse Not Directory.Exists(txtGameFolder.Text) Then
+            MessageBox.Show(Me, "Select a valid game folder on the Install tab first.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        Dim status As ExperimentalFsr4Status = ExperimentalFsr4Service.Detect(txtGameFolder.Text)
+        If status Is Nothing OrElse Not status.IsInstalled Then
+            MessageBox.Show(Me, "No experimental FSR4 package was detected for this game folder.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        If status.IsInstalled AndAlso Not status.IsManaged Then
+            MessageBox.Show(Me,
+                            "Experimental markers were detected, but this install is unmanaged." & Environment.NewLine &
+                            "To avoid deleting unknown files, automatic remove is blocked.",
+                            "Experimental FSR4",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information)
+            AppendLog("Experimental remove blocked: install is unmanaged.")
+            Return
+        End If
+
+        Dim confirm As DialogResult = MessageBox.Show(Me,
+                                                      "Remove the experimental FSR4 package from this game folder?" & Environment.NewLine &
+                                                      "Backups and INI values tracked by the installer will be restored.",
+                                                      "Experimental FSR4",
+                                                      MessageBoxButtons.YesNo,
+                                                      MessageBoxIcon.Question)
+        If confirm <> DialogResult.Yes Then
+            Return
+        End If
+
+        Try
+            SetExperimentalActionButtonsEnabled(False)
+            AppendLog("Removing experimental FSR4 package...")
+            Dim removed As Boolean = Await Task.Run(Function() ExperimentalFsr4Service.Remove(txtGameFolder.Text, AddressOf AppendLog))
+            If removed Then
+                AppendLog("Experimental FSR4 package removed.")
+                MessageBox.Show(Me, "Experimental FSR4 package removed.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Else
+                AppendLog("Experimental remove skipped (no managed manifest found).")
+                MessageBox.Show(Me, "No managed experimental package was found for this folder.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+        Catch ex As Exception
+            AppendLog("Experimental remove failed: " & ex.Message)
+            MessageBox.Show(Me, ex.Message, "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ErrorLogger.Log(ex, "MainForm.btnFsr4Remove")
+        Finally
+            SetExperimentalActionButtonsEnabled(True)
+            UpdateExperimentalStatus()
+        End Try
+    End Sub
+
+    Private Sub btnFsr4RefreshStatus_Click(sender As Object, e As EventArgs) Handles btnFsr4RefreshStatus.Click
+        UpdateExperimentalStatus()
+    End Sub
+
+    Private Sub btnFsr4PickGame_Click(sender As Object, e As EventArgs) Handles btnFsr4PickGame.Click
+        tabMain.SelectedTab = tabInstall
+        If txtGameExe IsNot Nothing Then
+            txtGameExe.Focus()
+        End If
+        AppendLog("Switched to Install tab to pick/change target game.")
+    End Sub
+
+    Private Async Sub btnFsr4ScanDetectedGames_Click(sender As Object, e As EventArgs) Handles btnFsr4ScanDetectedGames.Click
+        Await RunDetectionAsync(False)
+    End Sub
+
+    Private Sub btnFsr4UseSelectedGame_Click(sender As Object, e As EventArgs) Handles btnFsr4UseSelectedGame.Click
+        Dim selectedGame As DetectedGame = GetSelectedExperimentalDetectedGame()
+        If selectedGame Is Nothing Then
+            MessageBox.Show(Me, "Select a detected game first, or browse for a game EXE.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        UseExperimentalDetectedGame(selectedGame)
+    End Sub
+
+    Private Sub lvFsr4DetectedGames_SelectedIndexChanged(sender As Object, e As EventArgs) Handles lvFsr4DetectedGames.SelectedIndexChanged
+        btnFsr4UseSelectedGame.Enabled = GetSelectedExperimentalDetectedGame() IsNot Nothing
+    End Sub
+
+    Private Sub lvFsr4DetectedGames_DoubleClick(sender As Object, e As EventArgs) Handles lvFsr4DetectedGames.DoubleClick
+        Dim selectedGame As DetectedGame = GetSelectedExperimentalDetectedGame()
+        If selectedGame Is Nothing Then
+            Return
+        End If
+
+        UseExperimentalDetectedGame(selectedGame)
+    End Sub
+
+    Private Function GetSelectedExperimentalDetectedGame() As DetectedGame
+        If lvFsr4DetectedGames Is Nothing OrElse lvFsr4DetectedGames.SelectedItems.Count = 0 Then
+            Return Nothing
+        End If
+
+        Return TryCast(lvFsr4DetectedGames.SelectedItems(0).Tag, DetectedGame)
+    End Function
+
+    Private Sub UseExperimentalDetectedGame(game As DetectedGame)
+        If game Is Nothing Then
+            Return
+        End If
+
+        txtGameFolder.Text = game.InstallDir
+
+        Dim exePath As String = FindPreferredExecutable(game.InstallDir, game.DisplayName, game.SourceName)
+        If Not String.IsNullOrWhiteSpace(exePath) Then
+            txtGameExe.Text = exePath
+        End If
+
+        AppendLog("Experimental target game set to: " & game.DisplayName)
+    End Sub
+
+    Private Sub SetExperimentalActionButtonsEnabled(enabled As Boolean)
+        btnFsr4Apply.Enabled = enabled
+        btnFsr4Remove.Enabled = enabled
+        btnFsr4RefreshStatus.Enabled = enabled
+        btnFsr4ScanDetectedGames.Enabled = enabled
+        btnFsr4BrowseGameExe.Enabled = enabled
+        btnFsr4PickGame.Enabled = enabled
+        If enabled Then
+            btnFsr4UseSelectedGame.Enabled = GetSelectedExperimentalDetectedGame() IsNot Nothing
+        Else
+            btnFsr4UseSelectedGame.Enabled = False
+        End If
     End Sub
 
     Private Sub cmbDefaultPreset_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbDefaultPreset.SelectedIndexChanged
@@ -721,6 +1294,7 @@ Public Class MainForm
             btnInstall.Enabled = True
             UpdateProgress(0)
             UpdateInstallStatus()
+            UpdateExperimentalStatus()
         End Try
     End Sub
 
@@ -736,6 +1310,7 @@ Public Class MainForm
         Finally
             btnUninstall.Enabled = True
             UpdateInstallStatus()
+            UpdateExperimentalStatus()
         End Try
     End Sub
 
@@ -1153,6 +1728,56 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Sub UpdateExperimentalDetectedGamesList()
+        If lvFsr4DetectedGames Is Nothing Then
+            Return
+        End If
+
+        lvFsr4DetectedGames.BeginUpdate()
+        lvFsr4DetectedGames.Items.Clear()
+
+        If detectedGames IsNot Nothing Then
+            For Each game As DetectedGame In detectedGames.OrderBy(Function(entry) entry.DisplayName, StringComparer.OrdinalIgnoreCase)
+                If game Is Nothing Then
+                    Continue For
+                End If
+
+                Dim item As New ListViewItem(game.DisplayName)
+                item.SubItems.Add(If(game.Platform, ""))
+                item.SubItems.Add(If(game.InstallDir, ""))
+                item.Tag = game
+                lvFsr4DetectedGames.Items.Add(item)
+            Next
+        End If
+
+        lvFsr4DetectedGames.EndUpdate()
+
+        Dim selectedTarget As String = txtGameFolder.Text.Trim()
+        If Not String.IsNullOrWhiteSpace(selectedTarget) Then
+            For Each item As ListViewItem In lvFsr4DetectedGames.Items
+                Dim game As DetectedGame = TryCast(item.Tag, DetectedGame)
+                If game Is Nothing Then
+                    Continue For
+                End If
+
+                If String.Equals(NormalizePathSafe(game.InstallDir), NormalizePathSafe(selectedTarget), StringComparison.OrdinalIgnoreCase) Then
+                    item.Selected = True
+                    item.Focused = True
+                    Exit For
+                End If
+            Next
+        End If
+
+        Dim count As Integer = lvFsr4DetectedGames.Items.Count
+        If count <= 0 Then
+            lblFsr4DetectedGames.Text = "Detected supported games (none found, use Scan now or Browse game EXE)"
+        Else
+            lblFsr4DetectedGames.Text = "Detected supported games (" & count & ")"
+        End If
+
+        btnFsr4UseSelectedGame.Enabled = GetSelectedExperimentalDetectedGame() IsNot Nothing
+    End Sub
+
     Private Sub UpdateCompatibilityNote()
         If lblCompatibilityNote Is Nothing Then
             Return
@@ -1381,6 +2006,49 @@ Public Class MainForm
         Dim versionText As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version)
         Dim sourceText As String = If(String.IsNullOrWhiteSpace(info.Source), "", " (" & info.Source & ")")
         Return "Installed: " & versionText & sourceText
+    End Function
+
+    Private Sub UpdateExperimentalStatus()
+        If lblFsr4Status Is Nothing Then
+            Return
+        End If
+
+        If InvokeRequired Then
+            BeginInvoke(New Action(AddressOf UpdateExperimentalStatus))
+            Return
+        End If
+
+        If txtFsr4TargetGameFolder IsNot Nothing Then
+            txtFsr4TargetGameFolder.Text = txtGameFolder.Text.Trim()
+        End If
+
+        Dim targetGameFolder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(targetGameFolder) Then
+            lblFsr4Status.Text = "Experimental package: pick a target game first."
+            lastExperimentalStatusKey = "no-game"
+            Return
+        End If
+
+        Dim status As ExperimentalFsr4Status = ExperimentalFsr4Service.Detect(targetGameFolder)
+        Dim statusText As String = BuildExperimentalStatusText(status)
+        lblFsr4Status.Text = statusText
+
+        Dim key As String = If(status Is Nothing, "none", $"{status.IsInstalled}|{status.IsManaged}|{status.Version}|{status.Source}")
+        If key <> lastExperimentalStatusKey Then
+            lastExperimentalStatusKey = key
+            AppendLog("Experimental status: " & statusText)
+        End If
+    End Sub
+
+    Private Function BuildExperimentalStatusText(status As ExperimentalFsr4Status) As String
+        If status Is Nothing OrElse Not status.IsInstalled Then
+            Return "Experimental package: not installed"
+        End If
+
+        Dim versionText As String = If(String.IsNullOrWhiteSpace(status.Version), "unknown", status.Version)
+        Dim sourceText As String = If(String.IsNullOrWhiteSpace(status.Source), "unknown", status.Source)
+        Dim managedText As String = If(status.IsManaged, "managed", "unmanaged")
+        Return $"Experimental package: installed ({versionText}, {sourceText}, {managedText})"
     End Function
 
     Private Enum InstallAction
@@ -1876,13 +2544,7 @@ Public Class MainForm
                 fgSelection = FgTypeSelection.Nukem
         End Select
 
-        Dim conflict As ConflictMode = ConflictMode.BackupAndOverwrite
-        Select Case cmbConflictMode.SelectedIndex
-            Case 1
-                conflict = ConflictMode.Overwrite
-            Case 2
-                conflict = ConflictMode.Skip
-        End Select
+        Dim conflict As ConflictMode = GetConflictModeFromIndex(cmbConflictMode.SelectedIndex)
 
         Dim gpu As GpuVendor = If(rbGpuAmdIntel.Checked, GpuVendor.AmdIntel, GpuVendor.Nvidia)
 
@@ -1915,6 +2577,17 @@ Public Class MainForm
             .DefaultIniMode = defaultIniMode,
             .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath)
         }
+    End Function
+
+    Private Function GetConflictModeFromIndex(index As Integer) As ConflictMode
+        Select Case index
+            Case 1
+                Return ConflictMode.Overwrite
+            Case 2
+                Return ConflictMode.Skip
+            Case Else
+                Return ConflictMode.BackupAndOverwrite
+        End Select
     End Function
 
     Private Function ParseDefaultIniMode(value As String) As DefaultIniMode
@@ -1972,6 +2645,14 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Sub chkShowExperimentalTabOnUnsupportedGpu_CheckedChanged(sender As Object, e As EventArgs) Handles chkShowExperimentalTabOnUnsupportedGpu.CheckedChanged
+        If loadingSettingsUi Then
+            Return
+        End If
+
+        UpdateExperimentalTabAvailability(True)
+    End Sub
+
     Private Sub btnSaveSettings_Click(sender As Object, e As EventArgs) Handles btnSaveSettings.Click
         Dim settings As AppSettingsModel = AppSettings.Load()
         settings.CompatibilityListUrl = txtCompatibilityListUrl.Text.Trim()
@@ -1981,9 +2662,13 @@ Public Class MainForm
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
         settings.AutoRefreshCompatibilityOnStartup = chkAutoRefreshCompatibilityOnStartup.Checked
         settings.AutoCheckInstallerUpdates = chkAutoCheckInstallerUpdates.Checked
+        settings.ShowExperimentalTabOnUnsupportedGpu = chkShowExperimentalTabOnUnsupportedGpu.Checked
         settings.CustomScanFolder = txtCustomScanFolder.Text.Trim()
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
+        settings.ExperimentalFsr4PackageFolder = txtFsr4PackageFolder.Text.Trim()
+        settings.ExperimentalFsr4EnableUpdate = chkFsr4EnableUpdate.Checked
+        settings.ExperimentalFsr4EnableAgility = chkFsr4EnableAgility.Checked
         settings.DefaultPreset = GetDefaultPresetValue()
         settings.DefaultHookName = GetDefaultHookValue()
         settings.DefaultGpuVendor = GetDefaultGpuVendorValue()
@@ -2422,6 +3107,22 @@ Public Class MainForm
         toolTip.SetToolTip(txtFakenvapiFolder, "Folder containing nvapi64.dll and fakenvapi.ini for AMD/Intel.")
         toolTip.SetToolTip(btnBrowseFakenvapiFolder, "Browse for the Fakenvapi folder.")
 
+        toolTip.SetToolTip(txtFsr4PackageFolder, "Local folder containing experimental FSR4 INT8 files for older RDNA GPUs.")
+        toolTip.SetToolTip(btnBrowseFsr4PackageFolder, "Browse for the experimental FSR4 package folder.")
+        toolTip.SetToolTip(txtFsr4TargetGameFolder, "Game folder currently selected on the Install tab. This is where the experimental package will be applied.")
+        toolTip.SetToolTip(btnFsr4PickGame, "Switch to the Install tab so you can select or change the target game executable/folder.")
+        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Scan supported game installs and populate the detected-games picker.")
+        toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use the selected detected game as the experimental package target.")
+        toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: browse to a game executable when detection does not find your game.")
+        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games. Select one and click Use selected, or double-click.")
+        toolTip.SetToolTip(lblFsr4DetectedGames, "Shows how many supported games are currently detected for quick targeting.")
+        toolTip.SetToolTip(chkFsr4EnableUpdate, "When enabled, sets Fsr4Update=true in OptiScaler.ini during apply.")
+        toolTip.SetToolTip(chkFsr4EnableAgility, "When enabled, sets FsrAgilitySDKUpgrade=true in OptiScaler.ini during apply.")
+        toolTip.SetToolTip(btnFsr4Apply, "Copy the selected experimental package into the current game folder and optionally set INI keys.")
+        toolTip.SetToolTip(btnFsr4Remove, "Remove installer-managed experimental files and restore backups/INI keys.")
+        toolTip.SetToolTip(btnFsr4RefreshStatus, "Re-evaluate the experimental package status for the selected game folder.")
+        toolTip.SetToolTip(lblFsr4Status, "Shows whether an experimental package is installed and whether it is managed by this installer.")
+
         toolTip.SetToolTip(txtLog, "Read-only log of installer actions.")
         toolTip.SetToolTip(grpLog, "Log output for all installer actions.")
 
@@ -2432,6 +3133,7 @@ Public Class MainForm
         toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
         toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "When enabled, the compatibility list is auto-refreshed on startup.")
         toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "When enabled, the installer checks for updates at startup and shows a subtle in-app notice.")
+        toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Show the FSR4 INT8 (Experimental) tab even when an AMD RDNA GPU is not detected.")
         toolTip.SetToolTip(txtCustomScanFolder, "Optional custom folder root to scan for supported games. Use ';' to separate multiple folders.")
         toolTip.SetToolTip(btnBrowseCustomScanFolder, "Browse for an additional custom scan folder.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
@@ -2458,6 +3160,7 @@ Public Class MainForm
         Dim settings As AppSettingsModel = AppSettings.Load()
         ApplySettingsToUi(settings)
         ApplyDefaultInstallOptionsFromSettings(settings, False)
+        UpdateExperimentalStatus()
         lblSettingsPath.Text = "Settings file: " & AppSettings.GetSettingsPath()
         AppendLog("Settings loaded.")
     End Sub
@@ -2655,6 +3358,7 @@ Public Class MainForm
             detectedLookup = BuildDetectedLookup(results)
             detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
             ApplyCompatibilityFilter()
+            UpdateExperimentalDetectedGamesList()
             UpdateDetectedStatus()
             Dim installedCount As Integer = 0
             Dim antiCheatCount As Integer = 0
@@ -2674,6 +3378,7 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog(label & " failed: " & ex.Message)
             toolDetectedLabel.Text = "Detected: error"
+            UpdateExperimentalDetectedGamesList()
             ErrorLogger.Log(ex, "MainForm.DetectGames")
         Finally
             btnScanDetected.Enabled = True
@@ -2685,24 +3390,35 @@ Public Class MainForm
             Return
         End If
 
-        txtCompatibilityListUrl.Text = settings.CompatibilityListUrl
-        txtWikiBaseUrl.Text = settings.WikiBaseUrl
-        txtStableReleaseUrl.Text = settings.StableReleaseUrl
-        txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
-        txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
-        chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
-        chkAutoCheckInstallerUpdates.Checked = If(settings.AutoCheckInstallerUpdates.HasValue, settings.AutoCheckInstallerUpdates.Value, True)
-        txtCustomScanFolder.Text = If(settings.CustomScanFolder, "")
-        txtDefaultIniPath.Text = settings.DefaultIniPath
-        cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
-        _settingDefaultsPreset = True
-        cmbDefaultPreset.SelectedIndex = GetDefaultPresetIndex(settings.DefaultPreset)
-        cmbDefaultHookName.SelectedIndex = GetDefaultHookIndex(settings.DefaultHookName)
-        cmbDefaultGpuVendor.SelectedIndex = GetDefaultGpuVendorIndex(settings.DefaultGpuVendor)
-        chkDefaultDlssInputs.Checked = If(settings.DefaultDlssInputs.HasValue, settings.DefaultDlssInputs.Value, True)
-        cmbDefaultFgType.SelectedIndex = GetDefaultFrameGenerationIndex(settings.DefaultFrameGeneration)
-        cmbDefaultConflictMode.SelectedIndex = GetDefaultConflictModeIndex(settings.DefaultConflictMode)
-        _settingDefaultsPreset = False
+        loadingSettingsUi = True
+        Try
+            txtCompatibilityListUrl.Text = settings.CompatibilityListUrl
+            txtWikiBaseUrl.Text = settings.WikiBaseUrl
+            txtStableReleaseUrl.Text = settings.StableReleaseUrl
+            txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
+            txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
+            chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
+            chkAutoCheckInstallerUpdates.Checked = If(settings.AutoCheckInstallerUpdates.HasValue, settings.AutoCheckInstallerUpdates.Value, True)
+            chkShowExperimentalTabOnUnsupportedGpu.Checked = If(settings.ShowExperimentalTabOnUnsupportedGpu.HasValue, settings.ShowExperimentalTabOnUnsupportedGpu.Value, False)
+            txtCustomScanFolder.Text = If(settings.CustomScanFolder, "")
+            txtDefaultIniPath.Text = settings.DefaultIniPath
+            cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
+            txtFsr4PackageFolder.Text = If(settings.ExperimentalFsr4PackageFolder, "")
+            chkFsr4EnableUpdate.Checked = If(settings.ExperimentalFsr4EnableUpdate.HasValue, settings.ExperimentalFsr4EnableUpdate.Value, True)
+            chkFsr4EnableAgility.Checked = If(settings.ExperimentalFsr4EnableAgility.HasValue, settings.ExperimentalFsr4EnableAgility.Value, False)
+            _settingDefaultsPreset = True
+            cmbDefaultPreset.SelectedIndex = GetDefaultPresetIndex(settings.DefaultPreset)
+            cmbDefaultHookName.SelectedIndex = GetDefaultHookIndex(settings.DefaultHookName)
+            cmbDefaultGpuVendor.SelectedIndex = GetDefaultGpuVendorIndex(settings.DefaultGpuVendor)
+            chkDefaultDlssInputs.Checked = If(settings.DefaultDlssInputs.HasValue, settings.DefaultDlssInputs.Value, True)
+            cmbDefaultFgType.SelectedIndex = GetDefaultFrameGenerationIndex(settings.DefaultFrameGeneration)
+            cmbDefaultConflictMode.SelectedIndex = GetDefaultConflictModeIndex(settings.DefaultConflictMode)
+        Finally
+            _settingDefaultsPreset = False
+            loadingSettingsUi = False
+        End Try
+
+        UpdateExperimentalTabAvailability(False)
     End Sub
 
     Private Sub ApplyDefaultInstallOptionsFromSettings(settings As AppSettingsModel, Optional logAction As Boolean = True)

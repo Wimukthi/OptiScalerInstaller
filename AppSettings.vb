@@ -110,11 +110,15 @@ Friend Class AppSettingsModel
     Public Property InstallerReleaseUrl As String
     Public Property AutoRefreshCompatibilityOnStartup As Boolean?
     Public Property AutoCheckInstallerUpdates As Boolean?
+    Public Property ShowExperimentalTabOnUnsupportedGpu As Boolean?
     Public Property CustomScanFolder As String
     Public Property EnableGameTemplates As Boolean?
     Public Property HighlightCompatibilityChanges As Boolean?
     Public Property DefaultIniMode As String
     Public Property DefaultIniPath As String
+    Public Property ExperimentalFsr4PackageFolder As String
+    Public Property ExperimentalFsr4EnableUpdate As Boolean?
+    Public Property ExperimentalFsr4EnableAgility As Boolean?
     Public Property DefaultPreset As String
     Public Property DefaultHookName As String
     Public Property DefaultGpuVendor As String
@@ -165,6 +169,10 @@ Friend Class AppSettingsModel
             AutoCheckInstallerUpdates = defaults.AutoCheckInstallerUpdates
             changed = True
         End If
+        If Not ShowExperimentalTabOnUnsupportedGpu.HasValue AndAlso defaults.ShowExperimentalTabOnUnsupportedGpu.HasValue Then
+            ShowExperimentalTabOnUnsupportedGpu = defaults.ShowExperimentalTabOnUnsupportedGpu
+            changed = True
+        End If
         If String.IsNullOrWhiteSpace(CustomScanFolder) AndAlso Not String.IsNullOrWhiteSpace(defaults.CustomScanFolder) Then
             CustomScanFolder = defaults.CustomScanFolder
             changed = True
@@ -183,6 +191,18 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(DefaultIniPath) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniPath) Then
             DefaultIniPath = defaults.DefaultIniPath
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(ExperimentalFsr4PackageFolder) AndAlso Not String.IsNullOrWhiteSpace(defaults.ExperimentalFsr4PackageFolder) Then
+            ExperimentalFsr4PackageFolder = defaults.ExperimentalFsr4PackageFolder
+            changed = True
+        End If
+        If Not ExperimentalFsr4EnableUpdate.HasValue AndAlso defaults.ExperimentalFsr4EnableUpdate.HasValue Then
+            ExperimentalFsr4EnableUpdate = defaults.ExperimentalFsr4EnableUpdate
+            changed = True
+        End If
+        If Not ExperimentalFsr4EnableAgility.HasValue AndAlso defaults.ExperimentalFsr4EnableAgility.HasValue Then
+            ExperimentalFsr4EnableAgility = defaults.ExperimentalFsr4EnableAgility
             changed = True
         End If
         If String.IsNullOrWhiteSpace(DefaultPreset) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultPreset) Then
