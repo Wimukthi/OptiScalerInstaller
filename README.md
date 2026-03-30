@@ -23,6 +23,8 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Configurable URLs for lists and releases.
 - Anti-cheat signature hints in detection results with install-time warning prompts.
 - Optional custom folder scan source and startup compatibility auto-refresh toggle.
+- FSR4 INT8 (Experimental) workflow with detected-game picker and optional visibility override on unsupported GPUs.
+- Robust GPU detection using adapter vendor IDs (with fallbacks), and detected GPU model shown on the title bar.
 
 ## Requirements
 
@@ -92,7 +94,7 @@ Build version auto-increments on each build using `BuildVersion.txt` and is emit
 - Minor increments every 100 builds
 - Major increments every 1000 builds (base major starts at 1)
 
-The window title shows the current version as `vMajor.Minor.Patch.Build`.
+The window title shows `vMajor.Minor.Patch.Build` and, when detected, the active GPU model.
 
 ## Screenshots
 
@@ -114,6 +116,7 @@ Settings:
 
 ## Version History
 
+- v1.0.6.1 - Add FSR4 experimental tab visibility toggle for unsupported GPUs, fix runtime tab theming artifacts, harden GPU detection with vendor-ID matching, and show detected GPU model in the title bar.
 - v1.0.5.2 - Harden OptiScaler detection and executable resolution (fewer false positives, stronger manifest validation, improved nested binary probing), add startup auto-update-check toggle, and include OptiScaler project link in About.
 - v1.0.5.0 - Improve startup crash handling: fatal initialization errors now show an explicit dialog and terminate cleanly instead of silently running as a background process.
 - v1.0.4.9 - Fix install-status detection for games that load from nested binary folders (for example `Binaries\\Win64`) so existing OptiScaler installs are correctly reported.
