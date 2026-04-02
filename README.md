@@ -116,6 +116,7 @@ Settings:
 
 ## Version History
 
+- v1.0.6.7 - Harden uninstall/remove safety with root-scoped manifest path validation, add archive extraction traversal guards, improve release asset selection and digest verification, add retry/timeout handling for release/compatibility/download fetches, tighten startup background error handling, and expand core code comments.
 - v1.0.6.1 - Add FSR4 experimental tab visibility toggle for unsupported GPUs, fix runtime tab theming artifacts, harden GPU detection with vendor-ID matching, and show detected GPU model in the title bar.
 - v1.0.5.2 - Harden OptiScaler detection and executable resolution (fewer false positives, stronger manifest validation, improved nested binary probing), add startup auto-update-check toggle, and include OptiScaler project link in About.
 - v1.0.5.0 - Improve startup crash handling: fatal initialization errors now show an explicit dialog and terminate cleanly instead of silently running as a background process.
