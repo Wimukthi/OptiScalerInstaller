@@ -9,6 +9,7 @@ Public Class AntiCheatScanResult
 End Class
 
 Public Module AntiCheatService
+    ' Token signatures used for quick best-effort anti-cheat identification.
     Private ReadOnly SignatureMap As Dictionary(Of String, String()) = New Dictionary(Of String, String())(StringComparer.OrdinalIgnoreCase) From {
         {"Easy Anti-Cheat", New String() {"easyanticheat", "easyanticheat_eos", "easy anti-cheat"}},
         {"BattlEye", New String() {"battleye", "beservice", "beclient"}},
@@ -18,6 +19,7 @@ Public Module AntiCheatService
         {"NProtect GameGuard", New String() {"gameguard", "npgg", "nprotect"}}
     }
 
+    ' Scans a bounded folder set to avoid expensive full-drive traversal.
     Public Function Detect(gameFolder As String) As AntiCheatScanResult
         Dim result As New AntiCheatScanResult()
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
@@ -54,6 +56,7 @@ Public Module AntiCheatService
         Return result
     End Function
 
+    ' Matches folder/file names against known anti-cheat tokens.
     Private Function MatchProvider(value As String) As String
         If String.IsNullOrWhiteSpace(value) Then
             Return ""
@@ -71,6 +74,7 @@ Public Module AntiCheatService
         Return ""
     End Function
 
+    ' Breadth-first folder enumeration with depth and count caps for responsiveness.
     Private Function EnumerateFolders(root As String, maxDepth As Integer, maxFolders As Integer) As List(Of String)
         Dim output As New List(Of String)()
         If String.IsNullOrWhiteSpace(root) OrElse Not Directory.Exists(root) Then

@@ -73,6 +73,7 @@ Public Module OptiScalerInstallDetector
     End Function
 
     Private Function DetectInFolder(folderPath As String) As OptiScalerInstallInfo
+        ' Detect install state in a single folder (direct folder or nested binary folder).
         Dim info As New OptiScalerInstallInfo()
         info.InstallFolder = folderPath
 
@@ -99,6 +100,18 @@ Public Module OptiScalerInstallDetector
         Dim specificHookPath As String = GetSpecificHookPath(folderPath, Nothing)
         Dim genericHookPath As String = GetVerifiedGenericHookPath(folderPath, Nothing, hasIni OrElse hasRemoveBat OrElse hasSupportMarkers)
         Dim hookPath As String = If(Not String.IsNullOrWhiteSpace(specificHookPath), specificHookPath, genericHookPath)
+        Dim hasHookEvidence As Boolean = Not String.IsNullOrWhiteSpace(hookPath)
+        Dim hasCompanionEvidence As Boolean = hasIni OrElse hasRemoveBat OrElse hasSupportMarkers
+
+        ' Do not mark installed without a hook candidate.
+        If Not hasHookEvidence Then
+            Return info
+        End If
+
+        ' Generic hook names alone are weak signals; require a companion marker.
+        If String.IsNullOrWhiteSpace(specificHookPath) AndAlso Not hasCompanionEvidence Then
+            Return info
+        End If
 
         ' Confidence score tuned to avoid false positives from stock game files.
         Dim score As Integer = 0
@@ -223,27 +236,37 @@ Public Module OptiScalerInstallDetector
     End Function
 
     Private Function IsManifestValid(gameFolder As String, manifest As InstallManifest) As Boolean
+        ' Manifest is considered valid only with in-root evidence and at least one hook/marker signal.
         If manifest Is Nothing OrElse String.IsNullOrWhiteSpace(gameFolder) Then
             Return False
         End If
 
+        Dim gameRoot As String = NormalizePath(gameFolder)
+        If String.IsNullOrWhiteSpace(gameRoot) OrElse Not Directory.Exists(gameRoot) Then
+            Return False
+        End If
+
+        Dim hasManagedPathEvidence As Boolean = False
+        Dim hasHookEvidence As Boolean = False
+
         If Not String.IsNullOrWhiteSpace(manifest.HookName) Then
             Dim hookPath As String = Path.Combine(gameFolder, manifest.HookName)
             If File.Exists(hookPath) Then
-                Return True
+                hasHookEvidence = True
             End If
         End If
 
         If manifest.InstalledFiles IsNot Nothing Then
             For Each installedPath As String In manifest.InstalledFiles
-                If String.IsNullOrWhiteSpace(installedPath) Then
+                Dim fullPath As String = ResolvePathUnderRoot(gameRoot, installedPath)
+                If String.IsNullOrWhiteSpace(fullPath) Then
                     Continue For
                 End If
 
                 Try
-                    Dim fullPath As String = Path.GetFullPath(installedPath)
                     If File.Exists(fullPath) OrElse Directory.Exists(fullPath) Then
-                        Return True
+                        hasManagedPathEvidence = True
+                        Exit For
                     End If
                 Catch ex As Exception
                     ErrorLogger.Log(ex, "OptiScalerInstallDetector.IsManifestValid.Path")
@@ -251,11 +274,29 @@ Public Module OptiScalerInstallDetector
             Next
         End If
 
+        If Not hasManagedPathEvidence AndAlso manifest.BackupFiles IsNot Nothing Then
+            For Each entry As KeyValuePair(Of String, String) In manifest.BackupFiles
+                Dim destination As String = ResolvePathUnderRoot(gameRoot, entry.Key)
+                Dim backup As String = ResolvePathUnderRoot(gameRoot, entry.Value)
+                If (Not String.IsNullOrWhiteSpace(destination) AndAlso (File.Exists(destination) OrElse Directory.Exists(destination))) OrElse
+                   (Not String.IsNullOrWhiteSpace(backup) AndAlso (File.Exists(backup) OrElse Directory.Exists(backup))) Then
+                    hasManagedPathEvidence = True
+                    Exit For
+                End If
+            Next
+        End If
+
         Dim hasIni As Boolean = File.Exists(Path.Combine(gameFolder, "OptiScaler.ini"))
         Dim hasRemoveBat As Boolean = File.Exists(Path.Combine(gameFolder, "Remove OptiScaler.bat"))
         Dim hasSpecificHook As Boolean = Not String.IsNullOrWhiteSpace(GetSpecificHookPath(gameFolder, Nothing))
         Dim hasVerifiedGenericHook As Boolean = Not String.IsNullOrWhiteSpace(GetVerifiedGenericHookPath(gameFolder, Nothing, False))
-        Return hasIni OrElse hasRemoveBat OrElse hasSpecificHook OrElse hasVerifiedGenericHook
+        hasHookEvidence = hasHookEvidence OrElse hasSpecificHook OrElse hasVerifiedGenericHook
+
+        If hasHookEvidence Then
+            Return True
+        End If
+
+        Return hasManagedPathEvidence AndAlso (hasIni OrElse hasRemoveBat)
     End Function
 
     Private Function HasSupportInstallMarkers(gameFolder As String) As Boolean
@@ -379,5 +420,60 @@ Public Module OptiScalerInstallDetector
             ErrorLogger.Log(ex, "OptiScalerInstallDetector.TryGetFileVersion")
             Return ""
         End Try
+    End Function
+
+    ' Resolves a candidate path and rejects entries that escape the game root.
+    Private Function ResolvePathUnderRoot(gameRoot As String, candidatePath As String) As String
+        If String.IsNullOrWhiteSpace(gameRoot) OrElse String.IsNullOrWhiteSpace(candidatePath) Then
+            Return ""
+        End If
+
+        Try
+            Dim trimmedCandidate As String = candidatePath.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            Dim fullPath As String
+            If Path.IsPathRooted(trimmedCandidate) Then
+                fullPath = Path.GetFullPath(trimmedCandidate)
+            Else
+                fullPath = Path.GetFullPath(Path.Combine(gameRoot, trimmedCandidate))
+            End If
+
+            If Not IsPathUnderRoot(gameRoot, fullPath) Then
+                Return ""
+            End If
+
+            Return fullPath
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.ResolvePathUnderRoot")
+            Return ""
+        End Try
+    End Function
+
+    Private Function NormalizePath(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Try
+            Dim fullPath As String = Path.GetFullPath(value.Trim())
+            Return fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiScalerInstallDetector.NormalizePath")
+            Return ""
+        End Try
+    End Function
+
+    Private Function IsPathUnderRoot(rootPath As String, candidatePath As String) As Boolean
+        If String.IsNullOrWhiteSpace(rootPath) OrElse String.IsNullOrWhiteSpace(candidatePath) Then
+            Return False
+        End If
+
+        Dim normalizedRoot As String = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) & Path.DirectorySeparatorChar
+        Dim normalizedCandidate As String = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+
+        If normalizedCandidate.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) Then
+            Return True
+        End If
+
+        Return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
     End Function
 End Module

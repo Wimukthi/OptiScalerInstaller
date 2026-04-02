@@ -6,6 +6,7 @@ Imports System.Drawing
 Imports System.Globalization
 
 Friend Partial Class frmAbout
+    ' Displays installer metadata, author details, and release/version links.
     Inherits Form
 
     Private Const OptiScalerRepositoryUrl As String = "https://github.com/optiscaler/OptiScaler"
@@ -14,6 +15,7 @@ Friend Partial Class frmAbout
     Private ReadOnly _repositoryUrl As String
     Private ReadOnly _authorName As String
 
+    ' Constructor accepts current/local version plus latest known upstream release metadata.
     Public Sub New(currentVersion As Version, latestRelease As UpdateReleaseInfo, repositoryUrl As String, authorName As String)
         InitializeComponent()
 

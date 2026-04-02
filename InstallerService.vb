@@ -12,6 +12,8 @@ Imports SharpCompress.Archives.SevenZip
 Public Class InstallerService
     ' Orchestrates OptiScaler install/uninstall operations.
     Private Shared ReadOnly ManifestName As String = "OptiScalerInstaller.manifest.json"
+    Private Shared ReadOnly DownloadTimeout As TimeSpan = TimeSpan.FromMinutes(15)
+    Private Const MaxDownloadAttempts As Integer = 3
 
     Private Class ArchiveResult
         Public Property ArchivePath As String
@@ -73,6 +75,7 @@ Public Class InstallerService
             manifest.ArchiveSourceUrl = archiveResult.SourceUrl
             manifest.ArchiveSizeBytes = GetFileSizeSafe(archivePath)
             manifest.ArchiveSha256 = ComputeSha256(archivePath)
+            VerifyReleaseDigest(archiveResult.Release, manifest.ArchiveSha256, log)
             log?.Invoke("Archive fingerprint (SHA-256): " & ShortHash(manifest.ArchiveSha256))
             progress?.Invoke(25)
 
@@ -112,9 +115,16 @@ Public Class InstallerService
     End Function
 
     Public Shared Async Function UninstallAsync(gameFolder As String, log As Action(Of String)) As Task(Of Boolean)
+        ' Managed uninstall path: use manifest with root-constrained file operations.
         Dim manifestPath As String = Path.Combine(gameFolder, ManifestName)
         If Not File.Exists(manifestPath) Then
             Return TryUninstallLegacy(gameFolder, log)
+        End If
+
+        Dim gameRoot As String = NormalizePath(gameFolder)
+        If String.IsNullOrWhiteSpace(gameRoot) OrElse Not Directory.Exists(gameRoot) Then
+            log?.Invoke("Game folder not found. Uninstall aborted.")
+            Return False
         End If
 
         Dim manifest As InstallManifest = Nothing
@@ -132,31 +142,48 @@ Public Class InstallerService
         End If
 
         log?.Invoke("Removing installed files...")
-        For Each filePath As String In manifest.InstalledFiles
-            Try
-                If File.Exists(filePath) Then
-                    File.Delete(filePath)
+        If manifest.InstalledFiles IsNot Nothing Then
+            For Each filePath As String In manifest.InstalledFiles
+                Dim resolvedFilePath As String = ResolveManifestPath(gameRoot, filePath)
+                If String.IsNullOrWhiteSpace(resolvedFilePath) Then
+                    log?.Invoke("Skipping out-of-scope manifest file entry: " & If(filePath, "(empty)"))
+                    Continue For
                 End If
-            Catch ex As Exception
-                log?.Invoke("Failed to delete " & filePath & ": " & ex.Message)
-                ErrorLogger.Log(ex, "InstallerService.DeleteInstalledFile")
-            End Try
-        Next
+
+                Try
+                    If File.Exists(resolvedFilePath) Then
+                        File.Delete(resolvedFilePath)
+                    End If
+                Catch ex As Exception
+                    log?.Invoke("Failed to delete " & resolvedFilePath & ": " & ex.Message)
+                    ErrorLogger.Log(ex, "InstallerService.DeleteInstalledFile")
+                End Try
+            Next
+        End If
 
         log?.Invoke("Restoring backups...")
-        For Each kvp As KeyValuePair(Of String, String) In manifest.BackupFiles
-            Try
-                If File.Exists(kvp.Value) Then
-                    If File.Exists(kvp.Key) Then
-                        File.Delete(kvp.Key)
-                    End If
-                    File.Move(kvp.Value, kvp.Key)
+        If manifest.BackupFiles IsNot Nothing Then
+            For Each kvp As KeyValuePair(Of String, String) In manifest.BackupFiles
+                Dim destinationPath As String = ResolveManifestPath(gameRoot, kvp.Key)
+                Dim backupPath As String = ResolveManifestPath(gameRoot, kvp.Value)
+                If String.IsNullOrWhiteSpace(destinationPath) OrElse String.IsNullOrWhiteSpace(backupPath) Then
+                    log?.Invoke("Skipping out-of-scope backup entry: " & If(kvp.Key, "(empty)"))
+                    Continue For
                 End If
-            Catch ex As Exception
-                log?.Invoke("Failed to restore backup for " & kvp.Key & ": " & ex.Message)
-                ErrorLogger.Log(ex, "InstallerService.RestoreBackup")
-            End Try
-        Next
+
+                Try
+                    If File.Exists(backupPath) Then
+                        If File.Exists(destinationPath) Then
+                            File.Delete(destinationPath)
+                        End If
+                        File.Move(backupPath, destinationPath)
+                    End If
+                Catch ex As Exception
+                    log?.Invoke("Failed to restore backup for " & destinationPath & ": " & ex.Message)
+                    ErrorLogger.Log(ex, "InstallerService.RestoreBackup")
+                End Try
+            Next
+        End If
 
         Try
             If File.Exists(manifestPath) Then
@@ -282,6 +309,7 @@ Public Class InstallerService
     End Function
 
     Private Shared Sub ValidateConfig(config As InstallerConfig)
+        ' Hard validation before any download/copy operation starts.
         If config Is Nothing Then
             Throw New ArgumentNullException(NameOf(config))
         End If
@@ -314,6 +342,7 @@ Public Class InstallerService
     End Function
 
     Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer)) As Task(Of ArchiveResult)
+        ' Resolves release metadata/local archive selection into a concrete archive path.
         If config.Source = ReleaseSource.LocalArchive Then
             log?.Invoke("Using local archive: " & config.LocalArchivePath)
             ValidateArchiveFile(config.LocalArchivePath, 0, log)
@@ -358,71 +387,99 @@ Public Class InstallerService
     End Function
 
     Private Shared Async Function DownloadFileAsync(url As String, destination As String, log As Action(Of String), progress As Action(Of Integer)) As Task
-        Using client As New HttpClient()
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
-                response.EnsureSuccessStatusCode()
+        ' Streamed download with bounded retries for transient HTTP/network errors.
+        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
 
-                Dim total As Nullable(Of Long) = response.Content.Headers.ContentLength
-                Using input As Stream = Await response.Content.ReadAsStreamAsync()
-                    Using output As FileStream = File.Create(destination)
-                        Dim buffer(81919) As Byte
-                        Dim read As Integer
-                        Dim totalRead As Long = 0
+        For attempt As Integer = 1 To MaxDownloadAttempts
+            Dim retry As Boolean = False
+            Try
+                Using client As New HttpClient() With {.Timeout = DownloadTimeout}
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
+                    Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
+                        response.EnsureSuccessStatusCode()
 
-                        Do
-                            read = Await input.ReadAsync(buffer, 0, buffer.Length)
-                            If read = 0 Then
-                                Exit Do
-                            End If
+                        Dim total As Nullable(Of Long) = response.Content.Headers.ContentLength
+                        Using input As Stream = Await response.Content.ReadAsStreamAsync()
+                            Using output As FileStream = File.Create(destination)
+                                Dim buffer(81919) As Byte
+                                Dim read As Integer
+                                Dim totalRead As Long = 0
 
-                            Await output.WriteAsync(buffer, 0, read)
-                            totalRead += read
+                                Do
+                                    read = Await input.ReadAsync(buffer, 0, buffer.Length)
+                                    If read = 0 Then
+                                        Exit Do
+                                    End If
 
-                            If total.HasValue AndAlso total.Value > 0 Then
-                                Dim percent As Integer = CInt((totalRead * 100) / total.Value)
-                                progress?.Invoke(Math.Min(100, Math.Max(0, percent)))
-                            End If
-                        Loop
+                                    Await output.WriteAsync(buffer, 0, read)
+                                    totalRead += read
+
+                                    If total.HasValue AndAlso total.Value > 0 Then
+                                        Dim percent As Integer = CInt((totalRead * 100) / total.Value)
+                                        progress?.Invoke(Math.Min(100, Math.Max(0, percent)))
+                                    End If
+                                Loop
+                            End Using
+                        End Using
                     End Using
                 End Using
-            End Using
-        End Using
 
-        log?.Invoke("Download complete.")
+                log?.Invoke("Download complete.")
+                Return
+            Catch ex As Exception
+                If IsTransientDownloadException(ex) AndAlso attempt < MaxDownloadAttempts Then
+                    retry = True
+                    log?.Invoke($"Download attempt {attempt} failed. Retrying... ({ex.Message})")
+                    ErrorLogger.Log(ex, "InstallerService.DownloadFileAsync.Retry")
+                Else
+                    Throw
+                End If
+            End Try
+
+            If retry Then
+                Await Task.Delay(delay)
+                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
+            End If
+        Next
+
+        Throw New InvalidOperationException("Download failed after multiple attempts.")
     End Function
 
     Private Shared Sub ExtractArchive(archivePath As String, outputDir As String, log As Action(Of String))
         log?.Invoke("Extracting archive...")
         ' Use SharpCompress for .7z and fallback to generic archive open for other formats.
-        Dim options As New ExtractionOptions With {
-            .ExtractFullPath = True,
-            .Overwrite = True
-        }
 
         Dim extension As String = Path.GetExtension(archivePath).ToLowerInvariant()
         If extension = ".7z" Then
             Using archive As SevenZipArchive = SevenZipArchive.Open(archivePath)
-                ExtractEntries(archive.Entries, outputDir, options, log)
+                ExtractEntries(archive.Entries, outputDir, log)
             End Using
         Else
             Using archive As IArchive = ArchiveFactory.Open(archivePath)
-                ExtractEntries(archive.Entries, outputDir, options, log)
+                ExtractEntries(archive.Entries, outputDir, log)
             End Using
         End If
         log?.Invoke("Extraction complete.")
     End Sub
 
-    Private Shared Sub ExtractEntries(entries As IEnumerable(Of IArchiveEntry), outputDir As String, options As ExtractionOptions, log As Action(Of String))
+    Private Shared Sub ExtractEntries(entries As IEnumerable(Of IArchiveEntry), outputDir As String, log As Action(Of String))
+        Dim extractionRoot As String = NormalizePath(outputDir)
         For Each entry As IArchiveEntry In entries
             If entry.IsDirectory Then
+                Continue For
+            End If
+
+            Dim safeDestination As String = ""
+            Dim safeKey As String = ""
+            If Not TryGetSafeExtractionPath(extractionRoot, entry.Key, safeDestination, safeKey) Then
+                log?.Invoke("Skipping unsafe archive entry: " & If(entry.Key, "(null)"))
                 Continue For
             End If
 
             Dim hasStream As Boolean = EntryHasStream(entry)
             If Not hasStream Then
                 If entry.Size = 0 Then
-                    CreateEmptyEntry(outputDir, entry.Key, log)
+                    CreateEmptyEntry(safeDestination, safeKey, log)
                 Else
                     log?.Invoke("Skipping entry without stream: " & entry.Key)
                 End If
@@ -430,7 +487,15 @@ Public Class InstallerService
             End If
 
             Try
-                entry.WriteToDirectory(outputDir, options)
+                Dim destinationDir As String = Path.GetDirectoryName(safeDestination)
+                If Not String.IsNullOrWhiteSpace(destinationDir) Then
+                    Directory.CreateDirectory(destinationDir)
+                End If
+
+                entry.WriteToFile(safeDestination, New ExtractionOptions With {
+                    .ExtractFullPath = False,
+                    .Overwrite = True
+                })
             Catch ex As Exception
                 log?.Invoke("Failed to extract " & entry.Key & ": " & ex.Message)
                 ErrorLogger.Log(ex, "InstallerService.ExtractEntry")
@@ -458,13 +523,11 @@ Public Class InstallerService
         Return True
     End Function
 
-    Private Shared Sub CreateEmptyEntry(outputDir As String, key As String, log As Action(Of String))
-        If String.IsNullOrWhiteSpace(key) Then
+    Private Shared Sub CreateEmptyEntry(destination As String, safeKey As String, log As Action(Of String))
+        If String.IsNullOrWhiteSpace(destination) Then
             Return
         End If
 
-        Dim safeKey As String = key.Replace("/"c, Path.DirectorySeparatorChar)
-        Dim destination As String = Path.Combine(outputDir, safeKey)
         Dim folder As String = Path.GetDirectoryName(destination)
         If Not String.IsNullOrWhiteSpace(folder) Then
             Directory.CreateDirectory(folder)
@@ -472,9 +535,117 @@ Public Class InstallerService
 
         If Not File.Exists(destination) Then
             File.WriteAllText(destination, "")
-            log?.Invoke("Created empty file: " & safeKey)
+            log?.Invoke("Created empty file: " & If(safeKey, Path.GetFileName(destination)))
         End If
     End Sub
+
+    ' Resolves an archive entry path and rejects traversal/rooted entries.
+    Private Shared Function TryGetSafeExtractionPath(extractionRoot As String,
+                                                     entryKey As String,
+                                                     ByRef destination As String,
+                                                     ByRef safeKey As String) As Boolean
+        destination = ""
+        safeKey = ""
+
+        If String.IsNullOrWhiteSpace(extractionRoot) OrElse String.IsNullOrWhiteSpace(entryKey) Then
+            Return False
+        End If
+
+        Dim normalizedKey As String = entryKey.Trim().Replace("/"c, Path.DirectorySeparatorChar).Replace("\"c, Path.DirectorySeparatorChar)
+        normalizedKey = normalizedKey.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        If String.IsNullOrWhiteSpace(normalizedKey) Then
+            Return False
+        End If
+
+        If Path.IsPathRooted(normalizedKey) Then
+            Return False
+        End If
+
+        Try
+            Dim fullDestination As String = Path.GetFullPath(Path.Combine(extractionRoot, normalizedKey))
+            If Not IsPathInsideRoot(fullDestination, extractionRoot) Then
+                Return False
+            End If
+
+            destination = fullDestination
+            safeKey = normalizedKey
+            Return True
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.TryGetSafeExtractionPath")
+            Return False
+        End Try
+    End Function
+
+    ' Ensures manifest references only target files inside the selected game folder.
+    Private Shared Function ResolveManifestPath(gameRoot As String, manifestPathValue As String) As String
+        If String.IsNullOrWhiteSpace(gameRoot) OrElse String.IsNullOrWhiteSpace(manifestPathValue) Then
+            Return ""
+        End If
+
+        Try
+            Dim candidate As String = manifestPathValue.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            Dim fullPath As String
+            If Path.IsPathRooted(candidate) Then
+                fullPath = Path.GetFullPath(candidate)
+            Else
+                fullPath = Path.GetFullPath(Path.Combine(gameRoot, candidate))
+            End If
+
+            If Not IsPathInsideRoot(fullPath, gameRoot) Then
+                Return ""
+            End If
+
+            Return fullPath
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.ResolveManifestPath")
+            Return ""
+        End Try
+    End Function
+
+    Private Shared Function NormalizePath(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Try
+            Dim fullPath As String = Path.GetFullPath(value.Trim())
+            Return fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.NormalizePath")
+            Return ""
+        End Try
+    End Function
+
+    Private Shared Function IsPathInsideRoot(candidatePath As String, rootPath As String) As Boolean
+        If String.IsNullOrWhiteSpace(candidatePath) OrElse String.IsNullOrWhiteSpace(rootPath) Then
+            Return False
+        End If
+
+        Dim normalizedRoot As String = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) & Path.DirectorySeparatorChar
+        Dim normalizedCandidate As String = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+
+        If normalizedCandidate.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) Then
+            Return True
+        End If
+
+        Return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Private Shared Function IsTransientDownloadException(ex As Exception) As Boolean
+        If ex Is Nothing Then
+            Return False
+        End If
+
+        If TypeOf ex Is HttpRequestException Then
+            Return True
+        End If
+
+        If TypeOf ex Is TaskCanceledException Then
+            Return True
+        End If
+
+        Return False
+    End Function
 
     Private Shared Function ResolvePackageRoot(extractRoot As String) As String
         ' Prefer the folder that directly contains OptiScaler.dll, plus OptiScaler.ini when available.
@@ -999,6 +1170,55 @@ Public Class InstallerService
 
         log?.Invoke("Archive size: " & actualSize.ToString() & " bytes")
     End Sub
+
+    ' Validates a downloaded archive against the release digest (when provided).
+    Private Shared Sub VerifyReleaseDigest(release As ReleaseInfo, archiveSha256 As String, log As Action(Of String))
+        If release Is Nothing Then
+            Return
+        End If
+
+        Dim digestText As String = If(release.AssetDigest, "").Trim()
+        If String.IsNullOrWhiteSpace(digestText) Then
+            log?.Invoke("Release digest not provided by source; skipping digest validation.")
+            Return
+        End If
+
+        Dim expectedSha As String = ""
+        If Not TryExtractSha256Digest(digestText, expectedSha) Then
+            log?.Invoke("Release digest format not recognized: " & digestText)
+            Return
+        End If
+
+        If String.IsNullOrWhiteSpace(archiveSha256) Then
+            Throw New InvalidOperationException("Archive checksum could not be computed.")
+        End If
+
+        If Not archiveSha256.Equals(expectedSha, StringComparison.OrdinalIgnoreCase) Then
+            Throw New InvalidOperationException("Downloaded archive digest mismatch. Installation aborted.")
+        End If
+
+        log?.Invoke("Archive digest verified.")
+    End Sub
+
+    Private Shared Function TryExtractSha256Digest(digestText As String, ByRef sha256 As String) As Boolean
+        sha256 = ""
+        If String.IsNullOrWhiteSpace(digestText) Then
+            Return False
+        End If
+
+        Dim trimmed As String = digestText.Trim()
+        If trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) Then
+            trimmed = trimmed.Substring("sha256:".Length)
+        End If
+
+        trimmed = trimmed.Trim().ToLowerInvariant()
+        If Regex.IsMatch(trimmed, "^[a-f0-9]{64}$", RegexOptions.CultureInvariant) Then
+            sha256 = trimmed
+            Return True
+        End If
+
+        Return False
+    End Function
 
     Private Shared Function GetFileSizeSafe(path As String) As Long
         Try

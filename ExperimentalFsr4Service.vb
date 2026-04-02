@@ -109,6 +109,7 @@ Public Module ExperimentalFsr4Service
 
     Public Function Apply(options As ExperimentalFsr4ApplyOptions, log As Action(Of String)) As ExperimentalFsr4Manifest
         ValidateApplyOptions(options)
+        Dim normalizedGameFolder As String = NormalizePath(options.GameFolder)
 
         Dim resolvedPackageFolder As String = ResolvePackageFolder(options.PackageFolder)
         Dim filesToCopy As List(Of String) = EnumerateCopyFiles(resolvedPackageFolder)
@@ -120,7 +121,7 @@ Public Module ExperimentalFsr4Service
         Dim manifest As New ExperimentalFsr4Manifest With {
             .InstallerVersion = GetInstallerVersion(),
             .AppliedTimeUtc = DateTime.UtcNow,
-            .GameFolder = options.GameFolder,
+            .GameFolder = normalizedGameFolder,
             .PackageFolder = resolvedPackageFolder,
             .InstalledFiles = New List(Of String)(),
             .BackupFiles = New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase),
@@ -133,13 +134,18 @@ Public Module ExperimentalFsr4Service
                 Continue For
             End If
 
-            Dim destination As String = Path.Combine(options.GameFolder, relative)
+            Dim destination As String = ResolveManifestPath(normalizedGameFolder, relative)
+            If String.IsNullOrWhiteSpace(destination) Then
+                log?.Invoke("Skipping out-of-scope package entry: " & relative)
+                Continue For
+            End If
+
             If CopyFileWithConflict(sourcePath, destination, options.ConflictMode, manifest, log) Then
                 log?.Invoke("Copied experimental file: " & relative)
             End If
         Next
 
-        Dim iniPath As String = Path.Combine(options.GameFolder, "OptiScaler.ini")
+        Dim iniPath As String = Path.Combine(normalizedGameFolder, "OptiScaler.ini")
         If File.Exists(iniPath) Then
             If options.EnableFsr4Update Then
                 UpdateManagedIniKey(iniPath, "Fsr4Update", "true", manifest)
@@ -156,15 +162,21 @@ Public Module ExperimentalFsr4Service
             log?.Invoke("OptiScaler.ini not found. INI options were skipped.")
         End If
 
-        manifest.PackageVersion = GetVersionFromFolder(options.GameFolder)
+        manifest.PackageVersion = GetVersionFromFolder(normalizedGameFolder)
 
-        SaveManifest(options.GameFolder, manifest)
+        SaveManifest(normalizedGameFolder, manifest)
         log?.Invoke("Experimental FSR4 package apply complete.")
         Return manifest
     End Function
 
     Public Function Remove(gameFolder As String, log As Action(Of String)) As Boolean
+        ' Remove only files recorded by our manifest and only within the selected game root.
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Return False
+        End If
+
+        Dim gameRoot As String = NormalizePath(gameFolder)
+        If String.IsNullOrWhiteSpace(gameRoot) Then
             Return False
         End If
 
@@ -181,18 +193,20 @@ Public Module ExperimentalFsr4Service
 
         If manifest.InstalledFiles IsNot Nothing Then
             For Each installedPath As String In manifest.InstalledFiles.OrderByDescending(Function(value) If(value, ""), StringComparer.OrdinalIgnoreCase)
-                If String.IsNullOrWhiteSpace(installedPath) Then
+                Dim resolvedInstalledPath As String = ResolveManifestPath(gameRoot, installedPath)
+                If String.IsNullOrWhiteSpace(resolvedInstalledPath) Then
+                    log?.Invoke("Skipping out-of-scope file entry from experimental manifest: " & If(installedPath, "(empty)"))
                     Continue For
                 End If
 
                 Try
-                    If File.Exists(installedPath) Then
-                        File.Delete(installedPath)
+                    If File.Exists(resolvedInstalledPath) Then
+                        File.Delete(resolvedInstalledPath)
                         removedAny = True
-                        log?.Invoke("Removed experimental file: " & Path.GetFileName(installedPath))
+                        log?.Invoke("Removed experimental file: " & Path.GetFileName(resolvedInstalledPath))
                     End If
                 Catch ex As Exception
-                    log?.Invoke("Failed to remove file " & installedPath & ": " & ex.Message)
+                    log?.Invoke("Failed to remove file " & resolvedInstalledPath & ": " & ex.Message)
                     ErrorLogger.Log(ex, "ExperimentalFsr4Service.Remove.DeleteFile")
                 End Try
             Next
@@ -200,9 +214,10 @@ Public Module ExperimentalFsr4Service
 
         If manifest.BackupFiles IsNot Nothing Then
             For Each entry As KeyValuePair(Of String, String) In manifest.BackupFiles
-                Dim destination As String = entry.Key
-                Dim backupPath As String = entry.Value
+                Dim destination As String = ResolveManifestPath(gameRoot, entry.Key)
+                Dim backupPath As String = ResolveManifestPath(gameRoot, entry.Value)
                 If String.IsNullOrWhiteSpace(destination) OrElse String.IsNullOrWhiteSpace(backupPath) Then
+                    log?.Invoke("Skipping out-of-scope backup entry from experimental manifest.")
                     Continue For
                 End If
 
@@ -228,7 +243,7 @@ Public Module ExperimentalFsr4Service
             Next
         End If
 
-        Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+        Dim iniPath As String = Path.Combine(gameRoot, "OptiScaler.ini")
         If File.Exists(iniPath) AndAlso manifest.IniKeys IsNot Nothing Then
             For Each keyName As String In ManagedIniKeys
                 Dim state As ExperimentalIniKeyState = Nothing
@@ -240,7 +255,7 @@ Public Module ExperimentalFsr4Service
             Next
         End If
 
-        Dim manifestPath As String = Path.Combine(gameFolder, ManifestFileName)
+        Dim manifestPath As String = Path.Combine(gameRoot, ManifestFileName)
         Try
             If File.Exists(manifestPath) Then
                 File.Delete(manifestPath)
@@ -429,18 +444,24 @@ Public Module ExperimentalFsr4Service
     End Function
 
     Private Function IsManifestValid(gameFolder As String, manifest As ExperimentalFsr4Manifest) As Boolean
+        ' Validation checks for at least one live file/INI indicator under the expected game root.
         If manifest Is Nothing OrElse String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Return False
+        End If
+
+        Dim gameRoot As String = NormalizePath(gameFolder)
+        If String.IsNullOrWhiteSpace(gameRoot) Then
             Return False
         End If
 
         If manifest.InstalledFiles IsNot Nothing Then
             For Each installedPath As String In manifest.InstalledFiles
-                If String.IsNullOrWhiteSpace(installedPath) Then
+                Dim fullPath As String = ResolveManifestPath(gameRoot, installedPath)
+                If String.IsNullOrWhiteSpace(fullPath) Then
                     Continue For
                 End If
 
                 Try
-                    Dim fullPath As String = Path.GetFullPath(installedPath)
                     If File.Exists(fullPath) OrElse Directory.Exists(fullPath) Then
                         Return True
                     End If
@@ -450,8 +471,19 @@ Public Module ExperimentalFsr4Service
             Next
         End If
 
+        If manifest.BackupFiles IsNot Nothing Then
+            For Each entry As KeyValuePair(Of String, String) In manifest.BackupFiles
+                Dim destination As String = ResolveManifestPath(gameRoot, entry.Key)
+                Dim backup As String = ResolveManifestPath(gameRoot, entry.Value)
+                If (Not String.IsNullOrWhiteSpace(destination) AndAlso File.Exists(destination)) OrElse
+                   (Not String.IsNullOrWhiteSpace(backup) AndAlso File.Exists(backup)) Then
+                    Return True
+                End If
+            Next
+        End If
+
         If manifest.IniKeys IsNot Nothing AndAlso manifest.IniKeys.Count > 0 Then
-            Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+            Dim iniPath As String = Path.Combine(gameRoot, "OptiScaler.ini")
             If File.Exists(iniPath) Then
                 For Each keyName As String In ManagedIniKeys
                     If IsIniKeyEnabled(gameFolder, keyName) Then
@@ -523,6 +555,47 @@ Public Module ExperimentalFsr4Service
         End Try
 
         Return normalized.TrimEnd(Path.DirectorySeparatorChar)
+    End Function
+
+    ' Restricts manifest file operations to the selected game root.
+    Private Function ResolveManifestPath(gameRoot As String, manifestPathValue As String) As String
+        If String.IsNullOrWhiteSpace(gameRoot) OrElse String.IsNullOrWhiteSpace(manifestPathValue) Then
+            Return ""
+        End If
+
+        Try
+            Dim candidate As String = manifestPathValue.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            Dim fullPath As String
+            If Path.IsPathRooted(candidate) Then
+                fullPath = Path.GetFullPath(candidate)
+            Else
+                fullPath = Path.GetFullPath(Path.Combine(gameRoot, candidate))
+            End If
+
+            If Not IsPathInsideRoot(fullPath, gameRoot) Then
+                Return ""
+            End If
+
+            Return fullPath
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "ExperimentalFsr4Service.ResolveManifestPath")
+            Return ""
+        End Try
+    End Function
+
+    Private Function IsPathInsideRoot(candidatePath As String, rootPath As String) As Boolean
+        If String.IsNullOrWhiteSpace(candidatePath) OrElse String.IsNullOrWhiteSpace(rootPath) Then
+            Return False
+        End If
+
+        Dim normalizedRoot As String = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) & Path.DirectorySeparatorChar
+        Dim normalizedCandidate As String = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+
+        If normalizedCandidate.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) Then
+            Return True
+        End If
+
+        Return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
     End Function
 
     Private Sub UpdateManagedIniKey(path As String, keyName As String, newValue As String, manifest As ExperimentalFsr4Manifest)

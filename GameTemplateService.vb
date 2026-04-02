@@ -14,10 +14,12 @@ Public Class GameWorkaroundTemplate
 End Class
 
 Public Module GameTemplateService
+    ' Loads optional per-game install presets from Data\GameTemplates.json.
     Private ReadOnly TemplatesPath As String = Path.Combine(AppContext.BaseDirectory, "Data", "GameTemplates.json")
     Private ReadOnly SyncRoot As New Object()
     Private _templates As List(Of GameWorkaroundTemplate)
 
+    ' Matches by display name and aliases using relaxed normalization tokens.
     Public Function FindTemplate(gameName As String) As GameWorkaroundTemplate
         If String.IsNullOrWhiteSpace(gameName) Then
             Return Nothing
@@ -61,6 +63,7 @@ Public Module GameTemplateService
         Return String.Equals(key, inputKey, StringComparison.OrdinalIgnoreCase)
     End Function
 
+    ' Cached template load to avoid repeated JSON parsing during grid interactions.
     Private Function LoadTemplates() As List(Of GameWorkaroundTemplate)
         SyncLock SyncRoot
             If _templates IsNot Nothing Then

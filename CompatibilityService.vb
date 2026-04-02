@@ -7,6 +7,8 @@ Public Class CompatibilityService
     ' Loads, caches, and parses the OptiScaler compatibility list.
     Private Shared ReadOnly DefaultListPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "Compatibility-List.md")
     Private Shared ReadOnly CachePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OptiScalerInstaller", "compatibility.json")
+    Private Shared ReadOnly RequestTimeout As TimeSpan = TimeSpan.FromSeconds(30)
+    Private Const MaxRequestAttempts As Integer = 3
 
     Public Shared Function LoadCompatibilityList() As List(Of CompatibilityEntry)
         Dim cached As List(Of CompatibilityEntry) = TryLoadCache()
@@ -38,13 +40,44 @@ Public Class CompatibilityService
         End If
 
         Dim previousEntries As List(Of CompatibilityEntry) = LoadCompatibilityList()
-        Using client As New HttpClient()
+        Using client As New HttpClient() With {.Timeout = RequestTimeout}
             client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Dim content As String = Await client.GetStringAsync(listUrl)
+            Dim content As String = Await GetStringWithRetryAsync(client, listUrl)
             Dim entries As List(Of CompatibilityEntry) = ParseCompatibilityList(content)
             SaveCache(entries)
             Return BuildUpdateResult(previousEntries, entries)
         End Using
+    End Function
+
+    ' Retries transient failures so startup refreshes are less brittle.
+    Private Shared Async Function GetStringWithRetryAsync(client As HttpClient, url As String) As Task(Of String)
+        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
+
+        For attempt As Integer = 1 To MaxRequestAttempts
+            Dim retry As Boolean = False
+            Try
+                Return Await client.GetStringAsync(url)
+            Catch ex As HttpRequestException
+                If attempt < MaxRequestAttempts Then
+                    retry = True
+                Else
+                    Throw
+                End If
+            Catch ex As TaskCanceledException
+                If attempt < MaxRequestAttempts Then
+                    retry = True
+                Else
+                    Throw
+                End If
+            End Try
+
+            If retry Then
+                Await Task.Delay(delay)
+                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
+            End If
+        Next
+
+        Return Await client.GetStringAsync(url)
     End Function
 
     Private Shared Function GetCompatibilityListUrl() As String

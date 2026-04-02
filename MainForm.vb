@@ -94,21 +94,26 @@ Public Class MainForm
 
     ' Run background refreshes after the UI is ready.
     Private Async Sub StartBackgroundTasks()
-        Dim settings As AppSettingsModel = AppSettings.Load()
-        Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
-        Dim checkUpdatesOnStartup As Boolean = settings Is Nothing OrElse Not settings.AutoCheckInstallerUpdates.HasValue OrElse settings.AutoCheckInstallerUpdates.Value
-        If refreshOnStartup Then
-            Await RefreshCompatibilityAsync(False, True)
-        End If
+        Try
+            Dim settings As AppSettingsModel = AppSettings.Load()
+            Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
+            Dim checkUpdatesOnStartup As Boolean = settings Is Nothing OrElse Not settings.AutoCheckInstallerUpdates.HasValue OrElse settings.AutoCheckInstallerUpdates.Value
+            If refreshOnStartup Then
+                Await RefreshCompatibilityAsync(False, True)
+            End If
 
-        Await RefreshReleaseInfoAsync(False)
-        If checkUpdatesOnStartup Then
-            Await CheckForUpdatesSilentAsync()
-        Else
-            SetUpdateNoticeVisible(False, "")
-            AppendLog("Installer update auto-check disabled.")
-        End If
-        Await RunDetectionAsync(True)
+            Await RefreshReleaseInfoAsync(False)
+            If checkUpdatesOnStartup Then
+                Await CheckForUpdatesSilentAsync()
+            Else
+                SetUpdateNoticeVisible(False, "")
+                AppendLog("Installer update auto-check disabled.")
+            End If
+            Await RunDetectionAsync(True)
+        Catch ex As Exception
+            AppendLog("Startup background task failed: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.StartBackgroundTasks")
+        End Try
     End Sub
 
     Private Sub UpdateWindowTitle()
