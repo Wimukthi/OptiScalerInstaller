@@ -5,10 +5,12 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 ## Features
 
 - Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect) and prefill install settings.
-- Compatibility list view with detection and OptiScaler install status/version.
+- Compatibility list view with detection plus both OptiScaler and OptiPatcher install status/version.
 - Install from stable, alternate release source, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
+- OptiPatcher integration with rolling/stable/alternate/local source selection, supported-game enforcement, manual install/remove, and manifest-aware detection.
+- One-click Install-tab OptiPatcher flow (`Install OptiPatcher after OptiScaler install`) with install summary and preflight validation.
 - Global OptiScaler.ini defaults (merge or replace) during install.
 - Default install option presets (hook, GPU, DLSS inputs, frame generation, conflict mode).
 - Detect existing OptiScaler installs and offer update/reinstall/uninstall.
@@ -59,11 +61,13 @@ Run (Debug):
 - Select the game EXE or folder.
 - Choose OptiScaler source (stable/alternate/local .7z).
 - Set hook DLL name, GPU vendor, and frame generation mode.
+- Optionally enable `Install OptiPatcher after OptiScaler install` for supported detected games.
 - Install or uninstall using the Actions section.
 
 ### Add-ons tab
 
 - Provide paths for Fakenvapi, Nukem FG, nvngx_dlss.dll, ReShade, Special K, and ASI plugins.
+- Configure advanced OptiPatcher source options (rolling/stable/alternate/local .asi) and manual install/remove.
 - Enable only what your game needs.
 
 ### Settings tab
@@ -116,6 +120,7 @@ Settings:
 
 ## Version History
 
+- v1.0.7.6 - Add full OptiPatcher integration: support-list sync, release fetch (stable/rolling/alternate), install/remove services and manifests, detection column on Game Detection, supported-only enforcement, Install-tab `Install + OptiPatcher` guided flow with preflight + summary, and improved OptiPatcher panel layout/ASI folder auto-setup.
 - v1.0.6.7 - Harden uninstall/remove safety with root-scoped manifest path validation, add archive extraction traversal guards, improve release asset selection and digest verification, add retry/timeout handling for release/compatibility/download fetches, tighten startup background error handling, and expand core code comments.
 - v1.0.6.1 - Add FSR4 experimental tab visibility toggle for unsupported GPUs, fix runtime tab theming artifacts, harden GPU detection with vendor-ID matching, and show detected GPU model in the title bar.
 - v1.0.5.2 - Harden OptiScaler detection and executable resolution (fewer false positives, stronger manifest validation, improved nested binary probing), add startup auto-update-check toggle, and include OptiScaler project link in About.

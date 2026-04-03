@@ -27,6 +27,7 @@ Partial Class MainForm
         colCompatName = New ColumnHeader()
         colCompatDetected = New ColumnHeader()
         colCompatInstalled = New ColumnHeader()
+        colCompatPatcher = New ColumnHeader()
         colCompatPlatform = New ColumnHeader()
         colCompatAntiCheat = New ColumnHeader()
         colCompatPath = New ColumnHeader()
@@ -81,6 +82,8 @@ Partial Class MainForm
         btnUninstall = New Button()
         btnOpenGameFolder = New Button()
         lblInstalledStatus = New Label()
+        chkInstallOptiPatcher = New CheckBox()
+        lblInstallOptiPatcherStatus = New Label()
         lblOnlineWarning = New Label()
         lblActionNote = New Label()
         tabAddons = New TabPage()
@@ -119,6 +122,15 @@ Partial Class MainForm
         txtPluginsPath = New ThemedTextBox()
         btnBrowsePluginsPath = New Button()
         lblAsiHint = New Label()
+        lblOptiPatcherSource = New Label()
+        cmbOptiPatcherSource = New ComboBox()
+        btnOptiPatcherRefresh = New Button()
+        lblOptiPatcherRelease = New Label()
+        txtOptiPatcherLocalFile = New ThemedTextBox()
+        btnBrowseOptiPatcherLocal = New Button()
+        btnInstallOptiPatcher = New Button()
+        btnRemoveOptiPatcher = New Button()
+        lblOptiPatcherStatus = New Label()
         tabExperimental = New TabPage()
         experimentalLayout = New TableLayoutPanel()
         grpFsr4Package = New ThemedGroupBox()
@@ -283,7 +295,7 @@ Partial Class MainForm
         ' 
         ' lvCompatibility
         ' 
-        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPlatform, colCompatAntiCheat, colCompatPath})
+        lvCompatibility.Columns.AddRange(New ColumnHeader() {colCompatName, colCompatDetected, colCompatInstalled, colCompatPatcher, colCompatPlatform, colCompatAntiCheat, colCompatPath})
         lvCompatibility.Dock = DockStyle.Fill
         lvCompatibility.FullRowSelect = True
         lvCompatibility.Location = New Point(3, 47)
@@ -309,6 +321,11 @@ Partial Class MainForm
         ' 
         colCompatInstalled.Text = "OptiScaler"
         colCompatInstalled.Width = 150
+        ' 
+        ' colCompatPatcher
+        ' 
+        colCompatPatcher.Text = "OptiPatcher"
+        colCompatPatcher.Width = 140
         ' 
         ' colCompatPlatform
         ' 
@@ -862,6 +879,8 @@ Partial Class MainForm
         grpActions.Controls.Add(btnUninstall)
         grpActions.Controls.Add(btnOpenGameFolder)
         grpActions.Controls.Add(lblInstalledStatus)
+        grpActions.Controls.Add(chkInstallOptiPatcher)
+        grpActions.Controls.Add(lblInstallOptiPatcherStatus)
         grpActions.Controls.Add(lblOnlineWarning)
         grpActions.Controls.Add(lblActionNote)
         grpActions.Dock = DockStyle.Fill
@@ -909,6 +928,27 @@ Partial Class MainForm
         lblInstalledStatus.TabIndex = 3
         lblInstalledStatus.Text = "Installed: none"
         ' 
+        ' chkInstallOptiPatcher
+        ' 
+        chkInstallOptiPatcher.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        chkInstallOptiPatcher.AutoSize = True
+        chkInstallOptiPatcher.Location = New Point(756, 36)
+        chkInstallOptiPatcher.Name = "chkInstallOptiPatcher"
+        chkInstallOptiPatcher.Size = New Size(253, 19)
+        chkInstallOptiPatcher.TabIndex = 4
+        chkInstallOptiPatcher.Text = "Install OptiPatcher after OptiScaler install"
+        chkInstallOptiPatcher.UseVisualStyleBackColor = True
+        ' 
+        ' lblInstallOptiPatcherStatus
+        ' 
+        lblInstallOptiPatcherStatus.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        lblInstallOptiPatcherStatus.AutoEllipsis = True
+        lblInstallOptiPatcherStatus.Location = New Point(756, 58)
+        lblInstallOptiPatcherStatus.Name = "lblInstallOptiPatcherStatus"
+        lblInstallOptiPatcherStatus.Size = New Size(456, 17)
+        lblInstallOptiPatcherStatus.TabIndex = 5
+        lblInstallOptiPatcherStatus.Text = "OptiPatcher: select a supported detected game to enable."
+        ' 
         ' lblOnlineWarning
         ' 
         lblOnlineWarning.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
@@ -917,7 +957,7 @@ Partial Class MainForm
         lblOnlineWarning.Location = New Point(12, 94)
         lblOnlineWarning.Name = "lblOnlineWarning"
         lblOnlineWarning.Size = New Size(438, 15)
-        lblOnlineWarning.TabIndex = 4
+        lblOnlineWarning.TabIndex = 6
         lblOnlineWarning.Text = "Warning: Do not use OptiScaler with online games (anti-cheat risk, possible bans)."
         ' 
         ' lblActionNote
@@ -927,7 +967,7 @@ Partial Class MainForm
         lblActionNote.Location = New Point(12, 120)
         lblActionNote.Name = "lblActionNote"
         lblActionNote.Size = New Size(503, 15)
-        lblActionNote.TabIndex = 5
+        lblActionNote.TabIndex = 7
         lblActionNote.Text = "Tip: Press Insert in-game to open the OptiScaler overlay. Try Alt+Insert if it closes immediately."
         ' 
         ' tabAddons
@@ -1278,6 +1318,15 @@ Partial Class MainForm
         grpAsi.Controls.Add(txtPluginsPath)
         grpAsi.Controls.Add(btnBrowsePluginsPath)
         grpAsi.Controls.Add(lblAsiHint)
+        grpAsi.Controls.Add(lblOptiPatcherSource)
+        grpAsi.Controls.Add(cmbOptiPatcherSource)
+        grpAsi.Controls.Add(btnOptiPatcherRefresh)
+        grpAsi.Controls.Add(lblOptiPatcherRelease)
+        grpAsi.Controls.Add(txtOptiPatcherLocalFile)
+        grpAsi.Controls.Add(btnBrowseOptiPatcherLocal)
+        grpAsi.Controls.Add(btnInstallOptiPatcher)
+        grpAsi.Controls.Add(btnRemoveOptiPatcher)
+        grpAsi.Controls.Add(lblOptiPatcherStatus)
         grpAsi.Dock = DockStyle.Fill
         grpAsi.Location = New Point(628, 456)
         grpAsi.Margin = New Padding(8)
@@ -1285,22 +1334,22 @@ Partial Class MainForm
         grpAsi.Size = New Size(604, 209)
         grpAsi.TabIndex = 5
         grpAsi.TabStop = False
-        grpAsi.Text = "ASI Plugins"
+        grpAsi.Text = "OptiPatcher"
         ' 
         ' chkLoadAsiPlugins
         ' 
         chkLoadAsiPlugins.AutoSize = True
         chkLoadAsiPlugins.Location = New Point(12, 24)
         chkLoadAsiPlugins.Name = "chkLoadAsiPlugins"
-        chkLoadAsiPlugins.Size = New Size(161, 19)
+        chkLoadAsiPlugins.Size = New Size(300, 19)
         chkLoadAsiPlugins.TabIndex = 0
-        chkLoadAsiPlugins.Text = "Enable ASI plugin loading"
+        chkLoadAsiPlugins.Text = "Enable ASI plugin loading (auto-create plugins folder)"
         chkLoadAsiPlugins.UseVisualStyleBackColor = True
         ' 
         ' lblPluginsPath
         ' 
         lblPluginsPath.AutoSize = True
-        lblPluginsPath.Location = New Point(12, 59)
+        lblPluginsPath.Location = New Point(12, 52)
         lblPluginsPath.Name = "lblPluginsPath"
         lblPluginsPath.Size = New Size(73, 15)
         lblPluginsPath.TabIndex = 1
@@ -1311,7 +1360,7 @@ Partial Class MainForm
         txtPluginsPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtPluginsPath.BackColor = SystemColors.Window
         txtPluginsPath.ForeColor = SystemColors.WindowText
-        txtPluginsPath.Location = New Point(120, 56)
+        txtPluginsPath.Location = New Point(120, 48)
         txtPluginsPath.MinimumSize = New Size(0, 24)
         txtPluginsPath.Name = "txtPluginsPath"
         txtPluginsPath.Padding = New Padding(6, 3, 6, 3)
@@ -1321,7 +1370,7 @@ Partial Class MainForm
         ' btnBrowsePluginsPath
         ' 
         btnBrowsePluginsPath.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowsePluginsPath.Location = New Point(514, 56)
+        btnBrowsePluginsPath.Location = New Point(514, 48)
         btnBrowsePluginsPath.Name = "btnBrowsePluginsPath"
         btnBrowsePluginsPath.Size = New Size(70, 23)
         btnBrowsePluginsPath.TabIndex = 3
@@ -1331,11 +1380,97 @@ Partial Class MainForm
         ' lblAsiHint
         ' 
         lblAsiHint.AutoSize = True
-        lblAsiHint.Location = New Point(12, 112)
+        lblAsiHint.Location = New Point(12, 80)
         lblAsiHint.Name = "lblAsiHint"
-        lblAsiHint.Size = New Size(262, 15)
+        lblAsiHint.Size = New Size(350, 15)
         lblAsiHint.TabIndex = 4
-        lblAsiHint.Text = "OptiScaler loads *.asi files from the plugins path."
+        lblAsiHint.Text = "OptiPatcher needs ASI loading. Folder is created automatically."
+        ' 
+        ' lblOptiPatcherSource
+        ' 
+        lblOptiPatcherSource.AutoSize = True
+        lblOptiPatcherSource.Location = New Point(12, 108)
+        lblOptiPatcherSource.Name = "lblOptiPatcherSource"
+        lblOptiPatcherSource.Size = New Size(80, 15)
+        lblOptiPatcherSource.TabIndex = 5
+        lblOptiPatcherSource.Text = "Patcher source"
+        ' 
+        ' cmbOptiPatcherSource
+        ' 
+        cmbOptiPatcherSource.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbOptiPatcherSource.FormattingEnabled = True
+        cmbOptiPatcherSource.Items.AddRange(New Object() {"Rolling", "Stable", "Alternate", "Local .asi"})
+        cmbOptiPatcherSource.Location = New Point(120, 104)
+        cmbOptiPatcherSource.Name = "cmbOptiPatcherSource"
+        cmbOptiPatcherSource.Size = New Size(130, 23)
+        cmbOptiPatcherSource.TabIndex = 6
+        ' 
+        ' btnOptiPatcherRefresh
+        ' 
+        btnOptiPatcherRefresh.Location = New Point(258, 104)
+        btnOptiPatcherRefresh.Name = "btnOptiPatcherRefresh"
+        btnOptiPatcherRefresh.Size = New Size(70, 23)
+        btnOptiPatcherRefresh.TabIndex = 7
+        btnOptiPatcherRefresh.Text = "Refresh"
+        btnOptiPatcherRefresh.UseVisualStyleBackColor = True
+        ' 
+        ' lblOptiPatcherRelease
+        ' 
+        lblOptiPatcherRelease.AutoEllipsis = True
+        lblOptiPatcherRelease.Location = New Point(336, 108)
+        lblOptiPatcherRelease.Name = "lblOptiPatcherRelease"
+        lblOptiPatcherRelease.Size = New Size(248, 17)
+        lblOptiPatcherRelease.TabIndex = 8
+        lblOptiPatcherRelease.Text = "OptiPatcher: not loaded"
+        ' 
+        ' txtOptiPatcherLocalFile
+        ' 
+        txtOptiPatcherLocalFile.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtOptiPatcherLocalFile.BackColor = SystemColors.Window
+        txtOptiPatcherLocalFile.ForeColor = SystemColors.WindowText
+        txtOptiPatcherLocalFile.Location = New Point(120, 132)
+        txtOptiPatcherLocalFile.MinimumSize = New Size(0, 24)
+        txtOptiPatcherLocalFile.Name = "txtOptiPatcherLocalFile"
+        txtOptiPatcherLocalFile.Padding = New Padding(6, 3, 6, 3)
+        txtOptiPatcherLocalFile.Size = New Size(389, 24)
+        txtOptiPatcherLocalFile.TabIndex = 9
+        ' 
+        ' btnBrowseOptiPatcherLocal
+        ' 
+        btnBrowseOptiPatcherLocal.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        btnBrowseOptiPatcherLocal.Location = New Point(514, 132)
+        btnBrowseOptiPatcherLocal.Name = "btnBrowseOptiPatcherLocal"
+        btnBrowseOptiPatcherLocal.Size = New Size(70, 23)
+        btnBrowseOptiPatcherLocal.TabIndex = 10
+        btnBrowseOptiPatcherLocal.Text = "Browse"
+        btnBrowseOptiPatcherLocal.UseVisualStyleBackColor = True
+        ' 
+        ' btnInstallOptiPatcher
+        ' 
+        btnInstallOptiPatcher.Location = New Point(120, 164)
+        btnInstallOptiPatcher.Name = "btnInstallOptiPatcher"
+        btnInstallOptiPatcher.Size = New Size(102, 24)
+        btnInstallOptiPatcher.TabIndex = 11
+        btnInstallOptiPatcher.Text = "Install/Update"
+        btnInstallOptiPatcher.UseVisualStyleBackColor = True
+        ' 
+        ' btnRemoveOptiPatcher
+        ' 
+        btnRemoveOptiPatcher.Location = New Point(228, 164)
+        btnRemoveOptiPatcher.Name = "btnRemoveOptiPatcher"
+        btnRemoveOptiPatcher.Size = New Size(82, 24)
+        btnRemoveOptiPatcher.TabIndex = 12
+        btnRemoveOptiPatcher.Text = "Remove"
+        btnRemoveOptiPatcher.UseVisualStyleBackColor = True
+        ' 
+        ' lblOptiPatcherStatus
+        ' 
+        lblOptiPatcherStatus.AutoEllipsis = True
+        lblOptiPatcherStatus.Location = New Point(318, 168)
+        lblOptiPatcherStatus.Name = "lblOptiPatcherStatus"
+        lblOptiPatcherStatus.Size = New Size(272, 15)
+        lblOptiPatcherStatus.TabIndex = 13
+        lblOptiPatcherStatus.Text = "Status: not installed"
         ' 
         ' tabExperimental
         ' 
@@ -2381,6 +2516,8 @@ Partial Class MainForm
     Friend WithEvents btnUninstall As System.Windows.Forms.Button
     Friend WithEvents btnInstall As System.Windows.Forms.Button
     Friend WithEvents lblInstalledStatus As System.Windows.Forms.Label
+    Friend WithEvents chkInstallOptiPatcher As System.Windows.Forms.CheckBox
+    Friend WithEvents lblInstallOptiPatcherStatus As System.Windows.Forms.Label
     Friend WithEvents grpFakenvapi As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblFakenvapiHint As System.Windows.Forms.Label
     Friend WithEvents btnBrowseFakenvapiFolder As System.Windows.Forms.Button
@@ -2415,6 +2552,15 @@ Partial Class MainForm
     Friend WithEvents txtPluginsPath As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblPluginsPath As System.Windows.Forms.Label
     Friend WithEvents chkLoadAsiPlugins As System.Windows.Forms.CheckBox
+    Friend WithEvents lblOptiPatcherSource As System.Windows.Forms.Label
+    Friend WithEvents cmbOptiPatcherSource As System.Windows.Forms.ComboBox
+    Friend WithEvents btnOptiPatcherRefresh As System.Windows.Forms.Button
+    Friend WithEvents lblOptiPatcherRelease As System.Windows.Forms.Label
+    Friend WithEvents txtOptiPatcherLocalFile As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents btnBrowseOptiPatcherLocal As System.Windows.Forms.Button
+    Friend WithEvents btnInstallOptiPatcher As System.Windows.Forms.Button
+    Friend WithEvents btnRemoveOptiPatcher As System.Windows.Forms.Button
+    Friend WithEvents lblOptiPatcherStatus As System.Windows.Forms.Label
     Friend WithEvents grpFsr4Package As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblFsr4PackageFolder As System.Windows.Forms.Label
     Friend WithEvents txtFsr4PackageFolder As OptiScalerInstaller.ThemedTextBox
@@ -2455,6 +2601,7 @@ Partial Class MainForm
     Friend WithEvents colCompatAntiCheat As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPath As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatInstalled As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colCompatPatcher As System.Windows.Forms.ColumnHeader
     Friend WithEvents txtGameSearch As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblSearch As System.Windows.Forms.Label
     Friend WithEvents btnScanDetected As System.Windows.Forms.Button

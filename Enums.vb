@@ -33,3 +33,11 @@ Public Enum DefaultIniMode
     Merge
     Replace
 End Enum
+
+Public Enum OptiPatcherSource
+    ' Source for OptiPatcher plugin binary.
+    Stable
+    Rolling
+    Alternate
+    LocalFile
+End Enum

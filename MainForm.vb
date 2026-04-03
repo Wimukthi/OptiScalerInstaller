@@ -17,13 +17,19 @@ Public Class MainForm
     Private stableRelease As ReleaseInfo
     Private nightlyRelease As ReleaseInfo
     Private componentRelease As ReleaseInfo
+    Private optiPatcherStableRelease As ReleaseInfo
+    Private optiPatcherRollingRelease As ReleaseInfo
+    Private optiPatcherAlternateRelease As ReleaseInfo
     Private _settingThemeState As Boolean
     Private _settingDefaultsPreset As Boolean
     Private detectedGames As List(Of DetectedGame) = New List(Of DetectedGame)()
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
+    Private detectedOptiPatcherLookup As Dictionary(Of String, OptiPatcherInstallInfo) = New Dictionary(Of String, OptiPatcherInstallInfo)(StringComparer.OrdinalIgnoreCase)
     Private compatibilityChangedNames As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private compatibilityBaseNoteText As String = "List shows tested games only. Detected/Anti-cheat columns are best-effort and may be incomplete."
+    Private optiPatcherSupportEntries As List(Of OptiPatcherSupportEntry) = New List(Of OptiPatcherSupportEntry)()
+    Private optiPatcherSupportLookup As Dictionary(Of String, OptiPatcherSupportEntry) = New Dictionary(Of String, OptiPatcherSupportEntry)(StringComparer.OrdinalIgnoreCase)
     Private lastNormalBounds As Rectangle?
     Private windowSettingsApplied As Boolean
     Private windowSaveTimer As Timer
@@ -37,6 +43,7 @@ Public Class MainForm
     Private gpuDetectionAdapters As List(Of GpuAdapterInfo) = New List(Of GpuAdapterInfo)()
     Private gpuDetectionCandidates As List(Of String) = New List(Of String)()
     Private gpuDetectionLogWritten As Boolean
+    Private lastOptiPatcherStatusKey As String
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -75,9 +82,11 @@ Public Class MainForm
         End If
         UpdateCompatibilityNote()
         UpdateInstallStatus()
+        UpdateOptiPatcherStatus()
         UpdateExperimentalStatus()
         UpdateExperimentalDetectedGamesList()
         LoadCompatibility()
+        LoadOptiPatcherSupportList()
         _settingThemeState = True
         Dim preferredMode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
         DarkThemeCheckBox.Checked = preferredMode = SystemColorMode.Dark
@@ -103,6 +112,7 @@ Public Class MainForm
             End If
 
             Await RefreshReleaseInfoAsync(False)
+            Await RefreshOptiPatcherReleaseInfoAsync(False)
             If checkUpdatesOnStartup Then
                 Await CheckForUpdatesSilentAsync()
             Else
@@ -224,6 +234,7 @@ Public Class MainForm
         chkEnableReshade.Checked = False
         chkEnableSpecialK.Checked = False
         chkLoadAsiPlugins.Checked = False
+        chkInstallOptiPatcher.Checked = False
         chkCreateSpecialKMarker.Checked = True
         cmbHookName.SelectedIndex = 0
         cmbConflictMode.SelectedIndex = 0
@@ -240,6 +251,8 @@ Public Class MainForm
         chkAutoRefreshCompatibilityOnStartup.Checked = True
         chkAutoCheckInstallerUpdates.Checked = True
         chkShowExperimentalTabOnUnsupportedGpu.Checked = False
+        cmbOptiPatcherSource.SelectedIndex = 0
+        ToggleOptiPatcherLocalFile()
         ToggleLocalArchive()
         ApplyDetectedGpuVendor(False)
         UpdateExperimentalTabAvailability(False)
@@ -731,6 +744,33 @@ Public Class MainForm
         ApplyCompatibilityFilter()
     End Sub
 
+    Private Sub LoadOptiPatcherSupportList()
+        Try
+            optiPatcherSupportEntries = OptiPatcherSupportService.LoadSupportList()
+            optiPatcherSupportLookup = OptiPatcherSupportService.BuildLookup(optiPatcherSupportEntries)
+            AppendLog("Loaded OptiPatcher support list: " & optiPatcherSupportEntries.Count & " entries.")
+            ApplyCompatibilityFilter()
+            UpdateOptiPatcherStatus()
+        Catch ex As Exception
+            AppendLog("Failed to load OptiPatcher support list: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.LoadOptiPatcherSupportList")
+        End Try
+    End Sub
+
+    Private Async Function RefreshOptiPatcherSupportListAsync(isAuto As Boolean) As Task
+        Try
+            AppendLog(If(isAuto, "Auto-refreshing OptiPatcher support list...", "Refreshing OptiPatcher support list..."))
+            optiPatcherSupportEntries = Await OptiPatcherSupportService.UpdateSupportListAsync()
+            optiPatcherSupportLookup = OptiPatcherSupportService.BuildLookup(optiPatcherSupportEntries)
+            AppendLog("OptiPatcher support list updated: " & optiPatcherSupportEntries.Count & " entries.")
+            ApplyCompatibilityFilter()
+            UpdateOptiPatcherStatus()
+        Catch ex As Exception
+            AppendLog("Failed to update OptiPatcher support list: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.RefreshOptiPatcherSupportList")
+        End Try
+    End Function
+
     Private Sub ApplyCompatibilityFilter()
         Dim filter As String = txtGameSearch.Text.Trim()
         Dim settings As AppSettingsModel = AppSettings.Load()
@@ -751,18 +791,22 @@ Public Class MainForm
                 Dim isDetected As Boolean = detected IsNot Nothing
 
                 Dim installInfo As OptiScalerInstallInfo = Nothing
+                Dim patcherInfo As OptiPatcherInstallInfo = Nothing
                 If isDetected Then
-                    detectedInstallLookup.TryGetValue(GetDetectedInstallLookupKey(detected), installInfo)
+                    Dim lookupKey As String = GetDetectedInstallLookupKey(detected)
+                    detectedInstallLookup.TryGetValue(lookupKey, installInfo)
+                    detectedOptiPatcherLookup.TryGetValue(lookupKey, patcherInfo)
                 End If
 
                 Dim item As New ListViewItem(entry.Name)
                 item.SubItems.Add(If(isDetected, "Yes", ""))
                 item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
+                item.SubItems.Add(GetOptiPatcherStatusText(entry, isDetected, patcherInfo))
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
                 item.SubItems.Add(If(isDetected, GetAntiCheatStatusText(detected), ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
                 Dim isChanged As Boolean = highlightChanges AndAlso compatibilityChangedNames.Contains(normalizedKey)
-                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .IsRecentlyChanged = isChanged}
+                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .OptiPatcherInfo = patcherInfo, .IsRecentlyChanged = isChanged}
                 ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged, isDetected AndAlso Not String.IsNullOrWhiteSpace(detected.AntiCheat))
                 lvCompatibility.Items.Add(item)
             End If
@@ -791,7 +835,9 @@ Public Class MainForm
 
     Private Sub txtGameFolder_TextChanged(sender As Object, e As EventArgs) Handles txtGameFolder.TextChanged
         UpdateEngineWarningByFolder(txtGameFolder.Text)
+        EnsurePluginsFolderReady(False)
         UpdateInstallStatus()
+        UpdateOptiPatcherStatus()
         UpdateExperimentalStatus()
         UpdateExperimentalDetectedGamesList()
     End Sub
@@ -1229,6 +1275,241 @@ Public Class MainForm
         Return String.Format("{0:0.##} {1}", len, sizes(order))
     End Function
 
+    Private Async Function RefreshOptiPatcherReleaseInfoAsync(reportStatus As Boolean) As Task
+        Try
+            If reportStatus Then
+                SetStatus("Refreshing OptiPatcher release info...")
+            End If
+
+            AppendLog("Refreshing OptiPatcher releases...")
+
+            optiPatcherStableRelease = Await OptiPatcherReleaseService.GetStableReleaseAsync()
+            AppendLog("OptiPatcher stable loaded: " & If(optiPatcherStableRelease?.TagName, "n/a"))
+        Catch ex As Exception
+            optiPatcherStableRelease = Nothing
+            AppendLog("Failed to fetch OptiPatcher stable release: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.RefreshOptiPatcher.Stable")
+        End Try
+
+        Try
+            optiPatcherRollingRelease = Await OptiPatcherReleaseService.GetRollingReleaseAsync()
+            AppendLog("OptiPatcher rolling loaded: " & If(optiPatcherRollingRelease?.TagName, "n/a"))
+        Catch ex As Exception
+            optiPatcherRollingRelease = Nothing
+            AppendLog("Failed to fetch OptiPatcher rolling release: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.RefreshOptiPatcher.Rolling")
+        End Try
+
+        Dim alternateUrl As String = If(AppSettings.Load()?.OptiPatcherAlternateReleaseUrl, "")
+        If String.IsNullOrWhiteSpace(alternateUrl) Then
+            optiPatcherAlternateRelease = Nothing
+            AppendLog("OptiPatcher alternate release URL not set; skipping.")
+        Else
+            Try
+                optiPatcherAlternateRelease = Await OptiPatcherReleaseService.GetAlternateReleaseAsync()
+                AppendLog("OptiPatcher alternate loaded: " & If(optiPatcherAlternateRelease?.TagName, "n/a"))
+            Catch ex As Exception
+                optiPatcherAlternateRelease = Nothing
+                AppendLog("Failed to fetch OptiPatcher alternate release: " & ex.Message)
+                ErrorLogger.Log(ex, "MainForm.RefreshOptiPatcher.Alternate")
+            End Try
+        End If
+
+        UpdateOptiPatcherReleaseLabel()
+        If reportStatus Then
+            SetStatus("OptiPatcher release info updated.")
+        End If
+    End Function
+
+    Private Sub UpdateOptiPatcherReleaseLabel()
+        If lblOptiPatcherRelease Is Nothing Then
+            Return
+        End If
+
+        Dim source As OptiPatcherSource = GetOptiPatcherSourceFromUi()
+        Dim release As ReleaseInfo = Nothing
+        Select Case source
+            Case OptiPatcherSource.Stable
+                release = optiPatcherStableRelease
+            Case OptiPatcherSource.Alternate
+                release = optiPatcherAlternateRelease
+            Case OptiPatcherSource.LocalFile
+                lblOptiPatcherRelease.Text = "OptiPatcher: local file"
+                Return
+            Case Else
+                release = optiPatcherRollingRelease
+        End Select
+
+        lblOptiPatcherRelease.Text = FormatReleaseLabel("OptiPatcher", release)
+    End Sub
+
+    Private Function GetOptiPatcherSourceFromUi() As OptiPatcherSource
+        If cmbOptiPatcherSource Is Nothing Then
+            Return OptiPatcherSource.Rolling
+        End If
+
+        Select Case cmbOptiPatcherSource.SelectedIndex
+            Case 1
+                Return OptiPatcherSource.Stable
+            Case 2
+                Return OptiPatcherSource.Alternate
+            Case 3
+                Return OptiPatcherSource.LocalFile
+            Case Else
+                Return OptiPatcherSource.Rolling
+        End Select
+    End Function
+
+    Private Function GetOptiPatcherSourceIndex(value As String) As Integer
+        If String.IsNullOrWhiteSpace(value) Then
+            Return 0
+        End If
+
+        Select Case value.Trim().ToLowerInvariant()
+            Case "stable"
+                Return 1
+            Case "alternate"
+                Return 2
+            Case "local", "localfile"
+                Return 3
+            Case Else
+                Return 0
+        End Select
+    End Function
+
+    Private Function GetOptiPatcherSourceToken(index As Integer) As String
+        Select Case index
+            Case 1
+                Return "Stable"
+            Case 2
+                Return "Alternate"
+            Case 3
+                Return "LocalFile"
+            Case Else
+                Return "Rolling"
+        End Select
+    End Function
+
+    Private Sub ToggleOptiPatcherLocalFile()
+        If cmbOptiPatcherSource Is Nothing Then
+            Return
+        End If
+
+        Dim isLocal As Boolean = cmbOptiPatcherSource.SelectedIndex = 3
+        If txtOptiPatcherLocalFile IsNot Nothing Then
+            txtOptiPatcherLocalFile.Enabled = isLocal
+        End If
+        If btnBrowseOptiPatcherLocal IsNot Nothing Then
+            btnBrowseOptiPatcherLocal.Enabled = isLocal
+        End If
+    End Sub
+
+    Private Function BuildOptiPatcherConfig() As OptiPatcherInstallConfig
+        Return New OptiPatcherInstallConfig With {
+            .GameFolder = txtGameFolder.Text.Trim(),
+            .Source = GetOptiPatcherSourceFromUi(),
+            .StableRelease = optiPatcherStableRelease,
+            .RollingRelease = optiPatcherRollingRelease,
+            .AlternateRelease = optiPatcherAlternateRelease,
+            .LocalAsiPath = txtOptiPatcherLocalFile.Text.Trim(),
+            .ConflictMode = GetConflictModeFromIndex(cmbConflictMode.SelectedIndex),
+            .PluginPathOverride = If(String.IsNullOrWhiteSpace(txtPluginsPath.Text), "", txtPluginsPath.Text.Trim())
+        }
+    End Function
+
+    Private Async Sub cmbOptiPatcherSource_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbOptiPatcherSource.SelectedIndexChanged
+        ToggleOptiPatcherLocalFile()
+        UpdateOptiPatcherReleaseLabel()
+        SaveOptiPatcherUiSettings()
+        Await Task.CompletedTask
+    End Sub
+
+    Private Sub SaveOptiPatcherUiSettings()
+        If loadingSettingsUi Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        settings.OptiPatcherPreferredSource = GetOptiPatcherSourceToken(cmbOptiPatcherSource.SelectedIndex)
+        settings.OptiPatcherLocalPath = txtOptiPatcherLocalFile.Text.Trim()
+        AppSettings.Save(settings)
+    End Sub
+
+    Private Sub btnBrowseOptiPatcherLocal_Click(sender As Object, e As EventArgs) Handles btnBrowseOptiPatcherLocal.Click
+        AppendLog("Browsing for local OptiPatcher file.")
+        Using dialog As New OpenFileDialog()
+            dialog.Filter = "OptiPatcher plugin (*.asi)|*.asi|All files (*.*)|*.*"
+            dialog.Title = "Select OptiPatcher.asi"
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                txtOptiPatcherLocalFile.Text = dialog.FileName
+                AppendLog("Selected local OptiPatcher file: " & dialog.FileName)
+                SaveOptiPatcherUiSettings()
+            End If
+        End Using
+    End Sub
+
+    Private Async Sub btnOptiPatcherRefresh_Click(sender As Object, e As EventArgs) Handles btnOptiPatcherRefresh.Click
+        Await RefreshOptiPatcherReleaseInfoAsync(True)
+    End Sub
+
+    Private Async Sub btnInstallOptiPatcher_Click(sender As Object, e As EventArgs) Handles btnInstallOptiPatcher.Click
+        Try
+            btnInstallOptiPatcher.Enabled = False
+            Dim installed As Boolean = Await InstallOptiPatcherAsync(True)
+            UpdateOptiPatcherStatus()
+            If installed Then
+                Await RunDetectionAsync(False)
+            End If
+        Finally
+            btnInstallOptiPatcher.Enabled = True
+        End Try
+    End Sub
+
+    Private Async Sub btnRemoveOptiPatcher_Click(sender As Object, e As EventArgs) Handles btnRemoveOptiPatcher.Click
+        Try
+            btnRemoveOptiPatcher.Enabled = False
+            Dim gameFolder As String = txtGameFolder.Text.Trim()
+            If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+                MessageBox.Show(Me, "Select a valid game folder first.", "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+
+            Dim detected As OptiPatcherInstallInfo = OptiPatcherInstallDetector.Detect(gameFolder)
+            If detected Is Nothing OrElse Not detected.IsInstalled Then
+                MessageBox.Show(Me, "OptiPatcher is not detected in this game folder.", "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            If detected.Manifest Is Nothing Then
+                Dim unmanagedConfirm As DialogResult = MessageBox.Show(Me,
+                                                                       "OptiPatcher appears to be unmanaged. Remove the detected plugin file anyway?",
+                                                                       "OptiPatcher",
+                                                                       MessageBoxButtons.YesNo,
+                                                                       MessageBoxIcon.Question)
+                If unmanagedConfirm <> DialogResult.Yes Then
+                    AppendLog("OptiPatcher remove canceled (unmanaged install).")
+                    Return
+                End If
+            End If
+
+            Dim removed As Boolean = Await OptiPatcherInstallerService.RemoveAsync(gameFolder, AddressOf AppendLog, True)
+            If removed Then
+                AppendLog("OptiPatcher removed.")
+            Else
+                AppendLog("OptiPatcher remove completed with no file changes.")
+            End If
+
+            UpdateOptiPatcherStatus()
+            Await RunDetectionAsync(False)
+        Catch ex As Exception
+            AppendLog("OptiPatcher remove failed: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.btnRemoveOptiPatcher_Click")
+            MessageBox.Show(Me, "OptiPatcher remove failed: " & ex.Message, "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            btnRemoveOptiPatcher.Enabled = True
+        End Try
+    End Sub
+
     Private Async Sub btnInstall_Click(sender As Object, e As EventArgs) Handles btnInstall.Click
         Try
             btnInstall.Enabled = False
@@ -1262,6 +1543,30 @@ Public Class MainForm
                 AppendLog("Updating existing OptiScaler install...")
             End If
 
+            Dim detectedGame As DetectedGame = Nothing
+            Dim optiPatcherSupport As OptiPatcherSupportEntry = ResolveCurrentOptiPatcherSupport(detectedGame)
+            Dim installOptiPatcherAfterInstall As Boolean = chkInstallOptiPatcher IsNot Nothing AndAlso chkInstallOptiPatcher.Checked
+            If installOptiPatcherAfterInstall AndAlso optiPatcherSupport Is Nothing Then
+                AppendLog("Install blocked: OptiPatcher option requires a supported detected game.")
+                MessageBox.Show(Me,
+                                "OptiPatcher can only be installed for supported detected games." & Environment.NewLine &
+                                "Select a supported game from Game Detection first.",
+                                "Unsupported game",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning)
+                Return
+            End If
+
+            If installOptiPatcherAfterInstall AndAlso Not Await ValidateAutoOptiPatcherPreflightAsync() Then
+                AppendLog("Install aborted (OptiPatcher preflight).")
+                Return
+            End If
+
+            If Not ConfirmInstallSummary(action, config, installOptiPatcherAfterInstall, detectedGame, optiPatcherSupport) Then
+                AppendLog("Install canceled at summary confirmation.")
+                Return
+            End If
+
             If Not RunInstallPreflight(config) Then
                 AppendLog("Install aborted (preflight).")
                 Return
@@ -1271,6 +1576,16 @@ Public Class MainForm
             Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
             If manifest IsNot Nothing Then
                 manifest.VerificationTimeUtc = DateTime.UtcNow
+            End If
+
+            Dim optiPatcherOutcome As String = ""
+            If installOptiPatcherAfterInstall Then
+                AppendLog("Installing OptiPatcher as part of this install...")
+                Dim patcherInstalled As Boolean = Await InstallOptiPatcherAsync(False)
+                optiPatcherOutcome = If(patcherInstalled, "OptiPatcher installed.", "OptiPatcher install skipped or failed.")
+                If patcherInstalled Then
+                    Await RunDetectionAsync(False)
+                End If
             End If
 
             LogVerificationReport(verification)
@@ -1287,6 +1602,9 @@ Public Class MainForm
                 Dim message As String = "OptiScaler installed successfully."
                 If warningCount > 0 Then
                     message &= Environment.NewLine & warningCount.ToString() & " verification warning(s) were reported."
+                End If
+                If Not String.IsNullOrWhiteSpace(optiPatcherOutcome) Then
+                    message &= Environment.NewLine & optiPatcherOutcome
                 End If
                 MessageBox.Show(Me, message, "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
             End If
@@ -1579,6 +1897,7 @@ Public Class MainForm
                 End If
             End If
 
+            Await RefreshOptiPatcherSupportListAsync(isAuto)
             UpdateCompatibilityNote()
             ApplyCompatibilityFilter()
             If reportStatus Then
@@ -1711,6 +2030,26 @@ Public Class MainForm
         Return map
     End Function
 
+    Private Function BuildOptiPatcherStatusLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, OptiPatcherInstallInfo)
+        Dim map As New Dictionary(Of String, OptiPatcherInstallInfo)(StringComparer.OrdinalIgnoreCase)
+        For Each game As DetectedGame In results
+            If game Is Nothing Then
+                Continue For
+            End If
+
+            Dim key As String = GetDetectedInstallLookupKey(game)
+            If String.IsNullOrWhiteSpace(key) Then
+                Continue For
+            End If
+
+            If Not map.ContainsKey(key) Then
+                map(key) = OptiPatcherInstallDetector.Detect(game.InstallDir)
+            End If
+        Next
+
+        Return map
+    End Function
+
     Private Function GetDetectedInstallLookupKey(game As DetectedGame) As String
         If game Is Nothing Then
             Return ""
@@ -1813,6 +2152,27 @@ Public Class MainForm
         Return "Yes (" & info.Version & ")"
     End Function
 
+    Private Function GetOptiPatcherStatusText(entry As CompatibilityEntry, isDetected As Boolean, info As OptiPatcherInstallInfo) As String
+        Dim supportEntry As OptiPatcherSupportEntry = OptiPatcherSupportService.FindByGameName(optiPatcherSupportLookup, If(entry Is Nothing, "", entry.Name))
+        If supportEntry Is Nothing Then
+            Return If(isDetected, "N/A", "")
+        End If
+
+        If Not isDetected Then
+            Return "Supported"
+        End If
+
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return "No"
+        End If
+
+        If String.IsNullOrWhiteSpace(info.Version) Then
+            Return "Yes"
+        End If
+
+        Return "Yes (" & info.Version & ")"
+    End Function
+
     Private Function GetAntiCheatStatusText(game As DetectedGame) As String
         If game Is Nothing Then
             Return ""
@@ -1866,12 +2226,32 @@ Public Class MainForm
     End Sub
 
     Private Function BlendColors(baseColor As Color, overlay As Color, alpha As Integer) As Color
-        Dim clamped As Integer = Math.Max(0, Math.Min(255, alpha))
-        Dim factor As Double = clamped / 255.0R
-        Dim r As Integer = CInt(baseColor.R + (overlay.R - baseColor.R) * factor)
-        Dim g As Integer = CInt(baseColor.G + (overlay.G - baseColor.G) * factor)
-        Dim b As Integer = CInt(baseColor.B + (overlay.B - baseColor.B) * factor)
+        ' Defensive blend implementation to avoid overflow on any runtime/theme edge case.
+        Dim clamped As Integer
+        If alpha <= 0 Then
+            Return baseColor
+        ElseIf alpha >= 255 Then
+            Return Color.FromArgb(baseColor.A, overlay.R, overlay.G, overlay.B)
+        Else
+            clamped = alpha
+        End If
+
+        Dim inverse As Integer = 255 - clamped
+        Dim r As Integer = ClampColorChannel(CInt(Math.Round((CDbl(baseColor.R) * inverse + CDbl(overlay.R) * clamped) / 255.0R)))
+        Dim g As Integer = ClampColorChannel(CInt(Math.Round((CDbl(baseColor.G) * inverse + CDbl(overlay.G) * clamped) / 255.0R)))
+        Dim b As Integer = ClampColorChannel(CInt(Math.Round((CDbl(baseColor.B) * inverse + CDbl(overlay.B) * clamped) / 255.0R)))
+
         Return Color.FromArgb(baseColor.A, r, g, b)
+    End Function
+
+    Private Function ClampColorChannel(value As Integer) As Integer
+        If value < 0 Then
+            Return 0
+        End If
+        If value > 255 Then
+            Return 255
+        End If
+        Return value
     End Function
 
     Private Sub UseDetectedGame(game As DetectedGame)
@@ -1994,7 +2374,7 @@ Public Class MainForm
         Dim statusText As String = BuildInstallStatusText(info)
         lblInstalledStatus.Text = statusText
 
-        btnInstall.Text = If(info IsNot Nothing AndAlso info.IsInstalled, "Update", "Install")
+        UpdateInstallButtonText(info)
 
         Dim key As String = If(info Is Nothing, "none", $"{info.IsInstalled}|{info.Version}|{info.Source}")
         If key <> lastInstallStatusKey Then
@@ -2011,6 +2391,358 @@ Public Class MainForm
         Dim versionText As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version)
         Dim sourceText As String = If(String.IsNullOrWhiteSpace(info.Source), "", " (" & info.Source & ")")
         Return "Installed: " & versionText & sourceText
+    End Function
+
+    Private Sub UpdateInstallButtonText(info As OptiScalerInstallInfo)
+        If btnInstall Is Nothing Then
+            Return
+        End If
+
+        Dim baseText As String = If(info IsNot Nothing AndAlso info.IsInstalled, "Update", "Install")
+        If chkInstallOptiPatcher IsNot Nothing AndAlso chkInstallOptiPatcher.Enabled AndAlso chkInstallOptiPatcher.Checked Then
+            btnInstall.Text = baseText & " + OptiPatcher"
+        Else
+            btnInstall.Text = baseText
+        End If
+    End Sub
+
+    Private Sub UpdateOptiPatcherStatus()
+        If lblOptiPatcherStatus Is Nothing Then
+            Return
+        End If
+
+        If InvokeRequired Then
+            BeginInvoke(New Action(AddressOf UpdateOptiPatcherStatus))
+            Return
+        End If
+
+        Dim folder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(folder) OrElse Not Directory.Exists(folder) Then
+            lblOptiPatcherStatus.Text = "Status: pick a target game folder."
+            btnInstallOptiPatcher.Enabled = False
+            btnRemoveOptiPatcher.Enabled = False
+            If chkInstallOptiPatcher IsNot Nothing Then
+                chkInstallOptiPatcher.Checked = False
+                chkInstallOptiPatcher.Enabled = False
+            End If
+            If lblInstallOptiPatcherStatus IsNot Nothing Then
+                lblInstallOptiPatcherStatus.Text = "OptiPatcher: select a supported detected game to enable."
+            End If
+            SyncAutoOptiPatcherUiState(False)
+            UpdateInstallButtonText(OptiScalerInstallDetector.Detect(txtGameFolder.Text))
+            lastOptiPatcherStatusKey = "no-folder"
+            Return
+        End If
+
+        Dim installInfo As OptiPatcherInstallInfo = OptiPatcherInstallDetector.Detect(folder)
+        btnRemoveOptiPatcher.Enabled = installInfo IsNot Nothing AndAlso installInfo.IsInstalled
+
+        Dim detectedGame As DetectedGame = Nothing
+        Dim supportEntry As OptiPatcherSupportEntry = ResolveCurrentOptiPatcherSupport(detectedGame)
+        Dim isSupported As Boolean = supportEntry IsNot Nothing
+        btnInstallOptiPatcher.Enabled = isSupported
+        If chkInstallOptiPatcher IsNot Nothing Then
+            If Not isSupported Then
+                chkInstallOptiPatcher.Checked = False
+            End If
+            chkInstallOptiPatcher.Enabled = isSupported
+        End If
+        If lblInstallOptiPatcherStatus IsNot Nothing Then
+            lblInstallOptiPatcherStatus.Text = BuildInstallTabOptiPatcherStatusText(detectedGame, supportEntry, installInfo)
+        End If
+        SyncAutoOptiPatcherUiState(False)
+        UpdateInstallButtonText(OptiScalerInstallDetector.Detect(txtGameFolder.Text))
+
+        Dim statusText As String = BuildOptiPatcherStatusText(installInfo, supportEntry)
+        lblOptiPatcherStatus.Text = statusText
+
+        Dim key As String = $"{statusText}|{If(installInfo IsNot Nothing AndAlso installInfo.IsInstalled, installInfo.AsiPath, "")}"
+        If key <> lastOptiPatcherStatusKey Then
+            lastOptiPatcherStatusKey = key
+            AppendLog("OptiPatcher status: " & statusText)
+        End If
+    End Sub
+
+    Private Function BuildOptiPatcherStatusText(installInfo As OptiPatcherInstallInfo, supportEntry As OptiPatcherSupportEntry) As String
+        Dim installText As String
+        If installInfo Is Nothing OrElse Not installInfo.IsInstalled Then
+            installText = "not installed"
+        Else
+            Dim versionText As String = If(String.IsNullOrWhiteSpace(installInfo.Version), "unknown", installInfo.Version)
+            installText = "installed (" & versionText & ")"
+        End If
+
+        Dim supportText As String = "support unknown"
+        If supportEntry IsNot Nothing Then
+            supportText = "supported"
+            If supportEntry.DlssFgSupported.HasValue Then
+                supportText &= If(supportEntry.DlssFgSupported.Value, ", DLSS-FG yes", ", DLSS-FG no")
+            End If
+        End If
+
+        Return $"Status: {installText}, {supportText}"
+    End Function
+
+    Private Function BuildInstallTabOptiPatcherStatusText(detectedGame As DetectedGame,
+                                                          supportEntry As OptiPatcherSupportEntry,
+                                                          installInfo As OptiPatcherInstallInfo) As String
+        Dim sourceText As String = GetOptiPatcherSourceDisplayText()
+        Dim autoInstallEnabled As Boolean = chkInstallOptiPatcher IsNot Nothing AndAlso chkInstallOptiPatcher.Enabled AndAlso chkInstallOptiPatcher.Checked
+
+        If detectedGame Is Nothing Then
+            Return "OptiPatcher: unsupported until game is detected from the supported list. Source: " & sourceText
+        End If
+
+        If supportEntry Is Nothing Then
+            Return "OptiPatcher: unsupported for " & detectedGame.DisplayName
+        End If
+
+        Dim autoText As String = If(autoInstallEnabled, "auto-install enabled", "auto-install disabled")
+        If installInfo IsNot Nothing AndAlso installInfo.IsInstalled Then
+            Dim versionText As String = If(String.IsNullOrWhiteSpace(installInfo.Version), "unknown", installInfo.Version)
+            Return "OptiPatcher: supported for " & detectedGame.DisplayName & " (installed " & versionText & ", " & autoText & ", source " & sourceText & ")"
+        End If
+
+        Return "OptiPatcher: supported for " & detectedGame.DisplayName & " (" & autoText & ", source " & sourceText & ")"
+    End Function
+
+    Private Function FindDetectedGameByInstallDir(folder As String) As DetectedGame
+        If detectedGames Is Nothing OrElse String.IsNullOrWhiteSpace(folder) Then
+            Return Nothing
+        End If
+
+        Dim normalizedTarget As String = NormalizePathSafe(folder)
+        For Each game As DetectedGame In detectedGames
+            If game Is Nothing Then
+                Continue For
+            End If
+
+            If String.Equals(NormalizePathSafe(game.InstallDir), normalizedTarget, StringComparison.OrdinalIgnoreCase) Then
+                Return game
+            End If
+        Next
+
+        Return Nothing
+    End Function
+
+    Private Function ResolveCurrentOptiPatcherSupport(ByRef detectedGame As DetectedGame) As OptiPatcherSupportEntry
+        detectedGame = Nothing
+        Dim folder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(folder) Then
+            Return Nothing
+        End If
+
+        detectedGame = FindDetectedGameByInstallDir(folder)
+        If detectedGame Is Nothing Then
+            Return Nothing
+        End If
+
+        Return OptiPatcherSupportService.FindByGameName(optiPatcherSupportLookup, detectedGame.DisplayName)
+    End Function
+
+    Private Async Function InstallOptiPatcherAsync(showDialogs As Boolean) As Task(Of Boolean)
+        Try
+            Dim config As OptiPatcherInstallConfig = BuildOptiPatcherConfig()
+            If String.IsNullOrWhiteSpace(config.GameFolder) OrElse Not Directory.Exists(config.GameFolder) Then
+                If showDialogs Then
+                    MessageBox.Show(Me, "Select a valid game folder first.", "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                End If
+                AppendLog("OptiPatcher install blocked: invalid game folder.")
+                Return False
+            End If
+
+            Dim detectedGame As DetectedGame = Nothing
+            Dim support As OptiPatcherSupportEntry = ResolveCurrentOptiPatcherSupport(detectedGame)
+            If support Is Nothing Then
+                Dim message As String = "OptiPatcher can only be installed for supported detected games." & Environment.NewLine &
+                                        "Pick a supported game from Game Detection and use that folder."
+                AppendLog("OptiPatcher install blocked: unsupported or undetected game.")
+                If showDialogs Then
+                    MessageBox.Show(Me, message, "Unsupported game", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                End If
+                Return False
+            End If
+
+            AppendLog("Starting OptiPatcher install...")
+            Dim manifest As OptiPatcherManifest = Await OptiPatcherInstallerService.InstallAsync(config, AddressOf AppendLog)
+            If manifest Is Nothing Then
+                AppendLog("OptiPatcher install skipped.")
+                Return False
+            End If
+
+            AppendLog("OptiPatcher install completed.")
+            Return True
+        Catch ex As Exception
+            AppendLog("OptiPatcher install failed: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.InstallOptiPatcherAsync")
+            If showDialogs Then
+                MessageBox.Show(Me, "OptiPatcher install failed: " & ex.Message, "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            End If
+            Return False
+        Finally
+            UpdateOptiPatcherStatus()
+        End Try
+    End Function
+
+    Private Async Function ValidateAutoOptiPatcherPreflightAsync() As Task(Of Boolean)
+        Dim config As OptiPatcherInstallConfig = BuildOptiPatcherConfig()
+        Dim errors As New List(Of String)()
+
+        If config Is Nothing Then
+            errors.Add("OptiPatcher configuration is missing.")
+        Else
+            If String.IsNullOrWhiteSpace(config.GameFolder) OrElse Not Directory.Exists(config.GameFolder) Then
+                errors.Add("Game folder is missing for OptiPatcher auto-install.")
+            End If
+
+            Select Case config.Source
+                Case OptiPatcherSource.LocalFile
+                    If String.IsNullOrWhiteSpace(config.LocalAsiPath) OrElse Not File.Exists(config.LocalAsiPath) Then
+                        errors.Add("Local OptiPatcher .asi file was not found.")
+                    ElseIf Not String.Equals(Path.GetExtension(config.LocalAsiPath), ".asi", StringComparison.OrdinalIgnoreCase) Then
+                        errors.Add("Local OptiPatcher file must be an .asi file.")
+                    End If
+                Case OptiPatcherSource.Alternate
+                    Dim settings As AppSettingsModel = AppSettings.Load()
+                    If settings Is Nothing OrElse String.IsNullOrWhiteSpace(settings.OptiPatcherAlternateReleaseUrl) Then
+                        errors.Add("Alternate OptiPatcher source URL is empty in settings.")
+                    End If
+            End Select
+
+            If errors.Count = 0 AndAlso config.Source <> OptiPatcherSource.LocalFile Then
+                Dim selectedRelease As ReleaseInfo = GetSelectedOptiPatcherRelease(config)
+                If selectedRelease Is Nothing OrElse String.IsNullOrWhiteSpace(selectedRelease.DownloadUrl) Then
+                    AppendLog("OptiPatcher release info missing for selected source. Refreshing now...")
+                    Await RefreshOptiPatcherReleaseInfoAsync(False)
+                    config = BuildOptiPatcherConfig()
+                    selectedRelease = GetSelectedOptiPatcherRelease(config)
+                    If selectedRelease Is Nothing OrElse String.IsNullOrWhiteSpace(selectedRelease.DownloadUrl) Then
+                        errors.Add("Selected OptiPatcher source does not have a downloadable release asset.")
+                    End If
+                End If
+            End If
+        End If
+
+        If errors.Count > 0 Then
+            AppendLog("OptiPatcher preflight errors: " & String.Join("; ", errors))
+            MessageBox.Show(Me,
+                            "Fix the following OptiPatcher issues before installing:" & Environment.NewLine & "- " &
+                            String.Join(Environment.NewLine & "- ", errors),
+                            "OptiPatcher validation failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning)
+            Return False
+        End If
+
+        Return True
+    End Function
+
+    Private Function GetSelectedOptiPatcherRelease(config As OptiPatcherInstallConfig) As ReleaseInfo
+        If config Is Nothing Then
+            Return Nothing
+        End If
+
+        Select Case config.Source
+            Case OptiPatcherSource.Stable
+                Return config.StableRelease
+            Case OptiPatcherSource.Alternate
+                Return config.AlternateRelease
+            Case OptiPatcherSource.Rolling
+                Return config.RollingRelease
+            Case Else
+                Return Nothing
+        End Select
+    End Function
+
+    Private Function GetOptiPatcherSourceDisplayText() As String
+        Select Case GetOptiPatcherSourceFromUi()
+            Case OptiPatcherSource.Stable
+                Return "Stable"
+            Case OptiPatcherSource.Alternate
+                Return "Alternate"
+            Case OptiPatcherSource.LocalFile
+                Dim fileName As String = Path.GetFileName(If(txtOptiPatcherLocalFile.Text, "").Trim())
+                If String.IsNullOrWhiteSpace(fileName) Then
+                    Return "Local .asi"
+                End If
+                Return "Local .asi (" & fileName & ")"
+            Case Else
+                Return "Rolling"
+        End Select
+    End Function
+
+    Private Function ConfirmInstallSummary(action As InstallAction,
+                                           config As InstallerConfig,
+                                           installOptiPatcherAfterInstall As Boolean,
+                                           detectedGame As DetectedGame,
+                                           optiPatcherSupport As OptiPatcherSupportEntry) As Boolean
+        Dim addOns As New List(Of String)()
+        If Not String.IsNullOrWhiteSpace(config.FakenvapiFolder) Then
+            addOns.Add("Fakenvapi")
+        End If
+        If Not String.IsNullOrWhiteSpace(config.NvngxDllPath) Then
+            addOns.Add("nvngx override")
+        End If
+        If config.FgType = FgTypeSelection.Nukem AndAlso Not String.IsNullOrWhiteSpace(config.NukemDllPath) Then
+            addOns.Add("Nukem FG DLL")
+        End If
+        If config.EnableReshade Then
+            addOns.Add("ReShade")
+        End If
+        If config.EnableSpecialK Then
+            addOns.Add("Special K")
+        End If
+        If config.LoadAsiPlugins Then
+            addOns.Add("ASI loading")
+        End If
+
+        Dim optiScalerSourceText As String = "Unknown"
+        Select Case config.Source
+            Case ReleaseSource.Stable
+                optiScalerSourceText = "Stable"
+            Case ReleaseSource.Nightly
+                optiScalerSourceText = "Alternate"
+            Case ReleaseSource.LocalArchive
+                optiScalerSourceText = "Local archive"
+        End Select
+
+        Dim optiPatcherSourceText As String = GetOptiPatcherSourceDisplayText()
+
+        Dim actionText As String = "Install"
+        Select Case action
+            Case InstallAction.Update
+                actionText = "Update"
+            Case InstallAction.Reinstall
+                actionText = "Reinstall"
+        End Select
+
+        Dim patcherLine As String = "No"
+        If installOptiPatcherAfterInstall Then
+            patcherLine = "Yes (" & optiPatcherSourceText & ")"
+            If detectedGame IsNot Nothing AndAlso optiPatcherSupport IsNot Nothing Then
+                patcherLine &= " for " & detectedGame.DisplayName
+            End If
+        End If
+
+        Dim summary As New StringBuilder()
+        summary.AppendLine("Review install plan:")
+        summary.AppendLine()
+        summary.AppendLine("Action: " & actionText)
+        summary.AppendLine("OptiScaler source: " & optiScalerSourceText)
+        summary.AppendLine("OptiPatcher source: " & optiPatcherSourceText)
+        summary.AppendLine("Hook filename: " & config.HookName)
+        summary.AppendLine("GPU selection: " & If(config.GpuVendor = GpuVendor.AmdIntel, "AMD/Intel", "NVIDIA"))
+        summary.AppendLine("Frame generation: " & config.FgType.ToString())
+        summary.AppendLine("Add-ons: " & If(addOns.Count = 0, "None", String.Join(", ", addOns)))
+        summary.AppendLine("Install OptiPatcher: " & patcherLine)
+        summary.AppendLine()
+        summary.AppendLine("Proceed?")
+
+        Return MessageBox.Show(Me,
+                               summary.ToString(),
+                               "Confirm install",
+                               MessageBoxButtons.YesNo,
+                               MessageBoxIcon.Question) = DialogResult.Yes
     End Function
 
     Private Sub UpdateExperimentalStatus()
@@ -2510,8 +3242,71 @@ Public Class MainForm
     End Sub
 
     Private Sub chkLoadAsiPlugins_CheckedChanged(sender As Object, e As EventArgs) Handles chkLoadAsiPlugins.CheckedChanged
-        txtPluginsPath.Enabled = chkLoadAsiPlugins.Checked
-        btnBrowsePluginsPath.Enabled = chkLoadAsiPlugins.Checked
+        If chkLoadAsiPlugins.Checked Then
+            EnsurePluginsFolderReady(True)
+        End If
+        SyncAutoOptiPatcherUiState(False)
+    End Sub
+
+    Private Sub chkInstallOptiPatcher_CheckedChanged(sender As Object, e As EventArgs) Handles chkInstallOptiPatcher.CheckedChanged
+        SyncAutoOptiPatcherUiState(True)
+        UpdateOptiPatcherStatus()
+    End Sub
+
+    Private Sub SyncAutoOptiPatcherUiState(logAction As Boolean)
+        If chkLoadAsiPlugins Is Nothing OrElse txtPluginsPath Is Nothing OrElse btnBrowsePluginsPath Is Nothing Then
+            Return
+        End If
+
+        Dim autoInstallEnabled As Boolean = chkInstallOptiPatcher IsNot Nothing AndAlso chkInstallOptiPatcher.Enabled AndAlso chkInstallOptiPatcher.Checked
+        If autoInstallEnabled Then
+            If Not chkLoadAsiPlugins.Checked Then
+                chkLoadAsiPlugins.Checked = True
+            End If
+
+            chkLoadAsiPlugins.Enabled = False
+            EnsurePluginsFolderReady(logAction)
+            txtPluginsPath.Enabled = False
+            btnBrowsePluginsPath.Enabled = False
+        Else
+            chkLoadAsiPlugins.Enabled = True
+            txtPluginsPath.Enabled = chkLoadAsiPlugins.Checked
+            btnBrowsePluginsPath.Enabled = chkLoadAsiPlugins.Checked
+        End If
+
+        UpdateInstallButtonText(OptiScalerInstallDetector.Detect(txtGameFolder.Text))
+    End Sub
+
+    Private Sub EnsurePluginsFolderReady(logAction As Boolean)
+        If Not chkLoadAsiPlugins.Checked Then
+            Return
+        End If
+
+        Dim gameFolder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Return
+        End If
+
+        Dim pluginPath As String = txtPluginsPath.Text.Trim()
+        If String.IsNullOrWhiteSpace(pluginPath) Then
+            pluginPath = Path.Combine(gameFolder, "plugins")
+            txtPluginsPath.Text = pluginPath
+        ElseIf Not Path.IsPathRooted(pluginPath) Then
+            pluginPath = Path.GetFullPath(Path.Combine(gameFolder, pluginPath))
+            txtPluginsPath.Text = pluginPath
+        End If
+
+        If Not Directory.Exists(pluginPath) Then
+            Try
+                Directory.CreateDirectory(pluginPath)
+                If logAction Then
+                    AppendLog("Created plugins folder: " & pluginPath)
+                End If
+            Catch ex As Exception
+                AppendLog("Failed to create plugins folder: " & ex.Message)
+                ErrorLogger.Log(ex, "MainForm.EnsurePluginsFolderReady")
+            End Try
+        End If
     End Sub
 
     Private Sub btnBrowsePluginsPath_Click(sender As Object, e As EventArgs) Handles btnBrowsePluginsPath.Click
@@ -2674,6 +3469,8 @@ Public Class MainForm
         settings.ExperimentalFsr4PackageFolder = txtFsr4PackageFolder.Text.Trim()
         settings.ExperimentalFsr4EnableUpdate = chkFsr4EnableUpdate.Checked
         settings.ExperimentalFsr4EnableAgility = chkFsr4EnableAgility.Checked
+        settings.OptiPatcherPreferredSource = GetOptiPatcherSourceToken(cmbOptiPatcherSource.SelectedIndex)
+        settings.OptiPatcherLocalPath = txtOptiPatcherLocalFile.Text.Trim()
         settings.DefaultPreset = GetDefaultPresetValue()
         settings.DefaultHookName = GetDefaultHookValue()
         settings.DefaultGpuVendor = GetDefaultGpuVendorValue()
@@ -3089,6 +3886,8 @@ Public Class MainForm
         toolTip.SetToolTip(btnInstall, "Install OptiScaler and selected add-ons into the game folder.")
         toolTip.SetToolTip(btnUninstall, "Remove OptiScaler files using the install manifest.")
         toolTip.SetToolTip(btnOpenGameFolder, "Open the current game folder in Explorer.")
+        toolTip.SetToolTip(chkInstallOptiPatcher, "When enabled, installs OptiPatcher right after OptiScaler install. Supported detected games only.")
+        toolTip.SetToolTip(lblInstallOptiPatcherStatus, "Shows whether OptiPatcher can be installed for the currently selected game.")
 
         toolTip.SetToolTip(chkEnableReshade, "Enable ReShade integration and copy the chosen DLL.")
         toolTip.SetToolTip(txtReshadeDll, "Path to ReShade DLL to install.")
@@ -3099,9 +3898,17 @@ Public Class MainForm
         toolTip.SetToolTip(btnBrowseSpecialK, "Browse for SpecialK64.dll.")
         toolTip.SetToolTip(chkCreateSpecialKMarker, "Create SpecialK.marker to force Special K to load.")
 
-        toolTip.SetToolTip(chkLoadAsiPlugins, "Enable ASI loader support.")
-        toolTip.SetToolTip(txtPluginsPath, "Folder containing ASI plugins.")
+        toolTip.SetToolTip(chkLoadAsiPlugins, "Enable ASI plugin loading. When enabled, a plugins folder is auto-created in the selected game folder.")
+        toolTip.SetToolTip(txtPluginsPath, "ASI plugins folder path. Defaults to <game>\\plugins when ASI loading is enabled.")
         toolTip.SetToolTip(btnBrowsePluginsPath, "Browse for the ASI plugins folder.")
+        toolTip.SetToolTip(cmbOptiPatcherSource, "Select where OptiPatcher.asi should be pulled from.")
+        toolTip.SetToolTip(btnOptiPatcherRefresh, "Refresh OptiPatcher release metadata from the selected sources.")
+        toolTip.SetToolTip(lblOptiPatcherRelease, "Shows the currently loaded OptiPatcher release for the selected source.")
+        toolTip.SetToolTip(txtOptiPatcherLocalFile, "Local OptiPatcher.asi path used when source is set to Local .asi.")
+        toolTip.SetToolTip(btnBrowseOptiPatcherLocal, "Browse for a local OptiPatcher.asi file.")
+        toolTip.SetToolTip(btnInstallOptiPatcher, "Install or update OptiPatcher.asi in the selected game's plugin path and ensure LoadAsiPlugins=true.")
+        toolTip.SetToolTip(btnRemoveOptiPatcher, "Remove OptiPatcher.asi. Restores manifest backup when available.")
+        toolTip.SetToolTip(lblOptiPatcherStatus, "Current OptiPatcher install and support status for the selected game folder.")
 
         toolTip.SetToolTip(txtNvngxDll, "Optional nvngx_dlss.dll to copy if the game does not include one.")
         toolTip.SetToolTip(btnBrowseNvngx, "Browse for nvngx_dlss.dll.")
@@ -3346,6 +4153,7 @@ Public Class MainForm
             AppendLog(label & " started.")
             detectedGames.Clear()
             detectedLookup.Clear()
+            detectedOptiPatcherLookup.Clear()
 
             If allCompatibilityEntries Is Nothing OrElse allCompatibilityEntries.Count = 0 Then
                 AppendLog("Detection skipped: compatibility list is empty.")
@@ -3362,14 +4170,21 @@ Public Class MainForm
             detectedGames = results
             detectedLookup = BuildDetectedLookup(results)
             detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
+            detectedOptiPatcherLookup = Await Task.Run(Function() BuildOptiPatcherStatusLookup(results))
             ApplyCompatibilityFilter()
             UpdateExperimentalDetectedGamesList()
             UpdateDetectedStatus()
             Dim installedCount As Integer = 0
+            Dim patcherInstalledCount As Integer = 0
             Dim antiCheatCount As Integer = 0
             For Each info As OptiScalerInstallInfo In detectedInstallLookup.Values
                 If info IsNot Nothing AndAlso info.IsInstalled Then
                     installedCount += 1
+                End If
+            Next
+            For Each info As OptiPatcherInstallInfo In detectedOptiPatcherLookup.Values
+                If info IsNot Nothing AndAlso info.IsInstalled Then
+                    patcherInstalledCount += 1
                 End If
             Next
             For Each game As DetectedGame In detectedGames
@@ -3378,6 +4193,7 @@ Public Class MainForm
                 End If
             Next
             AppendLog("OptiScaler installed in " & installedCount & " detected game(s).")
+            AppendLog("OptiPatcher installed in " & patcherInstalledCount & " detected game(s).")
             AppendLog("Anti-cheat flagged in " & antiCheatCount & " detected game(s).")
             AppendLog(label & " finished: " & detectedLookup.Count & " supported game(s) detected.")
         Catch ex As Exception
@@ -3411,6 +4227,8 @@ Public Class MainForm
             txtFsr4PackageFolder.Text = If(settings.ExperimentalFsr4PackageFolder, "")
             chkFsr4EnableUpdate.Checked = If(settings.ExperimentalFsr4EnableUpdate.HasValue, settings.ExperimentalFsr4EnableUpdate.Value, True)
             chkFsr4EnableAgility.Checked = If(settings.ExperimentalFsr4EnableAgility.HasValue, settings.ExperimentalFsr4EnableAgility.Value, False)
+            cmbOptiPatcherSource.SelectedIndex = GetOptiPatcherSourceIndex(settings.OptiPatcherPreferredSource)
+            txtOptiPatcherLocalFile.Text = If(settings.OptiPatcherLocalPath, "")
             _settingDefaultsPreset = True
             cmbDefaultPreset.SelectedIndex = GetDefaultPresetIndex(settings.DefaultPreset)
             cmbDefaultHookName.SelectedIndex = GetDefaultHookIndex(settings.DefaultHookName)
@@ -3423,6 +4241,8 @@ Public Class MainForm
             loadingSettingsUi = False
         End Try
 
+        ToggleOptiPatcherLocalFile()
+        UpdateOptiPatcherReleaseLabel()
         UpdateExperimentalTabAvailability(False)
     End Sub
 
@@ -3643,6 +4463,7 @@ Public Class MainForm
         Public Property Entry As CompatibilityEntry
         Public Property Detected As DetectedGame
         Public Property InstallInfo As OptiScalerInstallInfo
+        Public Property OptiPatcherInfo As OptiPatcherInstallInfo
         Public Property IsRecentlyChanged As Boolean
     End Class
 End Class

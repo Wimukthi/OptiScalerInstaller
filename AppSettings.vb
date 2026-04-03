@@ -108,6 +108,12 @@ Friend Class AppSettingsModel
     Public Property NightlyReleaseUrl As String
     Public Property ComponentReleaseUrl As String
     Public Property InstallerReleaseUrl As String
+    Public Property OptiPatcherSupportListUrl As String
+    Public Property OptiPatcherStableReleaseUrl As String
+    Public Property OptiPatcherRollingReleaseUrl As String
+    Public Property OptiPatcherAlternateReleaseUrl As String
+    Public Property OptiPatcherPreferredSource As String
+    Public Property OptiPatcherLocalPath As String
     Public Property AutoRefreshCompatibilityOnStartup As Boolean?
     Public Property AutoCheckInstallerUpdates As Boolean?
     Public Property ShowExperimentalTabOnUnsupportedGpu As Boolean?
@@ -159,6 +165,30 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(InstallerReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.InstallerReleaseUrl) Then
             InstallerReleaseUrl = defaults.InstallerReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherSupportListUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherSupportListUrl) Then
+            OptiPatcherSupportListUrl = defaults.OptiPatcherSupportListUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherStableReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherStableReleaseUrl) Then
+            OptiPatcherStableReleaseUrl = defaults.OptiPatcherStableReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherRollingReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherRollingReleaseUrl) Then
+            OptiPatcherRollingReleaseUrl = defaults.OptiPatcherRollingReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherAlternateReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherAlternateReleaseUrl) Then
+            OptiPatcherAlternateReleaseUrl = defaults.OptiPatcherAlternateReleaseUrl
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherPreferredSource) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherPreferredSource) Then
+            OptiPatcherPreferredSource = defaults.OptiPatcherPreferredSource
+            changed = True
+        End If
+        If String.IsNullOrWhiteSpace(OptiPatcherLocalPath) AndAlso Not String.IsNullOrWhiteSpace(defaults.OptiPatcherLocalPath) Then
+            OptiPatcherLocalPath = defaults.OptiPatcherLocalPath
             changed = True
         End If
         If Not AutoRefreshCompatibilityOnStartup.HasValue AndAlso defaults.AutoRefreshCompatibilityOnStartup.HasValue Then
@@ -227,6 +257,12 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(DefaultConflictMode) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultConflictMode) Then
             DefaultConflictMode = defaults.DefaultConflictMode
+            changed = True
+        End If
+
+        ' Backward compatibility: older builds stored OptiPatcher rolling URL under ComponentReleaseUrl.
+        If String.IsNullOrWhiteSpace(OptiPatcherRollingReleaseUrl) AndAlso Not String.IsNullOrWhiteSpace(ComponentReleaseUrl) Then
+            OptiPatcherRollingReleaseUrl = ComponentReleaseUrl
             changed = True
         End If
 
