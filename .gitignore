@@ -1,6 +1,9 @@
 # Build outputs
 bin/
 obj/
+artifacts/
+Release/
+Screenshots/
 
 # Visual Studio
 .vs/

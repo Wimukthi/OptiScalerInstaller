@@ -2153,13 +2153,8 @@ Public Class MainForm
     End Function
 
     Private Function GetOptiPatcherStatusText(entry As CompatibilityEntry, isDetected As Boolean, info As OptiPatcherInstallInfo) As String
-        Dim supportEntry As OptiPatcherSupportEntry = OptiPatcherSupportService.FindByGameName(optiPatcherSupportLookup, If(entry Is Nothing, "", entry.Name))
-        If supportEntry Is Nothing Then
-            Return If(isDetected, "N/A", "")
-        End If
-
         If Not isDetected Then
-            Return "Supported"
+            Return ""
         End If
 
         If info Is Nothing OrElse Not info.IsInstalled Then
@@ -2512,17 +2507,34 @@ Public Class MainForm
         End If
 
         Dim normalizedTarget As String = NormalizePathSafe(folder)
+        Dim bestMatch As DetectedGame = Nothing
+        Dim bestLength As Integer = -1
+
         For Each game As DetectedGame In detectedGames
             If game Is Nothing Then
                 Continue For
             End If
 
-            If String.Equals(NormalizePathSafe(game.InstallDir), normalizedTarget, StringComparison.OrdinalIgnoreCase) Then
+            Dim gamePath As String = NormalizePathSafe(game.InstallDir)
+            If String.IsNullOrWhiteSpace(gamePath) Then
+                Continue For
+            End If
+
+            If String.Equals(gamePath, normalizedTarget, StringComparison.OrdinalIgnoreCase) Then
                 Return game
+            End If
+
+            Dim targetContainsGame As Boolean = normalizedTarget.StartsWith(gamePath & Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            Dim gameContainsTarget As Boolean = gamePath.StartsWith(normalizedTarget & Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            If targetContainsGame OrElse gameContainsTarget Then
+                If gamePath.Length > bestLength Then
+                    bestLength = gamePath.Length
+                    bestMatch = game
+                End If
             End If
         Next
 
-        Return Nothing
+        Return bestMatch
     End Function
 
     Private Function ResolveCurrentOptiPatcherSupport(ByRef detectedGame As DetectedGame) As OptiPatcherSupportEntry

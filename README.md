@@ -48,6 +48,12 @@ Run (Debug):
 .\bin\Debug\net10.0-windows\OptiScalerInstaller.exe
 ```
 
+Create release package (clean + staged zip):
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
+```
+
 ## Usage
 
 ### Game Detection tab
@@ -120,6 +126,7 @@ Settings:
 
 ## Version History
 
+- v1.0.8.0 - Fix OptiPatcher detection to use the same nested install probing behavior as OptiScaler, improve detected-game folder matching for nested binary paths, and harden release packaging with clean staged zip output (prevents stale top-level `win-x64` payloads).
 - v1.0.7.6 - Add full OptiPatcher integration: support-list sync, release fetch (stable/rolling/alternate), install/remove services and manifests, detection column on Game Detection, supported-only enforcement, Install-tab `Install + OptiPatcher` guided flow with preflight + summary, and improved OptiPatcher panel layout/ASI folder auto-setup.
 - v1.0.6.7 - Harden uninstall/remove safety with root-scoped manifest path validation, add archive extraction traversal guards, improve release asset selection and digest verification, add retry/timeout handling for release/compatibility/download fetches, tighten startup background error handling, and expand core code comments.
 - v1.0.6.1 - Add FSR4 experimental tab visibility toggle for unsupported GPUs, fix runtime tab theming artifacts, harden GPU detection with vendor-ID matching, and show detected GPU model in the title bar.

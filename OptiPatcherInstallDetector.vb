@@ -3,42 +3,35 @@ Imports System.IO
 Imports System.Text.Json
 
 Public Module OptiPatcherInstallDetector
-    ' Detects existing OptiPatcher installs via manifest and strong plugin file markers.
+    ' Detects existing OptiPatcher installs via manifest and plugin-file markers.
     Public Const ManifestFileName As String = "OptiPatcherInstaller.manifest.json"
 
     Public Function Detect(gameFolder As String) As OptiPatcherInstallInfo
-        Dim info As New OptiPatcherInstallInfo()
+        Dim empty As New OptiPatcherInstallInfo()
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
-            Return info
+            Return empty
         End If
 
-        Dim manifest As OptiPatcherManifest = TryLoadManifest(gameFolder)
-        If manifest IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(manifest.AsiPath) AndAlso File.Exists(manifest.AsiPath) Then
-            info.IsInstalled = True
-            info.Manifest = manifest
-            info.Source = "Manifest"
-            info.AsiPath = manifest.AsiPath
-            info.PluginFolder = manifest.PluginFolder
-            info.Version = If(String.IsNullOrWhiteSpace(manifest.OptiPatcherVersion), TryGetFileVersion(manifest.AsiPath), manifest.OptiPatcherVersion)
-            Return info
+        Dim direct As OptiPatcherInstallInfo = DetectInFolder(gameFolder)
+        If direct IsNot Nothing AndAlso direct.IsInstalled Then
+            Return direct
         End If
 
-        Dim pluginFolders As List(Of String) = ResolvePluginFolderCandidates(gameFolder)
-        For Each folder As String In pluginFolders
-            Dim candidate As String = Path.Combine(folder, "OptiPatcher.asi")
-            If Not File.Exists(candidate) Then
+        For Each nestedFolder As String In GetNestedProbeFolders(gameFolder)
+            Dim nested As OptiPatcherInstallInfo = DetectInFolder(nestedFolder)
+            If nested Is Nothing OrElse Not nested.IsInstalled Then
                 Continue For
             End If
 
-            info.IsInstalled = True
-            info.Source = "Plugin file"
-            info.AsiPath = candidate
-            info.PluginFolder = folder
-            info.Version = TryGetFileVersion(candidate)
-            Return info
+            Dim relative As String = TryGetRelativeFolder(gameFolder, nestedFolder)
+            If Not String.IsNullOrWhiteSpace(relative) Then
+                nested.Source = If(String.IsNullOrWhiteSpace(nested.Source), relative, nested.Source & " @ " & relative)
+            End If
+
+            Return nested
         Next
 
-        Return info
+        Return direct
     End Function
 
     Public Function ResolvePluginFolderCandidates(gameFolder As String) As List(Of String)
@@ -97,6 +90,103 @@ Public Module OptiPatcherInstallDetector
         End If
 
         Return Path.Combine(gameFolder, ManifestFileName)
+    End Function
+
+    Private Function DetectInFolder(folderPath As String) As OptiPatcherInstallInfo
+        Dim info As New OptiPatcherInstallInfo()
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return info
+        End If
+
+        Dim manifest As OptiPatcherManifest = TryLoadManifest(folderPath)
+        If manifest IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(manifest.AsiPath) AndAlso File.Exists(manifest.AsiPath) Then
+            info.IsInstalled = True
+            info.Manifest = manifest
+            info.Source = "Manifest"
+            info.AsiPath = manifest.AsiPath
+            info.PluginFolder = If(String.IsNullOrWhiteSpace(manifest.PluginFolder), Path.GetDirectoryName(manifest.AsiPath), manifest.PluginFolder)
+            info.Version = If(String.IsNullOrWhiteSpace(manifest.OptiPatcherVersion), TryGetFileVersion(manifest.AsiPath), manifest.OptiPatcherVersion)
+            Return info
+        End If
+
+        Dim pluginFolders As List(Of String) = ResolvePluginFolderCandidates(folderPath)
+        For Each folder As String In pluginFolders
+            Dim candidate As String = Path.Combine(folder, "OptiPatcher.asi")
+            If Not File.Exists(candidate) Then
+                Continue For
+            End If
+
+            info.IsInstalled = True
+            info.Source = "Plugin file"
+            info.AsiPath = candidate
+            info.PluginFolder = folder
+            info.Version = TryGetFileVersion(candidate)
+            Return info
+        Next
+
+        Return info
+    End Function
+
+    Private Function GetNestedProbeFolders(gameFolder As String) As IEnumerable(Of String)
+        Dim folders As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        AddKnownProbePaths(folders, gameFolder)
+
+        Try
+            For Each child As String In Directory.EnumerateDirectories(gameFolder, "*", SearchOption.TopDirectoryOnly)
+                AddKnownProbePaths(folders, child)
+
+                For Each grandChild As String In Directory.EnumerateDirectories(child, "*", SearchOption.TopDirectoryOnly)
+                    AddKnownProbePaths(folders, grandChild)
+                Next
+            Next
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiPatcherInstallDetector.GetNestedProbeFolders")
+        End Try
+
+        Return folders
+    End Function
+
+    Private Sub AddKnownProbePaths(target As HashSet(Of String), baseFolder As String)
+        If String.IsNullOrWhiteSpace(baseFolder) OrElse target Is Nothing Then
+            Return
+        End If
+
+        Dim candidates As String() = {
+            Path.Combine(baseFolder, "Binaries", "Win64"),
+            Path.Combine(baseFolder, "Binaries", "Win32"),
+            Path.Combine(baseFolder, "Binaries", "WinGDK"),
+            Path.Combine(baseFolder, "Engine", "Binaries", "Win64"),
+            Path.Combine(baseFolder, "bin"),
+            Path.Combine(baseFolder, "bin", "x64"),
+            Path.Combine(baseFolder, "bin", "Win64"),
+            Path.Combine(baseFolder, "x64"),
+            Path.Combine(baseFolder, "Win64"),
+            Path.Combine(baseFolder, "Win32"),
+            Path.Combine(baseFolder, "WinGDK")
+        }
+
+        For Each candidate As String In candidates
+            If Directory.Exists(candidate) Then
+                target.Add(candidate)
+            End If
+        Next
+    End Sub
+
+    Private Function TryGetRelativeFolder(rootFolder As String, childFolder As String) As String
+        If String.IsNullOrWhiteSpace(rootFolder) OrElse String.IsNullOrWhiteSpace(childFolder) Then
+            Return String.Empty
+        End If
+
+        Try
+            Dim relative As String = IO.Path.GetRelativePath(rootFolder, childFolder)
+            If String.IsNullOrWhiteSpace(relative) OrElse relative = "." Then
+                Return String.Empty
+            End If
+            Return relative
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "OptiPatcherInstallDetector.TryGetRelativeFolder")
+            Return String.Empty
+        End Try
     End Function
 
     Private Function TryLoadManifest(gameFolder As String) As OptiPatcherManifest
