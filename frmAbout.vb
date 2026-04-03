@@ -10,6 +10,7 @@ Friend Partial Class frmAbout
     Inherits Form
 
     Private Const OptiScalerRepositoryUrl As String = "https://github.com/optiscaler/OptiScaler"
+    Private Const SponsorUrl As String = "https://github.com/sponsors/Wimukthi"
     Private ReadOnly _currentVersion As Version
     Private ReadOnly _latestRelease As UpdateReleaseInfo
     Private ReadOnly _repositoryUrl As String
@@ -45,6 +46,9 @@ Friend Partial Class frmAbout
             linkOptiScaler.LinkColor = Color.DeepSkyBlue
             linkOptiScaler.ActiveLinkColor = Color.CornflowerBlue
             linkOptiScaler.VisitedLinkColor = Color.DodgerBlue
+            linkSponsor.LinkColor = Color.DeepSkyBlue
+            linkSponsor.ActiveLinkColor = Color.CornflowerBlue
+            linkSponsor.VisitedLinkColor = Color.DodgerBlue
         Else
             linkRepo.LinkColor = Color.RoyalBlue
             linkRepo.ActiveLinkColor = Color.MediumBlue
@@ -52,6 +56,9 @@ Friend Partial Class frmAbout
             linkOptiScaler.LinkColor = Color.RoyalBlue
             linkOptiScaler.ActiveLinkColor = Color.MediumBlue
             linkOptiScaler.VisitedLinkColor = Color.Purple
+            linkSponsor.LinkColor = Color.RoyalBlue
+            linkSponsor.ActiveLinkColor = Color.MediumBlue
+            linkSponsor.VisitedLinkColor = Color.Purple
         End If
     End Sub
 
@@ -88,6 +95,11 @@ Friend Partial Class frmAbout
         linkOptiScaler.Links.Clear()
         linkOptiScaler.Links.Add(0, OptiScalerRepositoryUrl.Length, OptiScalerRepositoryUrl)
         linkOptiScaler.Enabled = True
+
+        linkSponsor.Text = SponsorUrl
+        linkSponsor.Links.Clear()
+        linkSponsor.Links.Add(0, SponsorUrl.Length, SponsorUrl)
+        linkSponsor.Enabled = True
     End Sub
 
     Private Function FormatVersionDisplay(version As Version, fallbackTag As String) As String
@@ -139,6 +151,24 @@ Friend Partial Class frmAbout
         Catch ex As Exception
             ErrorLogger.Log(ex, "frmAbout.OpenOptiScalerRepository")
             MessageBox.Show(Me, "Unable to open the OptiScaler repository link.", "About", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        End Try
+    End Sub
+
+    Private Sub linkSponsor_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles linkSponsor.LinkClicked
+        Dim target As String = TryCast(e.Link.LinkData, String)
+        If String.IsNullOrWhiteSpace(target) Then
+            target = SponsorUrl
+        End If
+
+        If String.IsNullOrWhiteSpace(target) Then
+            Return
+        End If
+
+        Try
+            Process.Start(New ProcessStartInfo(target) With {.UseShellExecute = True})
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmAbout.OpenSponsor")
+            MessageBox.Show(Me, "Unable to open the sponsor link.", "About", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 

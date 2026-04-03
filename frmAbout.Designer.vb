@@ -32,6 +32,8 @@ Partial Class frmAbout
         linkOptiScaler = New LinkLabel()
         lblAuthorTitle = New Label()
         lblAuthorValue = New Label()
+        lblSponsorTitle = New Label()
+        linkSponsor = New LinkLabel()
         btnClose = New Button()
         tableRoot.SuspendLayout()
         tableDetails.SuspendLayout()
@@ -52,7 +54,7 @@ Partial Class frmAbout
         tableRoot.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableRoot.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
         tableRoot.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        tableRoot.Size = New Size(640, 280)
+        tableRoot.Size = New Size(640, 305)
         tableRoot.TabIndex = 0
         '
         ' lblTitle
@@ -83,18 +85,21 @@ Partial Class frmAbout
         tableDetails.Controls.Add(linkOptiScaler, 1, 4)
         tableDetails.Controls.Add(lblAuthorTitle, 0, 5)
         tableDetails.Controls.Add(lblAuthorValue, 1, 5)
+        tableDetails.Controls.Add(lblSponsorTitle, 0, 6)
+        tableDetails.Controls.Add(linkSponsor, 1, 6)
         tableDetails.Dock = DockStyle.Fill
         tableDetails.Location = New Point(16, 49)
         tableDetails.Margin = New Padding(0, 0, 0, 12)
         tableDetails.Name = "tableDetails"
-        tableDetails.RowCount = 6
+        tableDetails.RowCount = 7
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        tableDetails.Size = New Size(608, 169)
+        tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        tableDetails.Size = New Size(608, 194)
         tableDetails.TabIndex = 1
         '
         ' lblCurrentTitle
@@ -221,10 +226,32 @@ Partial Class frmAbout
         lblAuthorValue.TabIndex = 11
         lblAuthorValue.Text = "N/A"
         '
+        ' lblSponsorTitle
+        '
+        lblSponsorTitle.AutoSize = True
+        lblSponsorTitle.Location = New Point(0, 150)
+        lblSponsorTitle.Margin = New Padding(0, 0, 12, 0)
+        lblSponsorTitle.Name = "lblSponsorTitle"
+        lblSponsorTitle.Size = New Size(50, 15)
+        lblSponsorTitle.TabIndex = 12
+        lblSponsorTitle.Text = "Sponsor"
+        '
+        ' linkSponsor
+        '
+        linkSponsor.AutoEllipsis = True
+        linkSponsor.AutoSize = True
+        linkSponsor.Location = New Point(98, 150)
+        linkSponsor.Margin = New Padding(0)
+        linkSponsor.Name = "linkSponsor"
+        linkSponsor.Size = New Size(28, 15)
+        linkSponsor.TabIndex = 13
+        linkSponsor.TabStop = True
+        linkSponsor.Text = "N/A"
+        '
         ' btnClose
         '
         btnClose.Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
-        btnClose.Location = New Point(529, 230)
+        btnClose.Location = New Point(529, 255)
         btnClose.Name = "btnClose"
         btnClose.Size = New Size(95, 30)
         btnClose.TabIndex = 2
@@ -235,7 +262,7 @@ Partial Class frmAbout
         '
         AutoScaleDimensions = New SizeF(96.0F, 96.0F)
         AutoScaleMode = AutoScaleMode.Dpi
-        ClientSize = New Size(640, 280)
+        ClientSize = New Size(640, 305)
         Controls.Add(tableRoot)
         FormBorderStyle = FormBorderStyle.FixedDialog
         MaximizeBox = False
@@ -267,5 +294,7 @@ Partial Class frmAbout
     Friend WithEvents linkOptiScaler As LinkLabel
     Friend WithEvents lblAuthorTitle As Label
     Friend WithEvents lblAuthorValue As Label
+    Friend WithEvents lblSponsorTitle As Label
+    Friend WithEvents linkSponsor As LinkLabel
     Friend WithEvents btnClose As Button
 End Class
