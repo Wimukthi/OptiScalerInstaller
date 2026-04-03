@@ -2,13 +2,24 @@ Imports System.IO
 Imports System.Text.Json
 Imports System.Text.RegularExpressions
 Imports System.Linq
+Imports System.Collections.Concurrent
+Imports System.Threading.Tasks
+Imports System.Threading
 Imports Microsoft.Win32
 
 Public Class DetectionService
+    Public Class DeepScanProgressInfo
+        Public Property RootPath As String
+        Public Property CurrentDirectory As String
+        Public Property ScannedFoldersInRoot As Integer
+        Public Property MaxFoldersPerRoot As Integer
+        Public Property TotalRoots As Integer
+        Public Property RootsCompleted As Integer
+    End Class
+
     ' Scans known launchers and matches installs against the compatibility list.
     Public Shared Function DetectSupportedGames(entries As IEnumerable(Of CompatibilityEntry),
-                                                log As Action(Of String),
-                                                Optional customScanFolders As IEnumerable(Of String) = Nothing) As List(Of DetectedGame)
+                                                log As Action(Of String)) As List(Of DetectedGame)
         Dim results As New List(Of DetectedGame)()
         If entries Is Nothing Then
             Return results
@@ -22,7 +33,6 @@ Public Class DetectionService
         AddGogGames(matcher, results, seenPaths, log)
         AddEaGames(matcher, results, seenPaths, log)
         AddUbisoftGames(matcher, results, seenPaths, log)
-        AddCustomFolderGames(matcher, results, seenPaths, customScanFolders, log)
 
         results.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName))
         Return results
@@ -273,63 +283,157 @@ Public Class DetectionService
         seenPaths.Add(trimmedPath)
     End Sub
 
-    Private Shared Sub AddCustomFolderGames(matcher As CompatibilityMatcher,
-                                            results As List(Of DetectedGame),
-                                            seenPaths As HashSet(Of String),
-                                            customScanFolders As IEnumerable(Of String),
-                                            log As Action(Of String))
-        If customScanFolders Is Nothing Then
-            Return
+    Public Shared Function GetScannableDriveRoots(log As Action(Of String)) As List(Of String)
+        Dim roots As New List(Of String)()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+        For Each drive As DriveInfo In DriveInfo.GetDrives()
+            Try
+                If Not drive.IsReady Then
+                    Continue For
+                End If
+
+                Select Case drive.DriveType
+                    Case DriveType.Fixed, DriveType.Removable, DriveType.Network
+                        Dim root As String = NormalizeInstallPath(drive.RootDirectory.FullName)
+                        If String.IsNullOrWhiteSpace(root) OrElse seen.Contains(root) Then
+                            Continue For
+                        End If
+
+                        roots.Add(root)
+                        seen.Add(root)
+                End Select
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.GetScannableDriveRoots")
+            End Try
+        Next
+
+        roots.Sort(StringComparer.OrdinalIgnoreCase)
+        If log IsNot Nothing Then
+            log("Scannable drives: " & If(roots.Count = 0, "none", String.Join(", ", roots)))
         End If
 
-        For Each folder As String In customScanFolders
-            Dim root As String = NormalizeInstallPath(folder)
-            If String.IsNullOrWhiteSpace(root) Then
-                Continue For
-            End If
-            If Not Directory.Exists(root) Then
-                Continue For
-            End If
+        Return roots
+    End Function
 
+    Public Shared Function DetectSupportedGamesByDriveScan(entries As IEnumerable(Of CompatibilityEntry),
+                                                           driveRoots As IEnumerable(Of String),
+                                                           log As Action(Of String),
+                                                           Optional progress As Action(Of DeepScanProgressInfo) = Nothing) As List(Of DetectedGame)
+        Dim results As New List(Of DetectedGame)()
+        If entries Is Nothing OrElse driveRoots Is Nothing Then
+            Return results
+        End If
+
+        Dim roots As List(Of String) = driveRoots.
+            Where(Function(path) Not String.IsNullOrWhiteSpace(path)).
+            Select(Function(path) NormalizeInstallPath(path)).
+            Where(Function(path) Not String.IsNullOrWhiteSpace(path) AndAlso Directory.Exists(path)).
+            Distinct(StringComparer.OrdinalIgnoreCase).
+            ToList()
+
+        If roots.Count = 0 Then
             If log IsNot Nothing Then
-                log("Scanning custom folder: " & root)
+                log("Deep scan skipped: no valid drive roots selected.")
             End If
+            Return results
+        End If
 
-            ScanCustomRoot(matcher, results, seenPaths, root)
+        Dim matcher As New CompatibilityMatcher(entries)
+        Dim seenPaths As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim candidates As New ConcurrentDictionary(Of String, DeepScanCandidate)(StringComparer.OrdinalIgnoreCase)
+        Dim options As New ParallelOptions With {
+            .MaxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 6))
+        }
+        Dim totalRoots As Integer = roots.Count
+        Dim completedRoots As Integer = 0
+
+        If log IsNot Nothing Then
+            log("Deep scan started for drives: " & String.Join(", ", roots))
+        End If
+
+        Parallel.ForEach(roots, options, Sub(root)
+                                             ScanDriveRoot(matcher,
+                                                          root,
+                                                          candidates,
+                                                          log,
+                                                          totalRoots,
+                                                          Function() Volatile.Read(completedRoots),
+                                                          progress)
+                                             Interlocked.Increment(completedRoots)
+                                         End Sub)
+
+        For Each candidate As DeepScanCandidate In candidates.Values.OrderBy(Function(item) item.DisplayName, StringComparer.OrdinalIgnoreCase)
+            AddIfSupported(matcher, results, seenPaths, candidate.DisplayName, candidate.InstallDir, candidate.Platform)
         Next
-    End Sub
 
-    Private Shared Sub ScanCustomRoot(matcher As CompatibilityMatcher,
-                                      results As List(Of DetectedGame),
-                                      seenPaths As HashSet(Of String),
-                                      root As String)
+        results.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName))
+        Return results
+    End Function
+
+    Private Shared Sub ScanDriveRoot(matcher As CompatibilityMatcher,
+                                     root As String,
+                                     candidates As ConcurrentDictionary(Of String, DeepScanCandidate),
+                                     log As Action(Of String),
+                                     totalRoots As Integer,
+                                     completedRootsProvider As Func(Of Integer),
+                                     progress As Action(Of DeepScanProgressInfo))
+        Const maxDepth As Integer = 9
+        Const progressUpdateInterval As Integer = 200
         Dim queue As New Queue(Of ScanNode)()
         queue.Enqueue(New ScanNode With {.FolderPath = root, .Depth = 0})
         Dim visited As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-        Dim maxDepth As Integer = 3
-        Dim maxFolders As Integer = 2500
-        Dim scanned As Integer = 0
+        Dim scannedFolders As Integer = 0
+        Dim localHits As Integer = 0
+        Dim nextProgressFolderCount As Integer = 1
 
-        While queue.Count > 0 AndAlso scanned < maxFolders
+        If log IsNot Nothing Then
+            log("Deep scan: scanning " & root)
+        End If
+        ReportDeepScanProgress(progress, root, root, scannedFolders, totalRoots, completedRootsProvider, False)
+
+        While queue.Count > 0 AndAlso scannedFolders < ScanRootFolderBudget
             Dim node As ScanNode = queue.Dequeue()
-            scanned += 1
-
             Dim normalized As String = NormalizeInstallPath(node.FolderPath)
             If String.IsNullOrWhiteSpace(normalized) OrElse visited.Contains(normalized) Then
                 Continue While
             End If
             visited.Add(normalized)
 
+            If ShouldSkipScanDirectory(normalized, node.Depth = 0) Then
+                Continue While
+            End If
+
+            scannedFolders += 1
+            If scannedFolders >= nextProgressFolderCount Then
+                ReportDeepScanProgress(progress, root, normalized, scannedFolders, totalRoots, completedRootsProvider, False)
+                nextProgressFolderCount = scannedFolders + progressUpdateInterval
+            End If
+
             Dim folderName As String = Path.GetFileName(normalized)
-            If Not String.IsNullOrWhiteSpace(folderName) Then
-                AddIfSupported(matcher, results, seenPaths, folderName, normalized, "Custom")
+            If String.IsNullOrWhiteSpace(folderName) AndAlso node.Depth = 0 Then
+                folderName = normalized
+            End If
+
+            Dim folderMatch As CompatibilityEntry = matcher.Match(folderName)
+            If folderMatch IsNot Nothing Then
+                Dim installDir As String = ResolveMatchedFolderInstallDir(normalized)
+                If Not String.IsNullOrWhiteSpace(installDir) Then
+                    If candidates.TryAdd(installDir, New DeepScanCandidate With {
+                                         .DisplayName = folderMatch.Name,
+                                         .InstallDir = installDir,
+                                         .Platform = "Drive scan"
+                                     }) Then
+                        localHits += 1
+                    End If
+                End If
             End If
 
             Dim executables As IEnumerable(Of String) = Enumerable.Empty(Of String)()
             Try
                 executables = Directory.EnumerateFiles(normalized, "*.exe", SearchOption.TopDirectoryOnly)
             Catch ex As Exception
-                ErrorLogger.Log(ex, "DetectionService.ScanCustomRoot.EnumerateExe")
+                ErrorLogger.Log(ex, "DetectionService.ScanDriveRoot.EnumerateExe")
             End Try
 
             For Each exePath As String In executables
@@ -338,7 +442,23 @@ Public Class DetectionService
                     Continue For
                 End If
 
-                AddIfSupported(matcher, results, seenPaths, exeName, normalized, "Custom")
+                Dim exeMatch As CompatibilityEntry = matcher.Match(exeName)
+                If exeMatch Is Nothing Then
+                    Continue For
+                End If
+
+                Dim installDir As String = NormalizeInstallPath(Path.GetDirectoryName(exePath))
+                If String.IsNullOrWhiteSpace(installDir) Then
+                    Continue For
+                End If
+
+                If candidates.TryAdd(installDir, New DeepScanCandidate With {
+                                     .DisplayName = exeMatch.Name,
+                                     .InstallDir = installDir,
+                                     .Platform = "Drive scan"
+                                 }) Then
+                    localHits += 1
+                End If
             Next
 
             If node.Depth >= maxDepth Then
@@ -349,14 +469,168 @@ Public Class DetectionService
             Try
                 children = Directory.EnumerateDirectories(normalized, "*", SearchOption.TopDirectoryOnly)
             Catch ex As Exception
-                ErrorLogger.Log(ex, "DetectionService.ScanCustomRoot.EnumerateDirs")
+                ErrorLogger.Log(ex, "DetectionService.ScanDriveRoot.EnumerateDirs")
             End Try
 
             For Each child As String In children
+                Dim childName As String = Path.GetFileName(child)
+                If ShouldSkipScanDirectoryName(childName) Then
+                    Continue For
+                End If
+
+                Try
+                    Dim attributes As FileAttributes = File.GetAttributes(child)
+                    If (attributes And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
+                        Continue For
+                    End If
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "DetectionService.ScanDriveRoot.CheckAttributes")
+                End Try
+
                 queue.Enqueue(New ScanNode With {.FolderPath = child, .Depth = node.Depth + 1})
             Next
         End While
+        ReportDeepScanProgress(progress, root, root, scannedFolders, totalRoots, completedRootsProvider, True)
+
+        If log IsNot Nothing Then
+            If scannedFolders >= ScanRootFolderBudget Then
+                log("Deep scan: " & root & " reached folder budget (" & ScanRootFolderBudget & ").")
+            End If
+            log("Deep scan: finished " & root & " (" & scannedFolders & " folders, " & localHits & " candidate match(es)).")
+        End If
     End Sub
+
+    Private Shared Sub ReportDeepScanProgress(progress As Action(Of DeepScanProgressInfo),
+                                              root As String,
+                                              currentDirectory As String,
+                                              scannedFolders As Integer,
+                                              totalRoots As Integer,
+                                              completedRootsProvider As Func(Of Integer),
+                                              includeCurrentRootCompletion As Boolean)
+        If progress Is Nothing Then
+            Return
+        End If
+
+        Dim completedRoots As Integer = 0
+        If completedRootsProvider IsNot Nothing Then
+            completedRoots = Math.Max(0, completedRootsProvider())
+        End If
+        If includeCurrentRootCompletion Then
+            completedRoots += 1
+        End If
+
+        progress(New DeepScanProgressInfo With {
+                 .RootPath = root,
+                 .CurrentDirectory = currentDirectory,
+                 .ScannedFoldersInRoot = Math.Max(0, scannedFolders),
+                 .MaxFoldersPerRoot = ScanRootFolderBudget,
+                 .TotalRoots = Math.Max(1, totalRoots),
+                 .RootsCompleted = Math.Min(Math.Max(1, totalRoots), completedRoots)
+                 })
+    End Sub
+
+    Private Shared Function ResolveMatchedFolderInstallDir(folderPath As String) As String
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return ""
+        End If
+
+        If HasUsableExecutable(folderPath) Then
+            Return folderPath
+        End If
+
+        Dim probeFolders As String() = {
+            Path.Combine(folderPath, "Binaries", "Win64"),
+            Path.Combine(folderPath, "Binaries", "Win32"),
+            Path.Combine(folderPath, "Binaries", "WinGDK"),
+            Path.Combine(folderPath, "bin"),
+            Path.Combine(folderPath, "bin", "x64"),
+            Path.Combine(folderPath, "bin", "Win64"),
+            Path.Combine(folderPath, "x64"),
+            Path.Combine(folderPath, "Win64"),
+            Path.Combine(folderPath, "Win32"),
+            Path.Combine(folderPath, "WinGDK")
+        }
+
+        For Each probe As String In probeFolders
+            Dim normalized As String = NormalizeInstallPath(probe)
+            If String.IsNullOrWhiteSpace(normalized) OrElse Not Directory.Exists(normalized) Then
+                Continue For
+            End If
+
+            If HasUsableExecutable(normalized) Then
+                Return normalized
+            End If
+        Next
+
+        Return ""
+    End Function
+
+    Private Shared Function HasUsableExecutable(folderPath As String) As Boolean
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return False
+        End If
+
+        Try
+            For Each exePath As String In Directory.EnumerateFiles(folderPath, "*.exe", SearchOption.TopDirectoryOnly)
+                Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
+                If Not ShouldSkipExecutable(exeName) Then
+                    Return True
+                End If
+            Next
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "DetectionService.HasUsableExecutable")
+        End Try
+
+        Return False
+    End Function
+
+    Private Shared Function ShouldSkipScanDirectory(pathValue As String, isRoot As Boolean) As Boolean
+        If String.IsNullOrWhiteSpace(pathValue) Then
+            Return True
+        End If
+        If isRoot Then
+            Return False
+        End If
+
+        Dim name As String = Path.GetFileName(pathValue)
+        Return ShouldSkipScanDirectoryName(name)
+    End Function
+
+    Private Shared Function ShouldSkipScanDirectoryName(folderName As String) As Boolean
+        If String.IsNullOrWhiteSpace(folderName) Then
+            Return False
+        End If
+
+        Dim blockedNames As String() = {
+            "$recycle.bin",
+            "system volume information",
+            "windows",
+            "programdata",
+            "$winreagent",
+            "$windows.~bt",
+            "$windows.~ws",
+            "msocache",
+            "winsxs",
+            "appdata",
+            "temp",
+            "tmp",
+            "__pycache__",
+            "node_modules"
+        }
+
+        Dim lowered As String = folderName.Trim().ToLowerInvariant()
+        If lowered.StartsWith(".") Then
+            Return True
+        End If
+
+        For Each blocked As String In blockedNames
+            If lowered = blocked Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
 
     Private Shared Function ShouldSkipExecutable(exeName As String) As Boolean
         If String.IsNullOrWhiteSpace(exeName) Then
@@ -560,8 +834,16 @@ Public Class DetectionService
         End Function
     End Class
 
+    Private Class DeepScanCandidate
+        Public Property DisplayName As String
+        Public Property InstallDir As String
+        Public Property Platform As String
+    End Class
+
     Private Class ScanNode
         Public Property FolderPath As String
         Public Property Depth As Integer
     End Class
+
+    Private Const ScanRootFolderBudget As Integer = 180000
 End Class

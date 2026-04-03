@@ -33,12 +33,14 @@ Partial Class MainForm
         colCompatPath = New ColumnHeader()
         compatFooterPanel = New Panel()
         lblCompatibilityNote = New Label()
+        chkHideNonDetected = New CheckBox()
         compatHeaderPanel = New Panel()
         compatHeaderLeftPanel = New TableLayoutPanel()
         lblSearch = New Label()
         txtGameSearch = New ThemedTextBox()
         compatHeaderRightPanel = New FlowLayoutPanel()
         btnScanDetected = New Button()
+        btnDeepScanDrives = New Button()
         btnUseDetected = New Button()
         btnRefreshCompatibility = New Button()
         btnOpenWiki = New Button()
@@ -174,9 +176,6 @@ Partial Class MainForm
         chkAutoRefreshCompatibilityOnStartup = New CheckBox()
         chkAutoCheckInstallerUpdates = New CheckBox()
         chkShowExperimentalTabOnUnsupportedGpu = New CheckBox()
-        lblCustomScanFolder = New Label()
-        txtCustomScanFolder = New ThemedTextBox()
-        btnBrowseCustomScanFolder = New Button()
         lblDefaultIniPath = New Label()
         txtDefaultIniPath = New ThemedTextBox()
         btnBrowseDefaultIni = New Button()
@@ -345,6 +344,7 @@ Partial Class MainForm
         ' compatFooterPanel
         ' 
         compatFooterPanel.Controls.Add(lblCompatibilityNote)
+        compatFooterPanel.Controls.Add(chkHideNonDetected)
         compatFooterPanel.Dock = DockStyle.Bottom
         compatFooterPanel.Location = New Point(3, 652)
         compatFooterPanel.Name = "compatFooterPanel"
@@ -359,6 +359,18 @@ Partial Class MainForm
         lblCompatibilityNote.Size = New Size(532, 15)
         lblCompatibilityNote.TabIndex = 8
         lblCompatibilityNote.Text = "List shows tested games only. Detected/Anti-cheat columns are best-effort and may be incomplete."
+        ' 
+        ' chkHideNonDetected
+        ' 
+        chkHideNonDetected.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        chkHideNonDetected.AutoSize = True
+        chkHideNonDetected.Location = New Point(1111, 2)
+        chkHideNonDetected.Margin = New Padding(0)
+        chkHideNonDetected.Name = "chkHideNonDetected"
+        chkHideNonDetected.Size = New Size(121, 19)
+        chkHideNonDetected.TabIndex = 9
+        chkHideNonDetected.Text = "Hide non-detected"
+        chkHideNonDetected.UseVisualStyleBackColor = True
         ' 
         ' compatHeaderPanel
         ' 
@@ -415,14 +427,15 @@ Partial Class MainForm
         compatHeaderRightPanel.AutoSize = True
         compatHeaderRightPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink
         compatHeaderRightPanel.Controls.Add(btnScanDetected)
+        compatHeaderRightPanel.Controls.Add(btnDeepScanDrives)
         compatHeaderRightPanel.Controls.Add(btnUseDetected)
         compatHeaderRightPanel.Controls.Add(btnRefreshCompatibility)
         compatHeaderRightPanel.Controls.Add(btnOpenWiki)
         compatHeaderRightPanel.Dock = DockStyle.Right
-        compatHeaderRightPanel.Location = New Point(682, 6)
+        compatHeaderRightPanel.Location = New Point(546, 6)
         compatHeaderRightPanel.Margin = New Padding(0)
         compatHeaderRightPanel.Name = "compatHeaderRightPanel"
-        compatHeaderRightPanel.Size = New Size(552, 32)
+        compatHeaderRightPanel.Size = New Size(688, 32)
         compatHeaderRightPanel.TabIndex = 1
         compatHeaderRightPanel.WrapContents = False
         ' 
@@ -437,36 +450,47 @@ Partial Class MainForm
         btnScanDetected.Text = "Scan installed games"
         btnScanDetected.UseVisualStyleBackColor = True
         ' 
+        ' btnDeepScanDrives
+        ' 
+        btnDeepScanDrives.Anchor = AnchorStyles.None
+        btnDeepScanDrives.Location = New Point(140, 0)
+        btnDeepScanDrives.Margin = New Padding(6, 0, 0, 0)
+        btnDeepScanDrives.Name = "btnDeepScanDrives"
+        btnDeepScanDrives.Size = New Size(130, 27)
+        btnDeepScanDrives.TabIndex = 3
+        btnDeepScanDrives.Text = "Deep scan drives"
+        btnDeepScanDrives.UseVisualStyleBackColor = True
+        ' 
         ' btnUseDetected
         ' 
         btnUseDetected.Anchor = AnchorStyles.None
-        btnUseDetected.Location = New Point(140, 0)
+        btnUseDetected.Location = New Point(276, 0)
         btnUseDetected.Margin = New Padding(6, 0, 0, 0)
         btnUseDetected.Name = "btnUseDetected"
         btnUseDetected.Size = New Size(130, 27)
-        btnUseDetected.TabIndex = 3
+        btnUseDetected.TabIndex = 4
         btnUseDetected.Text = "Use detected"
         btnUseDetected.UseVisualStyleBackColor = True
         ' 
         ' btnRefreshCompatibility
         ' 
         btnRefreshCompatibility.Anchor = AnchorStyles.None
-        btnRefreshCompatibility.Location = New Point(276, 0)
+        btnRefreshCompatibility.Location = New Point(412, 0)
         btnRefreshCompatibility.Margin = New Padding(6, 0, 0, 0)
         btnRefreshCompatibility.Name = "btnRefreshCompatibility"
         btnRefreshCompatibility.Size = New Size(130, 27)
-        btnRefreshCompatibility.TabIndex = 4
+        btnRefreshCompatibility.TabIndex = 5
         btnRefreshCompatibility.Text = "Refresh lists"
         btnRefreshCompatibility.UseVisualStyleBackColor = True
         ' 
         ' btnOpenWiki
         ' 
         btnOpenWiki.Anchor = AnchorStyles.None
-        btnOpenWiki.Location = New Point(412, 0)
+        btnOpenWiki.Location = New Point(548, 0)
         btnOpenWiki.Margin = New Padding(6, 0, 0, 0)
         btnOpenWiki.Name = "btnOpenWiki"
         btnOpenWiki.Size = New Size(140, 27)
-        btnOpenWiki.TabIndex = 5
+        btnOpenWiki.TabIndex = 6
         btnOpenWiki.Text = "Open wiki page"
         btnOpenWiki.UseVisualStyleBackColor = True
         ' 
@@ -1794,9 +1818,6 @@ Partial Class MainForm
         grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
         grpSettings.Controls.Add(chkAutoCheckInstallerUpdates)
         grpSettings.Controls.Add(chkShowExperimentalTabOnUnsupportedGpu)
-        grpSettings.Controls.Add(lblCustomScanFolder)
-        grpSettings.Controls.Add(txtCustomScanFolder)
-        grpSettings.Controls.Add(btnBrowseCustomScanFolder)
         grpSettings.Controls.Add(lblDefaultIniPath)
         grpSettings.Controls.Add(txtDefaultIniPath)
         grpSettings.Controls.Add(btnBrowseDefaultIni)
@@ -1957,41 +1978,10 @@ Partial Class MainForm
         chkShowExperimentalTabOnUnsupportedGpu.Text = "Show FSR4 experimental tab on unsupported GPUs"
         chkShowExperimentalTabOnUnsupportedGpu.UseVisualStyleBackColor = True
         ' 
-        ' lblCustomScanFolder
-        ' 
-        lblCustomScanFolder.AutoSize = True
-        lblCustomScanFolder.Location = New Point(12, 226)
-        lblCustomScanFolder.Name = "lblCustomScanFolder"
-        lblCustomScanFolder.Size = New Size(106, 15)
-        lblCustomScanFolder.TabIndex = 15
-        lblCustomScanFolder.Text = "Custom scan folder"
-        ' 
-        ' txtCustomScanFolder
-        ' 
-        txtCustomScanFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
-        txtCustomScanFolder.BackColor = SystemColors.Window
-        txtCustomScanFolder.ForeColor = SystemColors.WindowText
-        txtCustomScanFolder.Location = New Point(180, 222)
-        txtCustomScanFolder.MinimumSize = New Size(0, 24)
-        txtCustomScanFolder.Name = "txtCustomScanFolder"
-        txtCustomScanFolder.Padding = New Padding(6, 3, 6, 3)
-        txtCustomScanFolder.Size = New Size(910, 24)
-        txtCustomScanFolder.TabIndex = 16
-        ' 
-        ' btnBrowseCustomScanFolder
-        ' 
-        btnBrowseCustomScanFolder.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseCustomScanFolder.Location = New Point(1098, 222)
-        btnBrowseCustomScanFolder.Name = "btnBrowseCustomScanFolder"
-        btnBrowseCustomScanFolder.Size = New Size(100, 24)
-        btnBrowseCustomScanFolder.TabIndex = 17
-        btnBrowseCustomScanFolder.Text = "Browse"
-        btnBrowseCustomScanFolder.UseVisualStyleBackColor = True
-        ' 
         ' lblDefaultIniPath
         ' 
         lblDefaultIniPath.AutoSize = True
-        lblDefaultIniPath.Location = New Point(12, 262)
+        lblDefaultIniPath.Location = New Point(12, 226)
         lblDefaultIniPath.Name = "lblDefaultIniPath"
         lblDefaultIniPath.Size = New Size(113, 15)
         lblDefaultIniPath.TabIndex = 18
@@ -2002,7 +1992,7 @@ Partial Class MainForm
         txtDefaultIniPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtDefaultIniPath.BackColor = SystemColors.Window
         txtDefaultIniPath.ForeColor = SystemColors.WindowText
-        txtDefaultIniPath.Location = New Point(180, 258)
+        txtDefaultIniPath.Location = New Point(180, 222)
         txtDefaultIniPath.MinimumSize = New Size(0, 24)
         txtDefaultIniPath.Name = "txtDefaultIniPath"
         txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
@@ -2012,7 +2002,7 @@ Partial Class MainForm
         ' btnBrowseDefaultIni
         ' 
         btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseDefaultIni.Location = New Point(1098, 258)
+        btnBrowseDefaultIni.Location = New Point(1098, 222)
         btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
         btnBrowseDefaultIni.Size = New Size(100, 24)
         btnBrowseDefaultIni.TabIndex = 20
@@ -2022,7 +2012,7 @@ Partial Class MainForm
         ' lblDefaultIniMode
         ' 
         lblDefaultIniMode.AutoSize = True
-        lblDefaultIniMode.Location = New Point(12, 294)
+        lblDefaultIniMode.Location = New Point(12, 258)
         lblDefaultIniMode.Name = "lblDefaultIniMode"
         lblDefaultIniMode.Size = New Size(112, 15)
         lblDefaultIniMode.TabIndex = 21
@@ -2033,7 +2023,7 @@ Partial Class MainForm
         cmbDefaultIniMode.DropDownStyle = ComboBoxStyle.DropDownList
         cmbDefaultIniMode.FormattingEnabled = True
         cmbDefaultIniMode.Items.AddRange(New Object() {"Off", "Merge", "Replace"})
-        cmbDefaultIniMode.Location = New Point(180, 290)
+        cmbDefaultIniMode.Location = New Point(180, 254)
         cmbDefaultIniMode.Name = "cmbDefaultIniMode"
         cmbDefaultIniMode.Size = New Size(220, 23)
         cmbDefaultIniMode.TabIndex = 22
@@ -2054,7 +2044,7 @@ Partial Class MainForm
         grpDefaultInstall.Controls.Add(lblDefaultConflictMode)
         grpDefaultInstall.Controls.Add(cmbDefaultConflictMode)
         grpDefaultInstall.Controls.Add(btnApplyDefaults)
-        grpDefaultInstall.Location = New Point(12, 334)
+        grpDefaultInstall.Location = New Point(12, 298)
         grpDefaultInstall.Name = "grpDefaultInstall"
         grpDefaultInstall.Size = New Size(1186, 250)
         grpDefaultInstall.TabIndex = 23
@@ -2322,7 +2312,7 @@ Partial Class MainForm
         ' 
         ' statusStrip
         ' 
-        statusStrip.Items.AddRange(New ToolStripItem() {toolStatusLabel, toolDetectedLabel, toolProgressBar})
+        statusStrip.Items.AddRange(New ToolStripItem() {toolDetectedLabel, toolProgressBar, toolStatusLabel})
         statusStrip.Location = New Point(0, 875)
         statusStrip.Name = "statusStrip"
         statusStrip.Size = New Size(1270, 22)
@@ -2332,6 +2322,7 @@ Partial Class MainForm
         ' toolStatusLabel
         ' 
         toolStatusLabel.Name = "toolStatusLabel"
+        toolStatusLabel.Spring = True
         toolStatusLabel.Size = New Size(39, 17)
         toolStatusLabel.Text = "Ready"
         ' 
@@ -2444,9 +2435,6 @@ Partial Class MainForm
     Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
     Friend WithEvents chkAutoCheckInstallerUpdates As System.Windows.Forms.CheckBox
     Friend WithEvents chkShowExperimentalTabOnUnsupportedGpu As System.Windows.Forms.CheckBox
-    Friend WithEvents lblCustomScanFolder As System.Windows.Forms.Label
-    Friend WithEvents txtCustomScanFolder As OptiScalerInstaller.ThemedTextBox
-    Friend WithEvents btnBrowseCustomScanFolder As System.Windows.Forms.Button
     Friend WithEvents lblDefaultIniPath As System.Windows.Forms.Label
     Friend WithEvents txtDefaultIniPath As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents btnBrowseDefaultIni As System.Windows.Forms.Button
@@ -2592,6 +2580,7 @@ Partial Class MainForm
     Friend WithEvents compatHeaderLeftPanel As System.Windows.Forms.TableLayoutPanel
     Friend WithEvents compatHeaderRightPanel As System.Windows.Forms.FlowLayoutPanel
     Friend WithEvents lblCompatibilityNote As System.Windows.Forms.Label
+    Friend WithEvents chkHideNonDetected As System.Windows.Forms.CheckBox
     Friend WithEvents btnOpenWiki As System.Windows.Forms.Button
     Friend WithEvents btnRefreshCompatibility As System.Windows.Forms.Button
     Friend WithEvents lvCompatibility As OptiScalerInstaller.ThemedListView
@@ -2605,6 +2594,7 @@ Partial Class MainForm
     Friend WithEvents txtGameSearch As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblSearch As System.Windows.Forms.Label
     Friend WithEvents btnScanDetected As System.Windows.Forms.Button
+    Friend WithEvents btnDeepScanDrives As System.Windows.Forms.Button
     Friend WithEvents btnUseDetected As System.Windows.Forms.Button
     Friend WithEvents txtLog As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents statusStrip As System.Windows.Forms.StatusStrip

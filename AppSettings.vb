@@ -116,8 +116,8 @@ Friend Class AppSettingsModel
     Public Property OptiPatcherLocalPath As String
     Public Property AutoRefreshCompatibilityOnStartup As Boolean?
     Public Property AutoCheckInstallerUpdates As Boolean?
+    Public Property HideNonDetectedGames As Boolean?
     Public Property ShowExperimentalTabOnUnsupportedGpu As Boolean?
-    Public Property CustomScanFolder As String
     Public Property EnableGameTemplates As Boolean?
     Public Property HighlightCompatibilityChanges As Boolean?
     Public Property DefaultIniMode As String
@@ -199,12 +199,12 @@ Friend Class AppSettingsModel
             AutoCheckInstallerUpdates = defaults.AutoCheckInstallerUpdates
             changed = True
         End If
-        If Not ShowExperimentalTabOnUnsupportedGpu.HasValue AndAlso defaults.ShowExperimentalTabOnUnsupportedGpu.HasValue Then
-            ShowExperimentalTabOnUnsupportedGpu = defaults.ShowExperimentalTabOnUnsupportedGpu
+        If Not HideNonDetectedGames.HasValue AndAlso defaults.HideNonDetectedGames.HasValue Then
+            HideNonDetectedGames = defaults.HideNonDetectedGames
             changed = True
         End If
-        If String.IsNullOrWhiteSpace(CustomScanFolder) AndAlso Not String.IsNullOrWhiteSpace(defaults.CustomScanFolder) Then
-            CustomScanFolder = defaults.CustomScanFolder
+        If Not ShowExperimentalTabOnUnsupportedGpu.HasValue AndAlso defaults.ShowExperimentalTabOnUnsupportedGpu.HasValue Then
+            ShowExperimentalTabOnUnsupportedGpu = defaults.ShowExperimentalTabOnUnsupportedGpu
             changed = True
         End If
         If Not EnableGameTemplates.HasValue AndAlso defaults.EnableGameTemplates.HasValue Then

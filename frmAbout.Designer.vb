@@ -19,6 +19,8 @@ Partial Class frmAbout
     Private Sub InitializeComponent()
         tableRoot = New TableLayoutPanel()
         lblTitle = New Label()
+        tabAboutMain = New TabControl()
+        tabPageAbout = New TabPage()
         tableDetails = New TableLayoutPanel()
         lblCurrentTitle = New Label()
         lblCurrentValue = New Label()
@@ -34,9 +36,24 @@ Partial Class frmAbout
         lblAuthorValue = New Label()
         lblSponsorTitle = New Label()
         linkSponsor = New LinkLabel()
+        tabPageSponsors = New TabPage()
+        sponsorsLayout = New TableLayoutPanel()
+        lblSponsorsIntro = New Label()
+        lvSponsors = New ThemedListView()
+        colSponsorName = New ColumnHeader()
+        colSponsorProfile = New ColumnHeader()
+        lblSponsorsStatus = New Label()
+        panelSponsorsActions = New Panel()
+        btnRefreshSponsors = New Button()
+        linkSponsorsPage = New LinkLabel()
         btnClose = New Button()
         tableRoot.SuspendLayout()
+        tabAboutMain.SuspendLayout()
+        tabPageAbout.SuspendLayout()
         tableDetails.SuspendLayout()
+        tabPageSponsors.SuspendLayout()
+        sponsorsLayout.SuspendLayout()
+        panelSponsorsActions.SuspendLayout()
         SuspendLayout()
         '
         ' tableRoot
@@ -44,7 +61,7 @@ Partial Class frmAbout
         tableRoot.ColumnCount = 1
         tableRoot.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
         tableRoot.Controls.Add(lblTitle, 0, 0)
-        tableRoot.Controls.Add(tableDetails, 0, 1)
+        tableRoot.Controls.Add(tabAboutMain, 0, 1)
         tableRoot.Controls.Add(btnClose, 0, 2)
         tableRoot.Dock = DockStyle.Fill
         tableRoot.Location = New Point(0, 0)
@@ -68,6 +85,29 @@ Partial Class frmAbout
         lblTitle.TabIndex = 0
         lblTitle.Text = "OptiScaler Installer"
         '
+        ' tabAboutMain
+        '
+        tabAboutMain.Controls.Add(tabPageAbout)
+        tabAboutMain.Controls.Add(tabPageSponsors)
+        tabAboutMain.Dock = DockStyle.Fill
+        tabAboutMain.Location = New Point(16, 49)
+        tabAboutMain.Margin = New Padding(0, 0, 0, 12)
+        tabAboutMain.Name = "tabAboutMain"
+        tabAboutMain.SelectedIndex = 0
+        tabAboutMain.Size = New Size(688, 321)
+        tabAboutMain.TabIndex = 1
+        '
+        ' tabPageAbout
+        '
+        tabPageAbout.Controls.Add(tableDetails)
+        tabPageAbout.Location = New Point(4, 24)
+        tabPageAbout.Name = "tabPageAbout"
+        tabPageAbout.Padding = New Padding(12)
+        tabPageAbout.Size = New Size(680, 293)
+        tabPageAbout.TabIndex = 0
+        tabPageAbout.Text = "About"
+        tabPageAbout.UseVisualStyleBackColor = True
+        '
         ' tableDetails
         '
         tableDetails.ColumnCount = 2
@@ -88,8 +128,8 @@ Partial Class frmAbout
         tableDetails.Controls.Add(lblSponsorTitle, 0, 6)
         tableDetails.Controls.Add(linkSponsor, 1, 6)
         tableDetails.Dock = DockStyle.Fill
-        tableDetails.Location = New Point(16, 49)
-        tableDetails.Margin = New Padding(0, 0, 0, 12)
+        tableDetails.Location = New Point(12, 12)
+        tableDetails.Margin = New Padding(0)
         tableDetails.Name = "tableDetails"
         tableDetails.RowCount = 7
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -99,8 +139,8 @@ Partial Class frmAbout
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         tableDetails.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        tableDetails.Size = New Size(608, 194)
-        tableDetails.TabIndex = 1
+        tableDetails.Size = New Size(656, 269)
+        tableDetails.TabIndex = 0
         '
         ' lblCurrentTitle
         '
@@ -248,10 +288,119 @@ Partial Class frmAbout
         linkSponsor.TabStop = True
         linkSponsor.Text = "N/A"
         '
+        ' tabPageSponsors
+        '
+        tabPageSponsors.Controls.Add(sponsorsLayout)
+        tabPageSponsors.Location = New Point(4, 24)
+        tabPageSponsors.Name = "tabPageSponsors"
+        tabPageSponsors.Padding = New Padding(12)
+        tabPageSponsors.Size = New Size(680, 293)
+        tabPageSponsors.TabIndex = 1
+        tabPageSponsors.Text = "Sponsors"
+        tabPageSponsors.UseVisualStyleBackColor = True
+        '
+        ' sponsorsLayout
+        '
+        sponsorsLayout.ColumnCount = 1
+        sponsorsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        sponsorsLayout.Controls.Add(lvSponsors, 0, 0)
+        sponsorsLayout.Controls.Add(panelSponsorsActions, 0, 1)
+        sponsorsLayout.Dock = DockStyle.Fill
+        sponsorsLayout.Location = New Point(12, 12)
+        sponsorsLayout.Margin = New Padding(0)
+        sponsorsLayout.Name = "sponsorsLayout"
+        sponsorsLayout.RowCount = 2
+        sponsorsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        sponsorsLayout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        sponsorsLayout.Size = New Size(656, 269)
+        sponsorsLayout.TabIndex = 0
+        '
+        ' lblSponsorsIntro
+        '
+        lblSponsorsIntro.AutoSize = True
+        lblSponsorsIntro.Location = New Point(0, 0)
+        lblSponsorsIntro.Margin = New Padding(0, 0, 0, 8)
+        lblSponsorsIntro.Name = "lblSponsorsIntro"
+        lblSponsorsIntro.Size = New Size(412, 15)
+        lblSponsorsIntro.TabIndex = 0
+        lblSponsorsIntro.Text = "Public sponsors are loaded automatically from your GitHub Sponsors page."
+        '
+        ' lvSponsors
+        '
+        lvSponsors.BorderStyle = BorderStyle.None
+        lvSponsors.Columns.AddRange(New ColumnHeader() {colSponsorName, colSponsorProfile})
+        lvSponsors.Dock = DockStyle.Fill
+        lvSponsors.FullRowSelect = True
+        lvSponsors.HeaderStyle = ColumnHeaderStyle.Nonclickable
+        lvSponsors.HideSelection = False
+        lvSponsors.Location = New Point(0, 0)
+        lvSponsors.Margin = New Padding(0)
+        lvSponsors.MultiSelect = False
+        lvSponsors.Name = "lvSponsors"
+        lvSponsors.OwnerDraw = False
+        lvSponsors.ShowGroups = False
+        lvSponsors.Size = New Size(656, 243)
+        lvSponsors.TabIndex = 1
+        lvSponsors.UseCompatibleStateImageBehavior = False
+        lvSponsors.View = View.Details
+        '
+        ' colSponsorName
+        '
+        colSponsorName.Text = "Sponsor"
+        colSponsorName.Width = 220
+        '
+        ' colSponsorProfile
+        '
+        colSponsorProfile.Text = "Profile"
+        colSponsorProfile.Width = 420
+        '
+        ' lblSponsorsStatus
+        '
+        lblSponsorsStatus.AutoSize = True
+        lblSponsorsStatus.Location = New Point(0, 232)
+        lblSponsorsStatus.Margin = New Padding(0, 6, 0, 8)
+        lblSponsorsStatus.Name = "lblSponsorsStatus"
+        lblSponsorsStatus.Size = New Size(111, 15)
+        lblSponsorsStatus.TabIndex = 2
+        lblSponsorsStatus.Text = "Loading sponsors..."
+        '
+        ' panelSponsorsActions
+        '
+        panelSponsorsActions.AutoSize = True
+        panelSponsorsActions.AutoSizeMode = AutoSizeMode.GrowAndShrink
+        panelSponsorsActions.Controls.Add(btnRefreshSponsors)
+        panelSponsorsActions.Controls.Add(linkSponsorsPage)
+        panelSponsorsActions.Dock = DockStyle.Fill
+        panelSponsorsActions.Location = New Point(0, 243)
+        panelSponsorsActions.Margin = New Padding(0)
+        panelSponsorsActions.Name = "panelSponsorsActions"
+        panelSponsorsActions.Size = New Size(656, 26)
+        panelSponsorsActions.TabIndex = 3
+        '
+        ' btnRefreshSponsors
+        '
+        btnRefreshSponsors.Location = New Point(0, 0)
+        btnRefreshSponsors.Name = "btnRefreshSponsors"
+        btnRefreshSponsors.Size = New Size(100, 26)
+        btnRefreshSponsors.TabIndex = 0
+        btnRefreshSponsors.Text = "Refresh"
+        btnRefreshSponsors.UseVisualStyleBackColor = True
+        '
+        ' linkSponsorsPage
+        '
+        linkSponsorsPage.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        linkSponsorsPage.AutoSize = True
+        linkSponsorsPage.Location = New Point(508, 6)
+        linkSponsorsPage.Name = "linkSponsorsPage"
+        linkSponsorsPage.Size = New Size(148, 15)
+        linkSponsorsPage.TabIndex = 1
+        linkSponsorsPage.TabStop = True
+        linkSponsorsPage.Text = "Open GitHub sponsors page"
+        '
         ' btnClose
         '
         btnClose.Anchor = AnchorStyles.Bottom Or AnchorStyles.Right
-        btnClose.Location = New Point(529, 255)
+        btnClose.Location = New Point(609, 385)
         btnClose.Name = "btnClose"
         btnClose.Size = New Size(95, 30)
         btnClose.TabIndex = 2
@@ -262,7 +411,7 @@ Partial Class frmAbout
         '
         AutoScaleDimensions = New SizeF(96.0F, 96.0F)
         AutoScaleMode = AutoScaleMode.Dpi
-        ClientSize = New Size(640, 305)
+        ClientSize = New Size(720, 435)
         Controls.Add(tableRoot)
         FormBorderStyle = FormBorderStyle.FixedDialog
         MaximizeBox = False
@@ -273,14 +422,23 @@ Partial Class frmAbout
         Text = "About"
         tableRoot.ResumeLayout(False)
         tableRoot.PerformLayout()
+        tabAboutMain.ResumeLayout(False)
+        tabPageAbout.ResumeLayout(False)
         tableDetails.ResumeLayout(False)
         tableDetails.PerformLayout()
+        tabPageSponsors.ResumeLayout(False)
+        sponsorsLayout.ResumeLayout(False)
+        sponsorsLayout.PerformLayout()
+        panelSponsorsActions.ResumeLayout(False)
+        panelSponsorsActions.PerformLayout()
         ResumeLayout(False)
 
     End Sub
 
     Friend WithEvents tableRoot As TableLayoutPanel
     Friend WithEvents lblTitle As Label
+    Friend WithEvents tabAboutMain As TabControl
+    Friend WithEvents tabPageAbout As TabPage
     Friend WithEvents tableDetails As TableLayoutPanel
     Friend WithEvents lblCurrentTitle As Label
     Friend WithEvents lblCurrentValue As Label
@@ -296,5 +454,15 @@ Partial Class frmAbout
     Friend WithEvents lblAuthorValue As Label
     Friend WithEvents lblSponsorTitle As Label
     Friend WithEvents linkSponsor As LinkLabel
+    Friend WithEvents tabPageSponsors As TabPage
+    Friend WithEvents sponsorsLayout As TableLayoutPanel
+    Friend WithEvents lblSponsorsIntro As Label
+    Friend WithEvents lvSponsors As ThemedListView
+    Friend WithEvents colSponsorName As ColumnHeader
+    Friend WithEvents colSponsorProfile As ColumnHeader
+    Friend WithEvents lblSponsorsStatus As Label
+    Friend WithEvents panelSponsorsActions As Panel
+    Friend WithEvents btnRefreshSponsors As Button
+    Friend WithEvents linkSponsorsPage As LinkLabel
     Friend WithEvents btnClose As Button
 End Class

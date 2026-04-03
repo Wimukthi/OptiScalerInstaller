@@ -26,6 +26,8 @@ Public Class MainForm
     Private detectedLookup As Dictionary(Of String, DetectedGame) = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
     Private detectedInstallLookup As Dictionary(Of String, OptiScalerInstallInfo) = New Dictionary(Of String, OptiScalerInstallInfo)(StringComparer.OrdinalIgnoreCase)
     Private detectedOptiPatcherLookup As Dictionary(Of String, OptiPatcherInstallInfo) = New Dictionary(Of String, OptiPatcherInstallInfo)(StringComparer.OrdinalIgnoreCase)
+    Private persistedDeepScanGames As List(Of DetectedGame) = New List(Of DetectedGame)()
+    Private persistedDeepScanLoaded As Boolean
     Private compatibilityChangedNames As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
     Private compatibilityBaseNoteText As String = "List shows tested games only. Detected/Anti-cheat columns are best-effort and may be incomplete."
     Private optiPatcherSupportEntries As List(Of OptiPatcherSupportEntry) = New List(Of OptiPatcherSupportEntry)()
@@ -86,6 +88,7 @@ Public Class MainForm
         UpdateExperimentalStatus()
         UpdateExperimentalDetectedGamesList()
         LoadCompatibility()
+        EnsurePersistedDeepScanGamesLoaded()
         LoadOptiPatcherSupportList()
         _settingThemeState = True
         Dim preferredMode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
@@ -114,7 +117,7 @@ Public Class MainForm
             Await RefreshReleaseInfoAsync(False)
             Await RefreshOptiPatcherReleaseInfoAsync(False)
             If checkUpdatesOnStartup Then
-                Await CheckForUpdatesSilentAsync()
+                Await CheckForUpdatesSilentAsync(True)
             Else
                 SetUpdateNoticeVisible(False, "")
                 AppendLog("Installer update auto-check disabled.")
@@ -230,6 +233,7 @@ Public Class MainForm
         ' Set initial selections before applying user settings.
         rbStable.Checked = True
         rbGpuNvidia.Checked = True
+        chkHideNonDetected.Checked = False
         chkDlssInputs.Checked = True
         chkEnableReshade.Checked = False
         chkEnableSpecialK.Checked = False
@@ -773,6 +777,7 @@ Public Class MainForm
 
     Private Sub ApplyCompatibilityFilter()
         Dim filter As String = txtGameSearch.Text.Trim()
+        Dim hideNonDetected As Boolean = chkHideNonDetected IsNot Nothing AndAlso chkHideNonDetected.Checked
         Dim settings As AppSettingsModel = AppSettings.Load()
         Dim highlightChanges As Boolean = True
         If settings IsNot Nothing AndAlso settings.HighlightCompatibilityChanges.HasValue Then
@@ -789,6 +794,9 @@ Public Class MainForm
                 detectedLookup.TryGetValue(normalizedKey, detected)
 
                 Dim isDetected As Boolean = detected IsNot Nothing
+                If hideNonDetected AndAlso Not isDetected Then
+                    Continue For
+                End If
 
                 Dim installInfo As OptiScalerInstallInfo = Nothing
                 Dim patcherInfo As OptiPatcherInstallInfo = Nothing
@@ -875,15 +883,43 @@ Public Class MainForm
         End Using
     End Sub
 
-    Private Sub btnBrowseCustomScanFolder_Click(sender As Object, e As EventArgs) Handles btnBrowseCustomScanFolder.Click
-        AppendLog("Browsing for custom scan folder.")
-        Using dialog As New FolderBrowserDialog()
-            dialog.Description = "Select an additional folder to scan for supported games"
-            If dialog.ShowDialog(Me) = DialogResult.OK Then
-                txtCustomScanFolder.Text = dialog.SelectedPath
-                AppendLog("Selected custom scan folder: " & dialog.SelectedPath)
+    Private Async Sub btnDeepScanDrives_Click(sender As Object, e As EventArgs) Handles btnDeepScanDrives.Click
+        Dim availableRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
+        If availableRoots.Count = 0 Then
+            AppendLog("Deep scan unavailable: no scannable drives found.")
+            MessageBox.Show(Me, "No ready fixed/removable/network drives were found.", "Deep Scan", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim selectedRoots As List(Of String) = Nothing
+        Using picker As New frmDriveSelection(availableRoots)
+            If picker.ShowDialog(Me) <> DialogResult.OK Then
+                AppendLog("Deep scan cancelled by user.")
+                Return
             End If
+
+            selectedRoots = picker.GetSelectedDriveRoots()
         End Using
+
+        If selectedRoots Is Nothing OrElse selectedRoots.Count = 0 Then
+            AppendLog("Deep scan skipped: no drives selected.")
+            MessageBox.Show(Me, "Select at least one drive to scan.", "Deep Scan", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Await RunDetectionAsync(False, selectedRoots)
+    End Sub
+
+    Private Sub chkHideNonDetected_CheckedChanged(sender As Object, e As EventArgs) Handles chkHideNonDetected.CheckedChanged
+        ApplyCompatibilityFilter()
+        If loadingSettingsUi Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        settings.HideNonDetectedGames = chkHideNonDetected.Checked
+        AppSettings.Save(settings)
+        AppendLog("Hide non-detected preference set to " & If(chkHideNonDetected.Checked, "On", "Off") & ".")
     End Sub
 
     Private Sub btnBrowseFsr4PackageFolder_Click(sender As Object, e As EventArgs) Handles btnBrowseFsr4PackageFolder.Click
@@ -1458,7 +1494,7 @@ Public Class MainForm
             Dim installed As Boolean = Await InstallOptiPatcherAsync(True)
             UpdateOptiPatcherStatus()
             If installed Then
-                Await RunDetectionAsync(False)
+                Await RefreshDetectedInstallStatesAsync(False)
             End If
         Finally
             btnInstallOptiPatcher.Enabled = True
@@ -1500,7 +1536,7 @@ Public Class MainForm
             End If
 
             UpdateOptiPatcherStatus()
-            Await RunDetectionAsync(False)
+            Await RefreshDetectedInstallStatesAsync(False)
         Catch ex As Exception
             AppendLog("OptiPatcher remove failed: " & ex.Message)
             ErrorLogger.Log(ex, "MainForm.btnRemoveOptiPatcher_Click")
@@ -1529,6 +1565,7 @@ Public Class MainForm
 
             If action = InstallAction.Uninstall Then
                 Await TryUninstallAsync(config.GameFolder, True)
+                Await RefreshDetectedInstallStatesAsync(False)
                 Return
             End If
 
@@ -1583,9 +1620,6 @@ Public Class MainForm
                 AppendLog("Installing OptiPatcher as part of this install...")
                 Dim patcherInstalled As Boolean = Await InstallOptiPatcherAsync(False)
                 optiPatcherOutcome = If(patcherInstalled, "OptiPatcher installed.", "OptiPatcher install skipped or failed.")
-                If patcherInstalled Then
-                    Await RunDetectionAsync(False)
-                End If
             End If
 
             LogVerificationReport(verification)
@@ -1609,6 +1643,7 @@ Public Class MainForm
                 MessageBox.Show(Me, message, "Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
             End If
             AppendLog("Install completed.")
+            Await RefreshDetectedInstallStatesAsync(False)
         Catch ex As Exception
             AppendLog("Install failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1626,6 +1661,7 @@ Public Class MainForm
             btnUninstall.Enabled = False
             AppendLog("Starting uninstall...")
             Await TryUninstallAsync(txtGameFolder.Text, True)
+            Await RefreshDetectedInstallStatesAsync(False)
         Catch ex As Exception
             AppendLog("Uninstall failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Uninstall Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1954,6 +1990,60 @@ Public Class MainForm
         Return TryCast(lvCompatibility.SelectedItems(0).Tag, CompatibilityRow)
     End Function
 
+    Private Sub EnsurePersistedDeepScanGamesLoaded()
+        If persistedDeepScanLoaded Then
+            Return
+        End If
+
+        persistedDeepScanGames = MergeDetectedGames(DeepScanDetectionCacheService.Load(AddressOf AppendLog), Nothing)
+        persistedDeepScanLoaded = True
+    End Sub
+
+    Private Function MergeDetectedGames(primary As IEnumerable(Of DetectedGame),
+                                        secondary As IEnumerable(Of DetectedGame)) As List(Of DetectedGame)
+        Dim merged As New List(Of DetectedGame)()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+        AddDetectedGamesToList(merged, seen, primary)
+        AddDetectedGamesToList(merged, seen, secondary)
+
+        merged.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(If(left?.DisplayName, ""), If(right?.DisplayName, "")))
+        Return merged
+    End Function
+
+    Private Sub AddDetectedGamesToList(target As List(Of DetectedGame),
+                                       seen As HashSet(Of String),
+                                       source As IEnumerable(Of DetectedGame))
+        If target Is Nothing OrElse seen Is Nothing OrElse source Is Nothing Then
+            Return
+        End If
+
+        For Each game As DetectedGame In source
+            If game Is Nothing OrElse String.IsNullOrWhiteSpace(game.DisplayName) OrElse String.IsNullOrWhiteSpace(game.InstallDir) Then
+                Continue For
+            End If
+
+            Dim installDir As String = NormalizePathSafe(game.InstallDir)
+            If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
+                Continue For
+            End If
+
+            Dim key As String = NameNormalization.NormalizeRelaxedName(game.DisplayName) & "|" & installDir
+            If Not seen.Add(key) Then
+                Continue For
+            End If
+
+            target.Add(New DetectedGame With {
+                .DisplayName = game.DisplayName,
+                .Platform = If(String.IsNullOrWhiteSpace(game.Platform), "Drive scan", game.Platform),
+                .InstallDir = installDir,
+                .MatchedEntry = game.MatchedEntry,
+                .SourceName = If(String.IsNullOrWhiteSpace(game.SourceName), game.DisplayName, game.SourceName),
+                .AntiCheat = If(game.AntiCheat, "")
+            })
+        Next
+    End Sub
+
     Private Function BuildDetectedLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, DetectedGame)
         Dim map As New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
         For Each game As DetectedGame In results
@@ -1971,43 +2061,6 @@ Public Class MainForm
             End If
         Next
         Return map
-    End Function
-
-    Private Function GetConfiguredCustomScanFolders() As List(Of String)
-        Dim folders As New List(Of String)()
-        Dim rawValue As String = ""
-
-        If txtCustomScanFolder IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(txtCustomScanFolder.Text) Then
-            rawValue = txtCustomScanFolder.Text
-        Else
-            Dim settings As AppSettingsModel = AppSettings.Load()
-            rawValue = If(settings Is Nothing, "", settings.CustomScanFolder)
-        End If
-
-        If String.IsNullOrWhiteSpace(rawValue) Then
-            Return folders
-        End If
-
-        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-        Dim parts As String() = rawValue.Split(New Char() {";"c, "|"c}, StringSplitOptions.RemoveEmptyEntries)
-        For Each part As String In parts
-            Dim trimmed As String = part.Trim()
-            If String.IsNullOrWhiteSpace(trimmed) Then
-                Continue For
-            End If
-
-            Dim normalized As String = NormalizePathSafe(trimmed)
-            If String.IsNullOrWhiteSpace(normalized) Then
-                Continue For
-            End If
-
-            If Directory.Exists(normalized) AndAlso Not seen.Contains(normalized) Then
-                folders.Add(normalized)
-                seen.Add(normalized)
-            End If
-        Next
-
-        Return folders
     End Function
 
     Private Function BuildInstallStatusLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, OptiScalerInstallInfo)
@@ -2062,6 +2115,28 @@ Public Class MainForm
 
         Dim pathKey As String = NormalizePathSafe(game.InstallDir)
         Return nameKey & "|" & pathKey
+    End Function
+
+    Private Async Function RefreshDetectedInstallStatesAsync(Optional logAction As Boolean = True) As Task
+        If detectedGames Is Nothing OrElse detectedGames.Count = 0 Then
+            ApplyCompatibilityFilter()
+            UpdateDetectedStatus()
+            UpdateExperimentalDetectedGamesList()
+            Return
+        End If
+
+        detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(detectedGames))
+        detectedOptiPatcherLookup = Await Task.Run(Function() BuildOptiPatcherStatusLookup(detectedGames))
+
+        ApplyCompatibilityFilter()
+        UpdateDetectedStatus()
+        UpdateExperimentalDetectedGamesList()
+        UpdateInstallStatus()
+        UpdateOptiPatcherStatus()
+
+        If logAction Then
+            AppendLog("Detected install states refreshed.")
+        End If
     End Function
 
     Private Sub UpdateDetectedStatus()
@@ -3474,8 +3549,8 @@ Public Class MainForm
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
         settings.AutoRefreshCompatibilityOnStartup = chkAutoRefreshCompatibilityOnStartup.Checked
         settings.AutoCheckInstallerUpdates = chkAutoCheckInstallerUpdates.Checked
+        settings.HideNonDetectedGames = chkHideNonDetected.Checked
         settings.ShowExperimentalTabOnUnsupportedGpu = chkShowExperimentalTabOnUnsupportedGpu.Checked
-        settings.CustomScanFolder = txtCustomScanFolder.Text.Trim()
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
         settings.ExperimentalFsr4PackageFolder = txtFsr4PackageFolder.Text.Trim()
@@ -3602,8 +3677,8 @@ Public Class MainForm
         End Try
     End Function
 
-    Private Async Function CheckForUpdatesSilentAsync() As Task
-        ' Check for installer updates without user prompts and set a subtle UI hint.
+    Private Async Function CheckForUpdatesSilentAsync(Optional promptOnAvailable As Boolean = False) As Task
+        ' Check for installer updates with optional startup prompt and set the UI hint.
         Try
             AppendLog("Checking for installer updates...")
             Dim release As UpdateReleaseInfo = Await UpdateService.GetLatestReleaseAsync()
@@ -3623,6 +3698,25 @@ Public Class MainForm
             SetUpdateNoticeVisible(isAvailable, release.TagName)
             If isAvailable Then
                 AppendLog("Installer update available: " & release.TagName)
+                If promptOnAvailable Then
+                    Dim latestLabel As String = If(String.IsNullOrWhiteSpace(release.TagName), release.Version.ToString(), release.TagName)
+                    Dim message As String = "A new OptiScaler Installer update is available." & Environment.NewLine &
+                                            "Current: " & currentVersion.ToString() & Environment.NewLine &
+                                            "Latest: " & latestLabel & Environment.NewLine & Environment.NewLine &
+                                            "Do you want to update now?"
+                    Dim result As DialogResult = MessageBox.Show(Me,
+                                                                  message,
+                                                                  "Update Available",
+                                                                  MessageBoxButtons.YesNo,
+                                                                  MessageBoxIcon.Information)
+                    If result = DialogResult.Yes Then
+                        Using dlg As New frmUpdate(release, currentVersion)
+                            dlg.ShowDialog(Me)
+                        End Using
+                    Else
+                        AppendLog("Startup update prompt dismissed by user.")
+                    End If
+                End If
             Else
                 AppendLog("Installer is up to date.")
             End If
@@ -3846,6 +3940,20 @@ Public Class MainForm
         Next
     End Sub
 
+    Private Function FormatStatusDirectory(pathValue As String) As String
+        If String.IsNullOrWhiteSpace(pathValue) Then
+            Return "(scanning...)"
+        End If
+
+        Dim normalized As String = pathValue.Trim().Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+        Const maxLength As Integer = 96
+        If normalized.Length <= maxLength Then
+            Return normalized
+        End If
+
+        Return "..." & normalized.Substring(normalized.Length - (maxLength - 3))
+    End Function
+
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then
             statusStrip.BeginInvoke(New Action(Of String)(AddressOf SetStatus), message)
@@ -3870,114 +3978,114 @@ Public Class MainForm
         toolTip.ReshowDelay = 100
         toolTip.ShowAlways = True
 
-        toolTip.SetToolTip(DarkThemeCheckBox, "Toggle dark theme. You will be asked to restart for the change to apply.")
-        toolTip.SetToolTip(tabMain, "Main navigation tabs.")
+        toolTip.SetToolTip(DarkThemeCheckBox, "Switch between dark and light UI colors. This only changes appearance, not install behavior. Restart when prompted so all controls redraw correctly.")
+        toolTip.SetToolTip(tabMain, "Main pages of the installer. Typical flow: Game Detection -> Install -> Add-ons -> optional FSR4 INT8 -> Settings.")
 
-        toolTip.SetToolTip(txtGameSearch, "Filter the list by game name. Case-insensitive.")
-        toolTip.SetToolTip(btnScanDetected, "Scan installed Steam, Epic, GOG, EA, and Ubisoft games and mark matches in the list. No files are modified.")
-        toolTip.SetToolTip(btnUseDetected, "Use the selected detected game and prefill the Install tab. You can still change settings before installing.")
-        toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the wiki and refresh the table.")
-        toolTip.SetToolTip(btnOpenWiki, "Open the selected game's wiki page in your browser.")
-        toolTip.SetToolTip(lvCompatibility, "Compatibility list with detection info, install state, and anti-cheat hints. Double-click a detected row to prefill the Install tab.")
+        toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
+        toolTip.SetToolTip(btnScanDetected, "Fast launcher-based scan. Checks Steam, Epic, GOG, EA, and Ubisoft metadata and marks matching supported games.")
+        toolTip.SetToolTip(btnDeepScanDrives, "Manual deep scan for launcher-independent installs. You choose drives, then the installer scans folders/executables asynchronously and shows live progress.")
+        toolTip.SetToolTip(btnUseDetected, "Use the selected detected row as the active install target. Automatically switches to Install tab and fills Game EXE/Game folder.")
+        toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
+        toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
+        toolTip.SetToolTip(btnOpenWiki, "Open the wiki page for the currently selected compatibility entry using the configured wiki base URL.")
+        toolTip.SetToolTip(lvCompatibility, "Master game list. Columns show detection state, OptiScaler/OptiPatcher status, platform, anti-cheat hint, and install path. Double-click a detected row to prefill install target.")
 
-        toolTip.SetToolTip(txtGameExe, "Path to the game's main executable. Avoid launchers, uninstallers, or setup tools.")
-        toolTip.SetToolTip(btnBrowseGameExe, "Browse for the game's executable (.exe).")
-        toolTip.SetToolTip(txtGameFolder, "Game install folder, auto-filled from the EXE. Edit only if needed.")
-        toolTip.SetToolTip(rbStable, "Install the latest stable OptiScaler release.")
-        toolTip.SetToolTip(rbNightly, "Install from an alternate OptiScaler release source (for forks or mirrors).")
-        toolTip.SetToolTip(rbLocal, "Install from a local OptiScaler .7z archive.")
-        toolTip.SetToolTip(txtLocalArchive, "Path to the local OptiScaler archive.")
-        toolTip.SetToolTip(btnBrowseArchive, "Browse for a local OptiScaler .7z archive.")
-        toolTip.SetToolTip(btnRefreshReleases, "Fetch latest release info for stable and alternate sources (and optional component feed).")
-        toolTip.SetToolTip(cmbHookName, "DLL filename OptiScaler will use (renames OptiScaler.dll). Choose the hook the game loads.")
-        toolTip.SetToolTip(rbGpuNvidia, "Target NVIDIA GPUs. Default DLSS path.")
-        toolTip.SetToolTip(rbGpuAmdIntel, "Target AMD/Intel GPUs and allow DLSS input spoofing.")
-        toolTip.SetToolTip(chkDlssInputs, "Enable DLSS input spoofing when using AMD/Intel. Unchecked sets Dxgi=false in OptiScaler.ini.")
-        toolTip.SetToolTip(cmbFgType, "Frame generation choice. Auto keeps default behavior.")
-        toolTip.SetToolTip(cmbConflictMode, "What to do when files already exist in the game folder.")
-        toolTip.SetToolTip(btnInstall, "Install OptiScaler and selected add-ons into the game folder.")
-        toolTip.SetToolTip(btnUninstall, "Remove OptiScaler files using the install manifest.")
-        toolTip.SetToolTip(btnOpenGameFolder, "Open the current game folder in Explorer.")
-        toolTip.SetToolTip(chkInstallOptiPatcher, "When enabled, installs OptiPatcher right after OptiScaler install. Supported detected games only.")
-        toolTip.SetToolTip(lblInstallOptiPatcherStatus, "Shows whether OptiPatcher can be installed for the currently selected game.")
+        toolTip.SetToolTip(txtGameExe, "Full path to the game executable you want to patch. Prefer the real game .exe in the binaries folder, not launcher/setup/uninstall executables.")
+        toolTip.SetToolTip(btnBrowseGameExe, "Browse to a game .exe file and auto-fill related fields.")
+        toolTip.SetToolTip(txtGameFolder, "Destination folder where OptiScaler files are copied. Usually auto-filled from Game EXE and should point to the folder that contains the game binary.")
+        toolTip.SetToolTip(rbStable, "Download and install the latest official stable OptiScaler release.")
+        toolTip.SetToolTip(rbNightly, "Use the alternate release URL source (for forks/mirrors/custom feeds). Leave alternate URL empty to disable this source.")
+        toolTip.SetToolTip(rbLocal, "Install from a local OptiScaler archive file (.7z), without downloading from the internet.")
+        toolTip.SetToolTip(txtLocalArchive, "Path to the local OptiScaler .7z archive used when Local source is selected.")
+        toolTip.SetToolTip(btnBrowseArchive, "Browse to a local OptiScaler archive file.")
+        toolTip.SetToolTip(btnRefreshReleases, "Refresh release metadata for OptiScaler sources so version labels and download targets are up to date.")
+        toolTip.SetToolTip(cmbHookName, "Select which filename OptiScaler.dll will be renamed to (for example dxgi.dll). Choose the hook the game actually loads.")
+        toolTip.SetToolTip(rbGpuNvidia, "Use NVIDIA path defaults. Best for NVIDIA cards and standard DLSS pipelines.")
+        toolTip.SetToolTip(rbGpuAmdIntel, "Use AMD/Intel path defaults. Enables options needed for DLSS input spoofing scenarios.")
+        toolTip.SetToolTip(chkDlssInputs, "Enable DLSS input spoofing for AMD/Intel mode. If disabled, installer writes Dxgi=false in OptiScaler.ini.")
+        toolTip.SetToolTip(cmbFgType, "Frame generation mode preference written during install. Auto keeps default behavior; other values force specific FG handling.")
+        toolTip.SetToolTip(cmbConflictMode, "How to handle existing files in the target folder (for example backup/overwrite/skip depending on selected mode).")
+        toolTip.SetToolTip(btnInstall, "Install or update OptiScaler into the selected game folder using current options from Install and Add-ons.")
+        toolTip.SetToolTip(btnUninstall, "Remove OptiScaler from the selected game folder using installer manifest data, with fallback cleanup paths when possible.")
+        toolTip.SetToolTip(btnOpenGameFolder, "Open the currently selected game folder in Windows Explorer.")
+        toolTip.SetToolTip(chkInstallOptiPatcher, "If enabled, OptiPatcher is installed automatically right after OptiScaler install. Only available for supported detected games.")
+        toolTip.SetToolTip(lblInstallOptiPatcherStatus, "Read-only status telling whether OptiPatcher auto-install is available for the current target.")
 
-        toolTip.SetToolTip(chkEnableReshade, "Enable ReShade integration and copy the chosen DLL.")
-        toolTip.SetToolTip(txtReshadeDll, "Path to ReShade DLL to install.")
-        toolTip.SetToolTip(btnBrowseReshade, "Browse for a ReShade DLL.")
+        toolTip.SetToolTip(chkEnableReshade, "Enable ReShade integration for this install and copy the selected ReShade DLL.")
+        toolTip.SetToolTip(txtReshadeDll, "Path to the ReShade DLL file that will be copied during install when ReShade is enabled.")
+        toolTip.SetToolTip(btnBrowseReshade, "Browse for a ReShade DLL file.")
 
-        toolTip.SetToolTip(chkEnableSpecialK, "Enable Special K integration.")
-        toolTip.SetToolTip(txtSpecialKDll, "Path to SpecialK64.dll.")
+        toolTip.SetToolTip(chkEnableSpecialK, "Enable Special K loader integration for this install.")
+        toolTip.SetToolTip(txtSpecialKDll, "Path to SpecialK64.dll to copy into the game folder when Special K integration is enabled.")
         toolTip.SetToolTip(btnBrowseSpecialK, "Browse for SpecialK64.dll.")
-        toolTip.SetToolTip(chkCreateSpecialKMarker, "Create SpecialK.marker to force Special K to load.")
+        toolTip.SetToolTip(chkCreateSpecialKMarker, "Create the SpecialK.marker file to force Special K loading in games that require marker-based activation.")
 
-        toolTip.SetToolTip(chkLoadAsiPlugins, "Enable ASI plugin loading. When enabled, a plugins folder is auto-created in the selected game folder.")
-        toolTip.SetToolTip(txtPluginsPath, "ASI plugins folder path. Defaults to <game>\\plugins when ASI loading is enabled.")
-        toolTip.SetToolTip(btnBrowsePluginsPath, "Browse for the ASI plugins folder.")
-        toolTip.SetToolTip(cmbOptiPatcherSource, "Select where OptiPatcher.asi should be pulled from.")
-        toolTip.SetToolTip(btnOptiPatcherRefresh, "Refresh OptiPatcher release metadata from the selected sources.")
-        toolTip.SetToolTip(lblOptiPatcherRelease, "Shows the currently loaded OptiPatcher release for the selected source.")
-        toolTip.SetToolTip(txtOptiPatcherLocalFile, "Local OptiPatcher.asi path used when source is set to Local .asi.")
+        toolTip.SetToolTip(chkLoadAsiPlugins, "Enable ASI plugin loading in OptiScaler.ini. Installer can auto-create a plugins folder so ASI plugins are discovered.")
+        toolTip.SetToolTip(txtPluginsPath, "Folder used for ASI plugins. If empty and ASI loading is enabled, installer uses/creates <GameFolder>\\plugins.")
+        toolTip.SetToolTip(btnBrowsePluginsPath, "Browse for an ASI plugins folder.")
+        toolTip.SetToolTip(cmbOptiPatcherSource, "Choose where OptiPatcher.asi comes from: online release source or local file.")
+        toolTip.SetToolTip(btnOptiPatcherRefresh, "Refresh OptiPatcher release information for selected source.")
+        toolTip.SetToolTip(lblOptiPatcherRelease, "Shows currently loaded OptiPatcher release tag/version and size for the selected source.")
+        toolTip.SetToolTip(txtOptiPatcherLocalFile, "Local OptiPatcher.asi file path used when source is Local .asi.")
         toolTip.SetToolTip(btnBrowseOptiPatcherLocal, "Browse for a local OptiPatcher.asi file.")
-        toolTip.SetToolTip(btnInstallOptiPatcher, "Install or update OptiPatcher.asi in the selected game's plugin path and ensure LoadAsiPlugins=true.")
-        toolTip.SetToolTip(btnRemoveOptiPatcher, "Remove OptiPatcher.asi. Restores manifest backup when available.")
-        toolTip.SetToolTip(lblOptiPatcherStatus, "Current OptiPatcher install and support status for the selected game folder.")
+        toolTip.SetToolTip(btnInstallOptiPatcher, "Install or update OptiPatcher.asi into the active plugin path and ensure ASI loading is enabled in OptiScaler.ini.")
+        toolTip.SetToolTip(btnRemoveOptiPatcher, "Remove OptiPatcher.asi from the active plugin path. If installer backup exists, it is restored.")
+        toolTip.SetToolTip(lblOptiPatcherStatus, "Read-only OptiPatcher detection/support state for the selected game folder.")
 
-        toolTip.SetToolTip(txtNvngxDll, "Optional nvngx_dlss.dll to copy if the game does not include one.")
+        toolTip.SetToolTip(txtNvngxDll, "Optional nvngx_dlss.dll source file. Use this when a game requires nvngx_dlss.dll but does not ship it.")
         toolTip.SetToolTip(btnBrowseNvngx, "Browse for nvngx_dlss.dll.")
 
-        toolTip.SetToolTip(txtNukemDll, "Path to dlssg_to_fsr3_amd_is_better.dll (Nukem FG).")
-        toolTip.SetToolTip(btnBrowseNukemDll, "Browse for the Nukem FG DLL.")
+        toolTip.SetToolTip(txtNukemDll, "Path to dlssg_to_fsr3_amd_is_better.dll (Nukem frame-generation helper).")
+        toolTip.SetToolTip(btnBrowseNukemDll, "Browse for Nukem FG DLL.")
 
-        toolTip.SetToolTip(txtFakenvapiFolder, "Folder containing nvapi64.dll and fakenvapi.ini for AMD/Intel.")
-        toolTip.SetToolTip(btnBrowseFakenvapiFolder, "Browse for the Fakenvapi folder.")
+        toolTip.SetToolTip(txtFakenvapiFolder, "Folder that contains nvapi64.dll and fakenvapi.ini for AMD/Intel spoofing scenarios.")
+        toolTip.SetToolTip(btnBrowseFakenvapiFolder, "Browse for the Fakenvapi package folder.")
 
-        toolTip.SetToolTip(txtFsr4PackageFolder, "Local folder containing experimental FSR4 INT8 files for older RDNA GPUs.")
-        toolTip.SetToolTip(btnBrowseFsr4PackageFolder, "Browse for the experimental FSR4 package folder.")
-        toolTip.SetToolTip(txtFsr4TargetGameFolder, "Game folder currently selected on the Install tab. This is where the experimental package will be applied.")
-        toolTip.SetToolTip(btnFsr4PickGame, "Switch to the Install tab so you can select or change the target game executable/folder.")
-        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Scan supported game installs and populate the detected-games picker.")
-        toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use the selected detected game as the experimental package target.")
-        toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: browse to a game executable when detection does not find your game.")
-        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games. Select one and click Use selected, or double-click.")
-        toolTip.SetToolTip(lblFsr4DetectedGames, "Shows how many supported games are currently detected for quick targeting.")
-        toolTip.SetToolTip(chkFsr4EnableUpdate, "When enabled, sets Fsr4Update=true in OptiScaler.ini during apply.")
-        toolTip.SetToolTip(chkFsr4EnableAgility, "When enabled, sets FsrAgilitySDKUpgrade=true in OptiScaler.ini during apply.")
-        toolTip.SetToolTip(btnFsr4Apply, "Copy the selected experimental package into the current game folder and optionally set INI keys.")
-        toolTip.SetToolTip(btnFsr4Remove, "Remove installer-managed experimental files and restore backups/INI keys.")
-        toolTip.SetToolTip(btnFsr4RefreshStatus, "Re-evaluate the experimental package status for the selected game folder.")
-        toolTip.SetToolTip(lblFsr4Status, "Shows whether an experimental package is installed and whether it is managed by this installer.")
+        toolTip.SetToolTip(txtFsr4PackageFolder, "Folder containing experimental FSR4 INT8 files (for example amdxcffx64.dll) that will be copied to selected game.")
+        toolTip.SetToolTip(btnBrowseFsr4PackageFolder, "Browse for local FSR4 INT8 package folder.")
+        toolTip.SetToolTip(txtFsr4TargetGameFolder, "Target game folder for experimental package apply/remove operations.")
+        toolTip.SetToolTip(btnFsr4PickGame, "Jump to Install tab to pick or change the active game target, then return here.")
+        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run detection and repopulate the detected supported games list used by this experimental workflow.")
+        toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use selected row from detected games list as FSR4 INT8 target folder.")
+        toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: choose a game executable directly if automatic detection misses it.")
+        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. Select one and use it, or double-click.")
+        toolTip.SetToolTip(lblFsr4DetectedGames, "Shows detected-game count for the experimental tab picker.")
+        toolTip.SetToolTip(chkFsr4EnableUpdate, "When checked, installer sets Fsr4Update=true in OptiScaler.ini during apply.")
+        toolTip.SetToolTip(chkFsr4EnableAgility, "When checked, installer sets FsrAgilitySDKUpgrade=true to help selected Windows 10 titles.")
+        toolTip.SetToolTip(btnFsr4Apply, "Copy experimental package files into target game folder, write selected INI keys, and create installer manifest metadata.")
+        toolTip.SetToolTip(btnFsr4Remove, "Remove installer-managed experimental files and restore backed-up files/INI keys where available.")
+        toolTip.SetToolTip(btnFsr4RefreshStatus, "Re-check whether experimental package appears installed and whether it is installer-managed.")
+        toolTip.SetToolTip(lblFsr4Status, "Read-only status summary for experimental package state in the selected target.")
 
-        toolTip.SetToolTip(txtLog, "Read-only log of installer actions.")
-        toolTip.SetToolTip(grpLog, "Log output for all installer actions.")
+        toolTip.SetToolTip(txtLog, "Read-only operation log. Every action, warning, and error is written here with timestamp for troubleshooting.")
+        toolTip.SetToolTip(grpLog, "Live log panel for installer activity.")
 
-        toolTip.SetToolTip(txtCompatibilityListUrl, "Raw markdown URL for the compatibility list (used by Refresh lists).")
-        toolTip.SetToolTip(txtWikiBaseUrl, "Base URL for wiki pages (used when opening a selected game's page).")
-        toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API URL for the latest stable release.")
-        toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API URL for the alternate release source.")
-        toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API URL for OptiScaler Installer updates.")
-        toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "When enabled, the compatibility list is auto-refreshed on startup.")
-        toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "When enabled, the installer checks for updates at startup and shows a subtle in-app notice.")
-        toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Show the FSR4 INT8 (Experimental) tab even when an AMD RDNA GPU is not detected.")
-        toolTip.SetToolTip(txtCustomScanFolder, "Optional custom folder root to scan for supported games. Use ';' to separate multiple folders.")
-        toolTip.SetToolTip(btnBrowseCustomScanFolder, "Browse for an additional custom scan folder.")
-        toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template to apply on install.")
-        toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for a default OptiScaler.ini template.")
-        toolTip.SetToolTip(cmbDefaultIniMode, "Choose how to apply the default OptiScaler.ini.")
-        toolTip.SetToolTip(cmbDefaultPreset, "Preset defaults for new installs (customizable).")
-        toolTip.SetToolTip(cmbDefaultHookName, "Default hook filename applied to installs.")
-        toolTip.SetToolTip(cmbDefaultGpuVendor, "Default GPU selection applied to installs.")
-        toolTip.SetToolTip(chkDefaultDlssInputs, "Default DLSS input spoofing toggle for installs.")
-        toolTip.SetToolTip(cmbDefaultFgType, "Default frame generation choice for installs.")
-        toolTip.SetToolTip(cmbDefaultConflictMode, "Default behavior when files already exist.")
-        toolTip.SetToolTip(btnApplyDefaults, "Apply these default options to the Install tab.")
-        toolTip.SetToolTip(btnSaveSettings, "Save settings to disk.")
-        toolTip.SetToolTip(btnReloadSettings, "Reload settings from disk and discard edits.")
-        toolTip.SetToolTip(btnLoadDefaults, "Load defaults from the bundled settings file.")
-        toolTip.SetToolTip(btnOpenSettingsFile, "Open the settings file in your default editor.")
-        toolTip.SetToolTip(btnCheckForUpdates, "Check for OptiScaler Installer updates.")
-        toolTip.SetToolTip(btnAbout, "Show current version, latest release date, repository link, and author details.")
-        toolTip.SetToolTip(btnExportDiagnostics, "Export logs, settings, and detection data to a diagnostics zip.")
-        toolTip.SetToolTip(lblInstalledStatus, "Shows detected OptiScaler installation status for the selected game folder.")
+        toolTip.SetToolTip(txtCompatibilityListUrl, "Direct URL to compatibility markdown list. Refresh lists downloads this file and parses supported games from it.")
+        toolTip.SetToolTip(txtWikiBaseUrl, "Base wiki URL used when opening per-game pages from Game Detection tab.")
+        toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API endpoint for latest stable OptiScaler release metadata.")
+        toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API endpoint for alternate OptiScaler release metadata. Leave empty to disable alternate source checks.")
+        toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API endpoint for OptiScaler Installer update checks.")
+        toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "If enabled, compatibility list is refreshed automatically on app start.")
+        toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "If enabled, installer checks for updates at startup. When a newer build is found, it shows a Yes/No update prompt and an in-app update notice.")
+        toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Force-show FSR4 INT8 experimental tab even when AMD RDNA GPU is not detected.")
+        toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template file to apply automatically on future installs.")
+        toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for default OptiScaler.ini template file.")
+        toolTip.SetToolTip(cmbDefaultIniMode, "Select how installer should apply default INI template: disabled, merge, or replace behavior based on selected mode.")
+        toolTip.SetToolTip(cmbDefaultPreset, "Preset bundle for default install options. Choose Custom to fine-tune each default below.")
+        toolTip.SetToolTip(cmbDefaultHookName, "Default hook filename that new installs should use.")
+        toolTip.SetToolTip(cmbDefaultGpuVendor, "Default GPU path choice for new installs. Auto uses detected adapter.")
+        toolTip.SetToolTip(chkDefaultDlssInputs, "Default state for DLSS input spoofing option on future installs.")
+        toolTip.SetToolTip(cmbDefaultFgType, "Default frame generation mode for future installs.")
+        toolTip.SetToolTip(cmbDefaultConflictMode, "Default existing-file conflict behavior for future installs.")
+        toolTip.SetToolTip(btnApplyDefaults, "Apply these default options to current Install tab controls immediately.")
+        toolTip.SetToolTip(btnSaveSettings, "Save current settings to JSON in the application folder.")
+        toolTip.SetToolTip(btnReloadSettings, "Reload settings from disk and discard unsaved edits in current UI.")
+        toolTip.SetToolTip(btnLoadDefaults, "Reset current settings UI to bundled defaults.")
+        toolTip.SetToolTip(btnOpenSettingsFile, "Open the live settings JSON file in your default text editor.")
+        toolTip.SetToolTip(btnCheckForUpdates, "Manually check whether a newer OptiScaler Installer release is available.")
+        toolTip.SetToolTip(btnAbout, "Open About window with current version, latest release date, repo links, author, and sponsorship link.")
+        toolTip.SetToolTip(btnExportDiagnostics, "Create a diagnostics zip (logs, settings, detection snapshot) for troubleshooting and issue reports.")
+        toolTip.SetToolTip(lblInstalledStatus, "Read-only OptiScaler install status for current target folder, including detected version when available.")
     End Sub
 
     Private Sub LoadSettingsUi()
@@ -4156,10 +4264,26 @@ Public Class MainForm
         Return New Rectangle(x, y, bounds.Width, bounds.Height)
     End Function
 
-    Private Async Function RunDetectionAsync(isAuto As Boolean) As Task
-        Dim label As String = If(isAuto, "Auto detection", "Detection")
+    Private Async Function RunDetectionAsync(isAuto As Boolean, Optional selectedDriveRoots As IEnumerable(Of String) = Nothing) As Task
+        Dim manualDriveRoots As List(Of String) = New List(Of String)()
+        If selectedDriveRoots IsNot Nothing Then
+            manualDriveRoots = selectedDriveRoots.
+                Where(Function(path) Not String.IsNullOrWhiteSpace(path)).
+                Select(Function(path) NormalizePathSafe(path)).
+                Where(Function(path) Not String.IsNullOrWhiteSpace(path)).
+                Distinct(StringComparer.OrdinalIgnoreCase).
+                ToList()
+        End If
+
+        Dim isManualDeepScan As Boolean = manualDriveRoots.Count > 0
+        Dim label As String = If(isManualDeepScan, "Manual deep scan", If(isAuto, "Auto detection", "Detection"))
+        Dim progressSync As New Object()
+        Dim lastProgressValue As Integer = -1
+        Dim lastStatusMessage As String = ""
+
         Try
             btnScanDetected.Enabled = False
+            btnDeepScanDrives.Enabled = False
             btnUseDetected.Enabled = False
             toolDetectedLabel.Text = "Detected: scanning..."
             AppendLog(label & " started.")
@@ -4167,18 +4291,102 @@ Public Class MainForm
             detectedLookup.Clear()
             detectedOptiPatcherLookup.Clear()
 
+            SetStatus(label & " in progress...")
+            If isManualDeepScan Then
+                UpdateProgress(0)
+                lastProgressValue = 0
+            End If
+
             If allCompatibilityEntries Is Nothing OrElse allCompatibilityEntries.Count = 0 Then
                 AppendLog("Detection skipped: compatibility list is empty.")
                 toolDetectedLabel.Text = "Detected: none"
+                SetStatus("Detection skipped.")
                 Return
             End If
 
-            Dim customScanFolders As List(Of String) = GetConfiguredCustomScanFolders()
-            If customScanFolders.Count > 0 Then
-                AppendLog("Custom scan roots: " & String.Join("; ", customScanFolders))
+            EnsurePersistedDeepScanGamesLoaded()
+            Dim prunedPersisted As List(Of DetectedGame) = MergeDetectedGames(persistedDeepScanGames, Nothing)
+            If prunedPersisted.Count <> persistedDeepScanGames.Count Then
+                persistedDeepScanGames = prunedPersisted
+                DeepScanDetectionCacheService.Save(persistedDeepScanGames, AddressOf AppendLog)
             End If
 
-            Dim results As List(Of DetectedGame) = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog, customScanFolders))
+            Dim results As List(Of DetectedGame)
+            If isManualDeepScan Then
+                AppendLog("Deep scan roots: " & String.Join("; ", manualDriveRoots))
+
+                Dim progressCallback As Action(Of DetectionService.DeepScanProgressInfo) =
+                    Sub(info)
+                        If info Is Nothing Then
+                            Return
+                        End If
+
+                        Dim totalRoots As Integer = Math.Max(1, info.TotalRoots)
+                        Dim completedRoots As Integer = Math.Min(totalRoots, Math.Max(0, info.RootsCompleted))
+                        Dim folderBudget As Integer = Math.Max(1, info.MaxFoldersPerRoot)
+                        Dim rootProgress As Double = Math.Min(1.0R, Math.Max(0.0R, CDbl(info.ScannedFoldersInRoot) / CDbl(folderBudget)))
+
+                        Dim progressValue As Integer = CInt(Math.Truncate(((completedRoots + rootProgress) / CDbl(totalRoots)) * 100.0R))
+                        If completedRoots < totalRoots AndAlso progressValue > 99 Then
+                            progressValue = 99
+                        End If
+                        progressValue = Math.Max(0, Math.Min(100, progressValue))
+
+                        Dim currentDirectory As String = FormatStatusDirectory(info.CurrentDirectory)
+                        Dim statusMessage As String = $"Deep scan [{completedRoots}/{totalRoots}]: {currentDirectory}"
+
+                        Dim shouldUpdateProgress As Boolean = False
+                        Dim shouldUpdateStatus As Boolean = False
+
+                        SyncLock progressSync
+                            If progressValue < lastProgressValue Then
+                                progressValue = lastProgressValue
+                            End If
+
+                            If progressValue <> lastProgressValue Then
+                                lastProgressValue = progressValue
+                                shouldUpdateProgress = True
+                            End If
+
+                            If Not String.Equals(statusMessage, lastStatusMessage, StringComparison.Ordinal) Then
+                                lastStatusMessage = statusMessage
+                                shouldUpdateStatus = True
+                            End If
+                        End SyncLock
+
+                        If shouldUpdateProgress Then
+                            UpdateProgress(progressValue)
+                        End If
+                        If shouldUpdateStatus Then
+                            SetStatus(statusMessage)
+                        End If
+                    End Sub
+
+                results = Await Task.Run(Function() DetectionService.DetectSupportedGamesByDriveScan(allCompatibilityEntries,
+                                                                                                       manualDriveRoots,
+                                                                                                       AddressOf AppendLog,
+                                                                                                       progressCallback))
+
+                If results IsNot Nothing AndAlso results.Count > 0 Then
+                    persistedDeepScanGames = MergeDetectedGames(persistedDeepScanGames, results)
+                    DeepScanDetectionCacheService.Save(persistedDeepScanGames, AddressOf AppendLog)
+                End If
+
+                UpdateProgress(100)
+                SetStatus("Manual deep scan finished.")
+            Else
+                results = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog))
+                SetStatus(label & " finished.")
+            End If
+
+            If persistedDeepScanGames IsNot Nothing AndAlso persistedDeepScanGames.Count > 0 Then
+                Dim mergedCountBefore As Integer = If(results Is Nothing, 0, results.Count)
+                results = MergeDetectedGames(results, persistedDeepScanGames)
+                If results.Count > mergedCountBefore Then
+                    AppendLog("Merged persisted deep-scan detections: +" & (results.Count - mergedCountBefore).ToString() & " game(s).")
+                End If
+            End If
+
             detectedGames = results
             detectedLookup = BuildDetectedLookup(results)
             detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
@@ -4211,10 +4419,15 @@ Public Class MainForm
         Catch ex As Exception
             AppendLog(label & " failed: " & ex.Message)
             toolDetectedLabel.Text = "Detected: error"
+            SetStatus(label & " failed.")
             UpdateExperimentalDetectedGamesList()
             ErrorLogger.Log(ex, "MainForm.DetectGames")
         Finally
             btnScanDetected.Enabled = True
+            btnDeepScanDrives.Enabled = True
+            If isManualDeepScan Then
+                UpdateProgress(0)
+            End If
         End Try
     End Function
 
@@ -4232,8 +4445,8 @@ Public Class MainForm
             txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
             chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
             chkAutoCheckInstallerUpdates.Checked = If(settings.AutoCheckInstallerUpdates.HasValue, settings.AutoCheckInstallerUpdates.Value, True)
+            chkHideNonDetected.Checked = If(settings.HideNonDetectedGames.HasValue, settings.HideNonDetectedGames.Value, False)
             chkShowExperimentalTabOnUnsupportedGpu.Checked = If(settings.ShowExperimentalTabOnUnsupportedGpu.HasValue, settings.ShowExperimentalTabOnUnsupportedGpu.Value, False)
-            txtCustomScanFolder.Text = If(settings.CustomScanFolder, "")
             txtDefaultIniPath.Text = settings.DefaultIniPath
             cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
             txtFsr4PackageFolder.Text = If(settings.ExperimentalFsr4PackageFolder, "")

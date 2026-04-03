@@ -5,7 +5,9 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 ## Features
 
 - Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect) and prefill install settings.
+- Manual deep-drive scan mode (select drives at runtime) for launcher-independent game detection.
 - Compatibility list view with detection plus both OptiScaler and OptiPatcher install status/version.
+- Optional `Hide non-detected` filter to focus only on detected installs.
 - Install from stable, alternate release source, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
@@ -23,7 +25,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Diagnostics export bundle (logs, settings, detection snapshot).
 - Configurable URLs for lists and releases.
 - Anti-cheat signature hints in detection results with install-time warning prompts.
-- Optional custom folder scan source and startup compatibility auto-refresh toggle.
+- Startup compatibility auto-refresh toggle.
 - FSR4 INT8 (Experimental) workflow with detected-game picker and optional visibility override on unsupported GPUs.
 - Robust GPU detection using adapter vendor IDs (with fallbacks), and detected GPU model shown on the title bar.
 
@@ -59,6 +61,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 
 - Search/filter the compatibility list.
 - Click "Scan installed games" to detect Steam/Epic/GOG/EA/Ubisoft installs.
+- Click "Deep scan drives" to select one or more drives and run a launcher-independent async deep scan.
+- Enable "Hide non-detected" to show only rows that are currently detected.
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
 
 ### Install tab
@@ -125,6 +129,8 @@ Settings:
 
 ## Version History
 
+- v1.0.9.7 - Add persistent deep-scan detected games cache and saved `Hide non-detected` preference, refresh OptiScaler/OptiPatcher install-state columns immediately after install/remove actions, add About -> Sponsors tab with automatic public sponsor loading, and streamline the Sponsors tab UI by removing extra helper/status text.
+- v1.0.8.8 - Add async manual deep-drive scan with drive picker dialog (launcher-independent detection), remove custom scan-folder setting/UI, add `Hide non-detected` filter on Game Detection tab, and switch drive picker list to themed control to remove bright system borders.
 - v1.0.8.2 - Add `Sponsor Me` link to About dialog (https://github.com/sponsors/Wimukthi) with themed link styling and direct open action.
 - v1.0.8.0 - Fix OptiPatcher detection to use the same nested install probing behavior as OptiScaler, improve detected-game folder matching for nested binary paths, and harden release packaging with clean staged zip output (prevents stale top-level `win-x64` payloads).
 - v1.0.7.6 - Add full OptiPatcher integration: support-list sync, release fetch (stable/rolling/alternate), install/remove services and manifests, detection column on Game Detection, supported-only enforcement, Install-tab `Install + OptiPatcher` guided flow with preflight + summary, and improved OptiPatcher panel layout/ASI folder auto-setup.
