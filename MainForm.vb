@@ -110,6 +110,9 @@ Public Class MainForm
             Dim settings As AppSettingsModel = AppSettings.Load()
             Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
             Dim checkUpdatesOnStartup As Boolean = settings Is Nothing OrElse Not settings.AutoCheckInstallerUpdates.HasValue OrElse settings.AutoCheckInstallerUpdates.Value
+            Dim runInitialDeepScan As Boolean = settings IsNot Nothing AndAlso
+                                                (Not settings.HasCompletedInitialDeepScan.HasValue OrElse
+                                                 Not settings.HasCompletedInitialDeepScan.Value)
             If refreshOnStartup Then
                 Await RefreshCompatibilityAsync(False, True)
             End If
@@ -122,7 +125,23 @@ Public Class MainForm
                 SetUpdateNoticeVisible(False, "")
                 AppendLog("Installer update auto-check disabled.")
             End If
-            Await RunDetectionAsync(True)
+
+            If runInitialDeepScan Then
+                AppendLog("First start detected: running one-time deep scan across available drives.")
+                Dim initialRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
+                If initialRoots.Count > 0 Then
+                    Await RunDetectionAsync(True, initialRoots, True)
+                Else
+                    AppendLog("One-time deep scan skipped: no scannable drives found.")
+                    Await RunDetectionAsync(True)
+                End If
+
+                settings.HasCompletedInitialDeepScan = True
+                AppSettings.Save(settings)
+                AppendLog("One-time first-start deep scan completed.")
+            Else
+                Await RunDetectionAsync(True)
+            End If
         Catch ex As Exception
             AppendLog("Startup background task failed: " & ex.Message)
             ErrorLogger.Log(ex, "MainForm.StartBackgroundTasks")
@@ -2189,6 +2208,7 @@ Public Class MainForm
 
         lvFsr4DetectedGames.BeginUpdate()
         lvFsr4DetectedGames.Items.Clear()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
 
         If detectedGames IsNot Nothing Then
             For Each game As DetectedGame In detectedGames.OrderBy(Function(entry) entry.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -2196,9 +2216,19 @@ Public Class MainForm
                     Continue For
                 End If
 
+                Dim normalizedPath As String = NormalizePathSafe(game.InstallDir)
+                If String.IsNullOrWhiteSpace(normalizedPath) Then
+                    Continue For
+                End If
+
+                Dim dedupeKey As String = NameNormalization.NormalizeRelaxedName(game.DisplayName) & "|" & normalizedPath
+                If Not seen.Add(dedupeKey) Then
+                    Continue For
+                End If
+
                 Dim item As New ListViewItem(game.DisplayName)
                 item.SubItems.Add(If(game.Platform, ""))
-                item.SubItems.Add(If(game.InstallDir, ""))
+                item.SubItems.Add(normalizedPath)
                 item.Tag = game
                 lvFsr4DetectedGames.Items.Add(item)
             Next
@@ -4299,7 +4329,9 @@ Public Class MainForm
         Return New Rectangle(x, y, bounds.Width, bounds.Height)
     End Function
 
-    Private Async Function RunDetectionAsync(isAuto As Boolean, Optional selectedDriveRoots As IEnumerable(Of String) = Nothing) As Task
+    Private Async Function RunDetectionAsync(isAuto As Boolean,
+                                             Optional selectedDriveRoots As IEnumerable(Of String) = Nothing,
+                                             Optional isInitialDeepScan As Boolean = False) As Task
         Dim manualDriveRoots As List(Of String) = New List(Of String)()
         If selectedDriveRoots IsNot Nothing Then
             manualDriveRoots = selectedDriveRoots.
@@ -4310,8 +4342,13 @@ Public Class MainForm
                 ToList()
         End If
 
-        Dim isManualDeepScan As Boolean = manualDriveRoots.Count > 0
-        Dim label As String = If(isManualDeepScan, "Manual deep scan", If(isAuto, "Auto detection", "Detection"))
+        Dim isDeepScan As Boolean = manualDriveRoots.Count > 0
+        Dim label As String
+        If isDeepScan Then
+            label = If(isInitialDeepScan, "Initial deep scan", "Manual deep scan")
+        Else
+            label = If(isAuto, "Auto detection", "Detection")
+        End If
         Dim progressSync As New Object()
         Dim lastProgressValue As Integer = -1
         Dim lastStatusMessage As String = ""
@@ -4327,7 +4364,7 @@ Public Class MainForm
             detectedOptiPatcherLookup.Clear()
 
             SetStatus(label & " in progress...")
-            If isManualDeepScan Then
+            If isDeepScan Then
                 UpdateProgress(0)
                 lastProgressValue = 0
             End If
@@ -4346,8 +4383,10 @@ Public Class MainForm
                 DeepScanDetectionCacheService.Save(persistedDeepScanGames, AddressOf AppendLog)
             End If
 
-            Dim results As List(Of DetectedGame)
-            If isManualDeepScan Then
+            Dim launcherResults As List(Of DetectedGame) = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog))
+            Dim results As List(Of DetectedGame) = launcherResults
+
+            If isDeepScan Then
                 AppendLog("Deep scan roots: " & String.Join("; ", manualDriveRoots))
 
                 Dim progressCallback As Action(Of DetectionService.DeepScanProgressInfo) =
@@ -4397,20 +4436,26 @@ Public Class MainForm
                         End If
                     End Sub
 
-                results = Await Task.Run(Function() DetectionService.DetectSupportedGamesByDriveScan(allCompatibilityEntries,
-                                                                                                       manualDriveRoots,
-                                                                                                       AddressOf AppendLog,
-                                                                                                       progressCallback))
+                Dim deepScanResults As List(Of DetectedGame) =
+                    Await Task.Run(Function() DetectionService.DetectSupportedGamesByDriveScan(allCompatibilityEntries,
+                                                                                                manualDriveRoots,
+                                                                                                AddressOf AppendLog,
+                                                                                                progressCallback))
 
-                If results IsNot Nothing AndAlso results.Count > 0 Then
-                    persistedDeepScanGames = MergeDetectedGames(persistedDeepScanGames, results)
+                If deepScanResults IsNot Nothing AndAlso deepScanResults.Count > 0 Then
+                    persistedDeepScanGames = MergeDetectedGames(persistedDeepScanGames, deepScanResults)
                     DeepScanDetectionCacheService.Save(persistedDeepScanGames, AddressOf AppendLog)
                 End If
 
+                Dim mergedBefore As Integer = If(launcherResults Is Nothing, 0, launcherResults.Count)
+                results = MergeDetectedGames(launcherResults, deepScanResults)
+                If results.Count > mergedBefore Then
+                    AppendLog("Deep scan augmented launcher detection: +" & (results.Count - mergedBefore).ToString() & " game(s).")
+                End If
+
                 UpdateProgress(100)
-                SetStatus("Manual deep scan finished.")
+                SetStatus(label & " finished.")
             Else
-                results = Await Task.Run(Function() DetectionService.DetectSupportedGames(allCompatibilityEntries, AddressOf AppendLog))
                 SetStatus(label & " finished.")
             End If
 
@@ -4460,7 +4505,7 @@ Public Class MainForm
         Finally
             btnScanDetected.Enabled = True
             btnDeepScanDrives.Enabled = True
-            If isManualDeepScan Then
+            If isDeepScan Then
                 UpdateProgress(0)
             End If
         End Try

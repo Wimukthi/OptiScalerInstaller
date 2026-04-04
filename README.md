@@ -129,6 +129,7 @@ Settings:
 
 ## Version History
 
+- v1.1.0.3 - Add one-time first-start deep scan across all available drives, make deep scan always augment launcher detection (never replace it), add uninstall-registry detection fallback for broader launcher coverage (including Battle.net-style installs), and de-duplicate FSR INT8 detected-game entries after merged scans.
 - v1.1.0.1 - Generalize deep-scan game-name matching for edge-case installs by improving title tokenization (digits/apostrophes), adding ambiguity-safe relaxed prefix matching, and expanding executable probe paths (`x64_dx12`, `x64_dx11`, nested bin/binaries subfolders).
 - v1.0.9.9 - Fix manual deep-scan root normalization so selected drives are scanned from true roots (for example `G:\`) instead of drive-relative current directories (for example installer folder on `G:`), preventing missed detections on launcher-independent installs.
 - v1.0.9.7 - Add persistent deep-scan detected games cache and saved `Hide non-detected` preference, refresh OptiScaler/OptiPatcher install-state columns immediately after install/remove actions, add About -> Sponsors tab with automatic public sponsor loading, and streamline the Sponsors tab UI by removing extra helper/status text.

@@ -14,6 +14,7 @@
   "OptiPatcherLocalPath": "",
   "AutoRefreshCompatibilityOnStartup": true,
   "AutoCheckInstallerUpdates": true,
+  "HasCompletedInitialDeepScan": false,
   "HideNonDetectedGames": false,
   "ShowExperimentalTabOnUnsupportedGpu": false,
   "EnableGameTemplates": true,

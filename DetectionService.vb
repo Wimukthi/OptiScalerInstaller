@@ -33,6 +33,7 @@ Public Class DetectionService
         AddGogGames(matcher, results, seenPaths, log)
         AddEaGames(matcher, results, seenPaths, log)
         AddUbisoftGames(matcher, results, seenPaths, log)
+        AddRegistryInstalledGames(matcher, results, seenPaths, log)
 
         results.Sort(Function(left, right) StringComparer.OrdinalIgnoreCase.Compare(left.DisplayName, right.DisplayName))
         Return results
@@ -246,6 +247,161 @@ Public Class DetectionService
             log("Ubisoft Connect not detected.")
         End If
     End Sub
+
+    Private Shared Sub AddRegistryInstalledGames(matcher As CompatibilityMatcher,
+                                                 results As List(Of DetectedGame),
+                                                 seenPaths As HashSet(Of String),
+                                                 log As Action(Of String))
+        If log IsNot Nothing Then
+            log("Scanning Windows uninstall registry...")
+        End If
+
+        Dim roots As Tuple(Of RegistryKey, String)() = {
+            Tuple.Create(Registry.LocalMachine, "Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            Tuple.Create(Registry.LocalMachine, "Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            Tuple.Create(Registry.CurrentUser, "Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            Tuple.Create(Registry.CurrentUser, "Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
+        }
+
+        Dim inspected As Integer = 0
+        Dim matched As Integer = 0
+        Dim seenCandidates As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+        For Each rootInfo As Tuple(Of RegistryKey, String) In roots
+            Try
+                Using uninstallRoot As RegistryKey = rootInfo.Item1.OpenSubKey(rootInfo.Item2)
+                    If uninstallRoot Is Nothing Then
+                        Continue For
+                    End If
+
+                    For Each subKeyName As String In uninstallRoot.GetSubKeyNames()
+                        Using appKey As RegistryKey = uninstallRoot.OpenSubKey(subKeyName)
+                            If appKey Is Nothing Then
+                                Continue For
+                            End If
+
+                            Dim displayName As String = Convert.ToString(appKey.GetValue("DisplayName"))
+                            If String.IsNullOrWhiteSpace(displayName) Then
+                                Continue For
+                            End If
+
+                            Dim installDir As String = GetInstallDirectoryFromUninstallKey(appKey)
+                            If String.IsNullOrWhiteSpace(installDir) Then
+                                Continue For
+                            End If
+
+                            Dim dedupeKey As String = NameNormalization.NormalizeRelaxedName(displayName) & "|" & NormalizeInstallPath(installDir)
+                            If Not seenCandidates.Add(dedupeKey) Then
+                                Continue For
+                            End If
+
+                            inspected += 1
+                            Dim countBefore As Integer = results.Count
+                            AddIfSupported(matcher, results, seenPaths, displayName, installDir, "Registry")
+                            If results.Count > countBefore Then
+                                matched += 1
+                            End If
+                        End Using
+                    Next
+                End Using
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.AddRegistryInstalledGames")
+            End Try
+        Next
+
+        If log IsNot Nothing Then
+            log("Windows uninstall registry scan: " & matched & " supported game(s) matched from " & inspected & " candidate(s).")
+        End If
+    End Sub
+
+    Private Shared Function GetInstallDirectoryFromUninstallKey(appKey As RegistryKey) As String
+        If appKey Is Nothing Then
+            Return ""
+        End If
+
+        Dim directValueNames As String() = {
+            "InstallLocation",
+            "InstallDir",
+            "InstallPath",
+            "Path",
+            "Install Folder",
+            "GamePath"
+        }
+
+        For Each valueName As String In directValueNames
+            Dim resolved As String = ResolveInstallPathFromValue(Convert.ToString(appKey.GetValue(valueName)))
+            If Not String.IsNullOrWhiteSpace(resolved) Then
+                Return resolved
+            End If
+        Next
+
+        Dim commandValueNames As String() = {
+            "DisplayIcon",
+            "UninstallString",
+            "QuietUninstallString"
+        }
+
+        For Each valueName As String In commandValueNames
+            Dim resolved As String = ResolveInstallPathFromValue(ExtractPathFromCommandValue(Convert.ToString(appKey.GetValue(valueName))))
+            If Not String.IsNullOrWhiteSpace(resolved) Then
+                Return resolved
+            End If
+        Next
+
+        Return ""
+    End Function
+
+    Private Shared Function ResolveInstallPathFromValue(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Dim trimmed As String = value.Trim().Trim(""""c)
+        If String.IsNullOrWhiteSpace(trimmed) Then
+            Return ""
+        End If
+
+        Dim normalized As String = NormalizeInstallPath(trimmed)
+        If Directory.Exists(normalized) Then
+            Return normalized
+        End If
+        If File.Exists(normalized) Then
+            Return NormalizeInstallPath(Path.GetDirectoryName(normalized))
+        End If
+
+        Return ""
+    End Function
+
+    Private Shared Function ExtractPathFromCommandValue(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Dim trimmed As String = value.Trim()
+        If trimmed.StartsWith("""", StringComparison.Ordinal) Then
+            Dim closingQuote As Integer = trimmed.IndexOf("""", 1, StringComparison.Ordinal)
+            If closingQuote > 1 Then
+                Return trimmed.Substring(1, closingQuote - 1)
+            End If
+        End If
+
+        Dim commaIndex As Integer = trimmed.IndexOf(","c)
+        If commaIndex > 0 Then
+            trimmed = trimmed.Substring(0, commaIndex)
+        End If
+        trimmed = trimmed.Trim().Trim(""""c)
+
+        If Regex.IsMatch(trimmed, "^[A-Za-z]:\\") Then
+            Return trimmed
+        End If
+
+        Dim match As Match = Regex.Match(value, "(?<path>[A-Za-z]:\\[^""]+\.(exe|bat|cmd|lnk))", RegexOptions.IgnoreCase)
+        If match.Success Then
+            Return match.Groups("path").Value
+        End If
+
+        Return ""
+    End Function
 
     Private Shared Sub AddIfSupported(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), displayName As String, installDir As String, platform As String)
         If String.IsNullOrWhiteSpace(displayName) OrElse String.IsNullOrWhiteSpace(installDir) Then

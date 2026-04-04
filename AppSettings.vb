@@ -116,6 +116,7 @@ Friend Class AppSettingsModel
     Public Property OptiPatcherLocalPath As String
     Public Property AutoRefreshCompatibilityOnStartup As Boolean?
     Public Property AutoCheckInstallerUpdates As Boolean?
+    Public Property HasCompletedInitialDeepScan As Boolean?
     Public Property HideNonDetectedGames As Boolean?
     Public Property ShowExperimentalTabOnUnsupportedGpu As Boolean?
     Public Property EnableGameTemplates As Boolean?
@@ -197,6 +198,10 @@ Friend Class AppSettingsModel
         End If
         If Not AutoCheckInstallerUpdates.HasValue AndAlso defaults.AutoCheckInstallerUpdates.HasValue Then
             AutoCheckInstallerUpdates = defaults.AutoCheckInstallerUpdates
+            changed = True
+        End If
+        If Not HasCompletedInitialDeepScan.HasValue AndAlso defaults.HasCompletedInitialDeepScan.HasValue Then
+            HasCompletedInitialDeepScan = defaults.HasCompletedInitialDeepScan
             changed = True
         End If
         If Not HideNonDetectedGames.HasValue AndAlso defaults.HideNonDetectedGames.HasValue Then
