@@ -661,12 +661,47 @@ Public Class DetectionService
 
         Dim trimmed As String = value.Trim()
         Dim normalized As String = trimmed.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+        If IsDriveLetterOnlyPath(normalized) Then
+            normalized &= Path.DirectorySeparatorChar
+        End If
+
         Try
             normalized = Path.GetFullPath(normalized)
         Catch ex As Exception
             ErrorLogger.Log(ex, "DetectionService.NormalizeInstallPath")
             normalized = trimmed
         End Try
+
+        Return TrimPathExceptRoot(normalized)
+    End Function
+
+    Private Shared Function IsDriveLetterOnlyPath(value As String) As Boolean
+        Return Not String.IsNullOrWhiteSpace(value) AndAlso
+               value.Length = 2 AndAlso
+               Char.IsLetter(value(0)) AndAlso
+               value(1) = ":"c
+    End Function
+
+    Private Shared Function TrimPathExceptRoot(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then
+            Return ""
+        End If
+
+        Dim normalized As String = value.Trim()
+        Dim root As String = ""
+        Try
+            root = Path.GetPathRoot(normalized)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "DetectionService.TrimPathExceptRoot")
+        End Try
+
+        If Not String.IsNullOrWhiteSpace(root) Then
+            Dim normalizedNoSlash As String = normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            Dim rootNoSlash As String = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            If String.Equals(normalizedNoSlash, rootNoSlash, StringComparison.OrdinalIgnoreCase) Then
+                Return root
+            End If
+        End If
 
         Return normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
     End Function
