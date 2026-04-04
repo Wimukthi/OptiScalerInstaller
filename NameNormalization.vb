@@ -17,12 +17,27 @@ Friend Module NameNormalization
         Return NormalizeTokens(value, True)
     End Function
 
-    Private Function NormalizeTokens(value As String, relaxed As Boolean) As String
-        Dim sb As New StringBuilder()
-        For Each token As String In Tokenize(value)
-            If relaxed AndAlso SkipTokens.Contains(token) Then
+    Public Function TokenizeRelaxed(value As String) As List(Of String)
+        Dim tokens As List(Of String) = Tokenize(value)
+        If tokens.Count = 0 Then
+            Return tokens
+        End If
+
+        Dim filtered As New List(Of String)()
+        For Each token As String In tokens
+            If SkipTokens.Contains(token) Then
                 Continue For
             End If
+            filtered.Add(token)
+        Next
+
+        Return filtered
+    End Function
+
+    Private Function NormalizeTokens(value As String, relaxed As Boolean) As String
+        Dim sb As New StringBuilder()
+        Dim tokens As List(Of String) = If(relaxed, TokenizeRelaxed(value), Tokenize(value))
+        For Each token As String In tokens
             sb.Append(token)
         Next
         Return sb.ToString()
@@ -35,12 +50,26 @@ Friend Module NameNormalization
         End If
 
         Dim current As New StringBuilder()
+        Dim previousKind As Integer = 0 ' 0=none, 1=letter, 2=digit
         For Each ch As Char In value.ToLowerInvariant()
+            If ch = "'"c Then
+                Continue For
+            End If
+
             If Char.IsLetterOrDigit(ch) Then
+                Dim kind As Integer = If(Char.IsDigit(ch), 2, 1)
+                If current.Length > 0 AndAlso previousKind <> 0 AndAlso kind <> previousKind Then
+                    tokens.Add(current.ToString())
+                    current.Clear()
+                End If
                 current.Append(ch)
+                previousKind = kind
             ElseIf current.Length > 0 Then
                 tokens.Add(current.ToString())
                 current.Clear()
+                previousKind = 0
+            Else
+                previousKind = 0
             End If
         Next
 

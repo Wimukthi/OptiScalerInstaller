@@ -544,8 +544,12 @@ Public Class DetectionService
             Path.Combine(folderPath, "Binaries", "WinGDK"),
             Path.Combine(folderPath, "bin"),
             Path.Combine(folderPath, "bin", "x64"),
+            Path.Combine(folderPath, "bin", "x64_dx12"),
+            Path.Combine(folderPath, "bin", "x64_dx11"),
             Path.Combine(folderPath, "bin", "Win64"),
             Path.Combine(folderPath, "x64"),
+            Path.Combine(folderPath, "x64_dx12"),
+            Path.Combine(folderPath, "x64_dx11"),
             Path.Combine(folderPath, "Win64"),
             Path.Combine(folderPath, "Win32"),
             Path.Combine(folderPath, "WinGDK")
@@ -560,6 +564,67 @@ Public Class DetectionService
             If HasUsableExecutable(normalized) Then
                 Return normalized
             End If
+        Next
+
+        Dim nestedMatch As String = ProbeCommonExecutableSubfolders(folderPath)
+        If Not String.IsNullOrWhiteSpace(nestedMatch) Then
+            Return nestedMatch
+        End If
+
+        Return ""
+    End Function
+
+    Private Shared Function ProbeCommonExecutableSubfolders(folderPath As String) As String
+        Dim containers As String() = {
+            folderPath,
+            Path.Combine(folderPath, "bin"),
+            Path.Combine(folderPath, "binaries"),
+            Path.Combine(folderPath, "Binaries")
+        }
+
+        For Each container As String In containers
+            Dim normalizedContainer As String = NormalizeInstallPath(container)
+            If String.IsNullOrWhiteSpace(normalizedContainer) OrElse Not Directory.Exists(normalizedContainer) Then
+                Continue For
+            End If
+
+            Dim children As IEnumerable(Of String) = Enumerable.Empty(Of String)()
+            Try
+                children = Directory.EnumerateDirectories(normalizedContainer, "*", SearchOption.TopDirectoryOnly)
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateChildren")
+                Continue For
+            End Try
+
+            For Each child As String In children
+                Dim normalizedChild As String = NormalizeInstallPath(child)
+                If String.IsNullOrWhiteSpace(normalizedChild) Then
+                    Continue For
+                End If
+
+                If HasUsableExecutable(normalizedChild) Then
+                    Return normalizedChild
+                End If
+
+                Dim grandChildren As IEnumerable(Of String) = Enumerable.Empty(Of String)()
+                Try
+                    grandChildren = Directory.EnumerateDirectories(normalizedChild, "*", SearchOption.TopDirectoryOnly)
+                Catch ex As Exception
+                    ErrorLogger.Log(ex, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateGrandChildren")
+                    Continue For
+                End Try
+
+                For Each grandChild As String In grandChildren
+                    Dim normalizedGrandChild As String = NormalizeInstallPath(grandChild)
+                    If String.IsNullOrWhiteSpace(normalizedGrandChild) Then
+                        Continue For
+                    End If
+
+                    If HasUsableExecutable(normalizedGrandChild) Then
+                        Return normalizedGrandChild
+                    End If
+                Next
+            Next
         Next
 
         Return ""
@@ -810,11 +875,13 @@ Public Class DetectionService
         Private ReadOnly exactMap As Dictionary(Of String, CompatibilityEntry)
         Private ReadOnly normalizedMap As Dictionary(Of String, CompatibilityEntry)
         Private ReadOnly relaxedMap As Dictionary(Of String, CompatibilityEntry)
+        Private ReadOnly relaxedTokenEntries As List(Of RelaxedTokenEntry)
 
         Public Sub New(entries As IEnumerable(Of CompatibilityEntry))
             exactMap = New Dictionary(Of String, CompatibilityEntry)(StringComparer.OrdinalIgnoreCase)
             normalizedMap = New Dictionary(Of String, CompatibilityEntry)(StringComparer.OrdinalIgnoreCase)
             relaxedMap = New Dictionary(Of String, CompatibilityEntry)(StringComparer.OrdinalIgnoreCase)
+            relaxedTokenEntries = New List(Of RelaxedTokenEntry)()
 
             For Each entry As CompatibilityEntry In entries
                 If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.Name) Then
@@ -833,6 +900,14 @@ Public Class DetectionService
                 Dim relaxed As String = NormalizeRelaxedName(entry.Name)
                 If Not String.IsNullOrWhiteSpace(relaxed) AndAlso Not relaxedMap.ContainsKey(relaxed) Then
                     relaxedMap(relaxed) = entry
+                End If
+
+                Dim relaxedTokens As List(Of String) = NameNormalization.TokenizeRelaxed(entry.Name)
+                If relaxedTokens.Count > 0 Then
+                    relaxedTokenEntries.Add(New RelaxedTokenEntry With {
+                                           .Entry = entry,
+                                           .Tokens = relaxedTokens
+                    })
                 End If
             Next
         End Sub
@@ -857,7 +932,54 @@ Public Class DetectionService
                 Return matchedEntry
             End If
 
+            Dim inputRelaxedTokens As List(Of String) = NameNormalization.TokenizeRelaxed(name)
+            matchedEntry = MatchByRelaxedTokenPrefix(inputRelaxedTokens)
+            If matchedEntry IsNot Nothing Then
+                Return matchedEntry
+            End If
+
             Return Nothing
+        End Function
+
+        Private Function MatchByRelaxedTokenPrefix(inputTokens As List(Of String)) As CompatibilityEntry
+            If inputTokens Is Nothing OrElse inputTokens.Count < 2 Then
+                Return Nothing
+            End If
+
+            Dim matched As CompatibilityEntry = Nothing
+            For Each candidate As RelaxedTokenEntry In relaxedTokenEntries
+                If candidate Is Nothing OrElse candidate.Entry Is Nothing OrElse candidate.Tokens Is Nothing Then
+                    Continue For
+                End If
+
+                If IsPrefix(inputTokens, candidate.Tokens) OrElse IsPrefix(candidate.Tokens, inputTokens) Then
+                    If matched Is Nothing Then
+                        matched = candidate.Entry
+                    ElseIf Not String.Equals(matched.Name, candidate.Entry.Name, StringComparison.OrdinalIgnoreCase) Then
+                        ' Ambiguous prefix match; do not guess.
+                        Return Nothing
+                    End If
+                End If
+            Next
+
+            Return matched
+        End Function
+
+        Private Shared Function IsPrefix(prefixTokens As List(Of String), fullTokens As List(Of String)) As Boolean
+            If prefixTokens Is Nothing OrElse fullTokens Is Nothing Then
+                Return False
+            End If
+            If prefixTokens.Count = 0 OrElse prefixTokens.Count > fullTokens.Count Then
+                Return False
+            End If
+
+            For i As Integer = 0 To prefixTokens.Count - 1
+                If Not String.Equals(prefixTokens(i), fullTokens(i), StringComparison.OrdinalIgnoreCase) Then
+                    Return False
+                End If
+            Next
+
+            Return True
         End Function
 
         Private Shared Function NormalizeName(value As String) As String
@@ -867,6 +989,11 @@ Public Class DetectionService
         Private Shared Function NormalizeRelaxedName(value As String) As String
             Return NameNormalization.NormalizeRelaxedName(value)
         End Function
+
+        Private Class RelaxedTokenEntry
+            Public Property Entry As CompatibilityEntry
+            Public Property Tokens As List(Of String)
+        End Class
     End Class
 
     Private Class DeepScanCandidate
