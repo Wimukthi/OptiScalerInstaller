@@ -2208,31 +2208,31 @@ Public Class MainForm
 
         lvFsr4DetectedGames.BeginUpdate()
         lvFsr4DetectedGames.Items.Clear()
-        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-
-        If detectedGames IsNot Nothing Then
-            For Each game As DetectedGame In detectedGames.OrderBy(Function(entry) entry.DisplayName, StringComparer.OrdinalIgnoreCase)
-                If game Is Nothing Then
-                    Continue For
-                End If
-
-                Dim normalizedPath As String = NormalizePathSafe(game.InstallDir)
-                If String.IsNullOrWhiteSpace(normalizedPath) Then
-                    Continue For
-                End If
-
-                Dim dedupeKey As String = NameNormalization.NormalizeRelaxedName(game.DisplayName) & "|" & normalizedPath
-                If Not seen.Add(dedupeKey) Then
-                    Continue For
-                End If
-
-                Dim item As New ListViewItem(game.DisplayName)
-                item.SubItems.Add(If(game.Platform, ""))
-                item.SubItems.Add(normalizedPath)
-                item.Tag = game
-                lvFsr4DetectedGames.Items.Add(item)
-            Next
+        Dim canonicalByName As Dictionary(Of String, DetectedGame) = Nothing
+        If detectedLookup IsNot Nothing AndAlso detectedLookup.Count > 0 Then
+            canonicalByName = New Dictionary(Of String, DetectedGame)(detectedLookup, StringComparer.OrdinalIgnoreCase)
+        ElseIf detectedGames IsNot Nothing AndAlso detectedGames.Count > 0 Then
+            canonicalByName = BuildDetectedLookup(detectedGames)
+        Else
+            canonicalByName = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
         End If
+
+        For Each game As DetectedGame In canonicalByName.Values.OrderBy(Function(entry) entry.DisplayName, StringComparer.OrdinalIgnoreCase)
+            If game Is Nothing Then
+                Continue For
+            End If
+
+            Dim normalizedPath As String = NormalizePathSafe(game.InstallDir)
+            If String.IsNullOrWhiteSpace(normalizedPath) Then
+                Continue For
+            End If
+
+            Dim item As New ListViewItem(game.DisplayName)
+            item.SubItems.Add(If(game.Platform, ""))
+            item.SubItems.Add(normalizedPath)
+            item.Tag = game
+            lvFsr4DetectedGames.Items.Add(item)
+        Next
 
         lvFsr4DetectedGames.EndUpdate()
 

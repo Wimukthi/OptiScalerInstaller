@@ -129,6 +129,7 @@ Settings:
 
 ## Version History
 
+- v1.1.0.5 - Align FSR INT8 detected-games list with the canonical Game Detection result set so counts and entries match (fixes duplicate/multi-path variants appearing only in the experimental list).
 - v1.1.0.3 - Add one-time first-start deep scan across all available drives, make deep scan always augment launcher detection (never replace it), add uninstall-registry detection fallback for broader launcher coverage (including Battle.net-style installs), and de-duplicate FSR INT8 detected-game entries after merged scans.
 - v1.1.0.1 - Generalize deep-scan game-name matching for edge-case installs by improving title tokenization (digits/apostrophes), adding ambiguity-safe relaxed prefix matching, and expanding executable probe paths (`x64_dx12`, `x64_dx11`, nested bin/binaries subfolders).
 - v1.0.9.9 - Fix manual deep-scan root normalization so selected drives are scanned from true roots (for example `G:\`) instead of drive-relative current directories (for example installer folder on `G:`), preventing missed detections on launcher-independent installs.
