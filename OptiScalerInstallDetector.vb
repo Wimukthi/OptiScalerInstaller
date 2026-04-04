@@ -178,6 +178,10 @@ Public Module OptiScalerInstallDetector
             Return
         End If
 
+        If Directory.Exists(baseFolder) Then
+            target.Add(baseFolder)
+        End If
+
         Dim candidates As String() = {
             Path.Combine(baseFolder, "Binaries", "Win64"),
             Path.Combine(baseFolder, "Binaries", "Win32"),
@@ -185,8 +189,12 @@ Public Module OptiScalerInstallDetector
             Path.Combine(baseFolder, "Engine", "Binaries", "Win64"),
             Path.Combine(baseFolder, "bin"),
             Path.Combine(baseFolder, "bin", "x64"),
+            Path.Combine(baseFolder, "bin", "x64_dx12"),
+            Path.Combine(baseFolder, "bin", "x64_dx11"),
             Path.Combine(baseFolder, "bin", "Win64"),
             Path.Combine(baseFolder, "x64"),
+            Path.Combine(baseFolder, "x64_dx12"),
+            Path.Combine(baseFolder, "x64_dx11"),
             Path.Combine(baseFolder, "Win64"),
             Path.Combine(baseFolder, "Win32"),
             Path.Combine(baseFolder, "WinGDK")

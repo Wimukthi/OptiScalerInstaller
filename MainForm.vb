@@ -903,30 +903,28 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnDeepScanDrives_Click(sender As Object, e As EventArgs) Handles btnDeepScanDrives.Click
-        Dim availableRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
-        If availableRoots.Count = 0 Then
-            AppendLog("Deep scan unavailable: no scannable drives found.")
-            MessageBox.Show(Me, "No ready fixed/removable/network drives were found.", "Deep Scan", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        If allCompatibilityEntries Is Nothing OrElse allCompatibilityEntries.Count = 0 Then
+            MessageBox.Show(Me, "Compatibility list is empty. Refresh lists first.", "Add Game Manually", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
-        Dim selectedRoots As List(Of String) = Nothing
-        Using picker As New frmDriveSelection(availableRoots)
-            If picker.ShowDialog(Me) <> DialogResult.OK Then
-                AppendLog("Deep scan cancelled by user.")
+        AppendLog("Browsing for game executable to add manually.")
+        Using dialog As New OpenFileDialog()
+            dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
+            dialog.Title = "Select Game Executable"
+            If File.Exists(txtGameExe.Text) Then
+                dialog.FileName = txtGameExe.Text
+            ElseIf Directory.Exists(txtGameFolder.Text) Then
+                dialog.InitialDirectory = txtGameFolder.Text
+            End If
+
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then
+                AppendLog("Manual add cancelled by user.")
                 Return
             End If
 
-            selectedRoots = picker.GetSelectedDriveRoots()
+            Await AddManualDetectedGameAsync(dialog.FileName)
         End Using
-
-        If selectedRoots Is Nothing OrElse selectedRoots.Count = 0 Then
-            AppendLog("Deep scan skipped: no drives selected.")
-            MessageBox.Show(Me, "Select at least one drive to scan.", "Deep Scan", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        Await RunDetectionAsync(False, selectedRoots)
     End Sub
 
     Private Sub chkHideNonDetected_CheckedChanged(sender As Object, e As EventArgs) Handles chkHideNonDetected.CheckedChanged
@@ -1078,7 +1076,7 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnFsr4ScanDetectedGames_Click(sender As Object, e As EventArgs) Handles btnFsr4ScanDetectedGames.Click
-        Await RunDetectionAsync(False)
+        Await RunUnifiedDetectionAsync(False)
     End Sub
 
     Private Sub btnFsr4UseSelectedGame_Click(sender As Object, e As EventArgs) Handles btnFsr4UseSelectedGame.Click
@@ -2004,8 +2002,85 @@ Public Class MainForm
     End Function
 
     Private Async Sub btnScanDetected_Click(sender As Object, e As EventArgs) Handles btnScanDetected.Click
-        Await RunDetectionAsync(False)
+        Await RunUnifiedDetectionAsync(False)
     End Sub
+
+    Private Async Function RunUnifiedDetectionAsync(isAuto As Boolean,
+                                                    Optional isInitialDeepScan As Boolean = False) As Task
+        Dim scanRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
+        If scanRoots IsNot Nothing AndAlso scanRoots.Count > 0 Then
+            Await RunDetectionAsync(isAuto, scanRoots, isInitialDeepScan)
+            Return
+        End If
+
+        If Not isAuto Then
+            AppendLog("Drive scan roots unavailable; running launcher/registry detection only.")
+        End If
+        Await RunDetectionAsync(isAuto, Nothing, isInitialDeepScan)
+    End Function
+
+    Private Async Function AddManualDetectedGameAsync(exePath As String) As Task
+        Try
+            btnDeepScanDrives.Enabled = False
+            btnUseDetected.Enabled = False
+
+            Dim normalizedExe As String = NormalizePathSafe(exePath)
+            If String.IsNullOrWhiteSpace(normalizedExe) OrElse Not File.Exists(normalizedExe) Then
+                MessageBox.Show(Me, "Select a valid game executable file.", "Add Game Manually", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+
+            AppendLog("Manual add: analyzing " & normalizedExe)
+            SetStatus("Manual add: matching selected game...")
+
+            Dim detected As DetectedGame = Await Task.Run(Function() DetectionService.DetectSupportedGameFromExecutable(allCompatibilityEntries,
+                                                                                                                           normalizedExe,
+                                                                                                                           "Manual"))
+            If detected Is Nothing Then
+                AppendLog("Manual add failed: selected executable did not match a supported game.")
+                MessageBox.Show(Me,
+                                "The selected executable did not match any game in the compatibility list." & Environment.NewLine &
+                                "Try selecting the main game EXE from the actual binaries folder.",
+                                "Add Game Manually",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information)
+                SetStatus("Manual add: no supported match.")
+                Return
+            End If
+
+            EnsurePersistedDeepScanGamesLoaded()
+
+            Dim beforeCount As Integer = detectedGames.Count
+            persistedDeepScanGames = MergeDetectedGames(persistedDeepScanGames, New List(Of DetectedGame) From {detected})
+            DeepScanDetectionCacheService.Save(persistedDeepScanGames, AddressOf AppendLog)
+
+            detectedGames = MergeDetectedGames(detectedGames, New List(Of DetectedGame) From {detected})
+            detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(detectedGames))
+            detectedLookup = BuildDetectedLookup(detectedGames, detectedInstallLookup)
+            detectedOptiPatcherLookup = Await Task.Run(Function() BuildOptiPatcherStatusLookup(detectedGames))
+
+            ApplyCompatibilityFilter()
+            UpdateExperimentalDetectedGamesList()
+            UpdateDetectedStatus()
+            UpdateInstallStatus()
+            UpdateOptiPatcherStatus()
+
+            Dim isNewEntry As Boolean = detectedGames.Count > beforeCount
+            If isNewEntry Then
+                AppendLog("Manual add succeeded: " & detected.DisplayName & " (" & detected.InstallDir & ").")
+            Else
+                AppendLog("Manual add matched existing detected game: " & detected.DisplayName & ". Status refreshed.")
+            End If
+            SetStatus("Manual add complete.")
+        Catch ex As Exception
+            AppendLog("Manual add failed: " & ex.Message)
+            SetStatus("Manual add failed.")
+            ErrorLogger.Log(ex, "MainForm.AddManualDetectedGame")
+        Finally
+            btnDeepScanDrives.Enabled = True
+            UpdateUseDetectedState()
+        End Try
+    End Function
 
     Private Sub btnUseDetected_Click(sender As Object, e As EventArgs) Handles btnUseDetected.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
@@ -2098,7 +2173,8 @@ Public Class MainForm
         Next
     End Sub
 
-    Private Function BuildDetectedLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, DetectedGame)
+    Private Function BuildDetectedLookup(results As IEnumerable(Of DetectedGame),
+                                         Optional installLookup As IDictionary(Of String, OptiScalerInstallInfo) = Nothing) As Dictionary(Of String, DetectedGame)
         Dim map As New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
         For Each game As DetectedGame In results
             If game Is Nothing Then
@@ -2112,9 +2188,73 @@ Public Class MainForm
 
             If Not map.ContainsKey(key) Then
                 map(key) = game
+            ElseIf IsPreferredDetectedGameCandidate(game, map(key), installLookup) Then
+                map(key) = game
             End If
         Next
         Return map
+    End Function
+
+    Private Function IsPreferredDetectedGameCandidate(candidate As DetectedGame,
+                                                      current As DetectedGame,
+                                                      installLookup As IDictionary(Of String, OptiScalerInstallInfo)) As Boolean
+        Dim candidateScore As Integer = GetDetectedGameCandidateScore(candidate, installLookup)
+        Dim currentScore As Integer = GetDetectedGameCandidateScore(current, installLookup)
+        If candidateScore <> currentScore Then
+            Return candidateScore > currentScore
+        End If
+
+        Dim candidatePath As String = NormalizePathSafe(If(candidate?.InstallDir, ""))
+        Dim currentPath As String = NormalizePathSafe(If(current?.InstallDir, ""))
+        If candidatePath.Length <> currentPath.Length Then
+            Return candidatePath.Length < currentPath.Length
+        End If
+
+        Return StringComparer.OrdinalIgnoreCase.Compare(candidatePath, currentPath) < 0
+    End Function
+
+    Private Function GetDetectedGameCandidateScore(game As DetectedGame,
+                                                   installLookup As IDictionary(Of String, OptiScalerInstallInfo)) As Integer
+        If game Is Nothing Then
+            Return Integer.MinValue
+        End If
+
+        Dim score As Integer = 0
+
+        Dim lookupKey As String = GetDetectedInstallLookupKey(game)
+        If installLookup IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(lookupKey) Then
+            Dim installInfo As OptiScalerInstallInfo = Nothing
+            If installLookup.TryGetValue(lookupKey, installInfo) AndAlso installInfo IsNot Nothing AndAlso installInfo.IsInstalled Then
+                score += 10000
+            End If
+        End If
+
+        Dim platformValue As String = If(game.Platform, "").Trim().ToLowerInvariant()
+        Select Case platformValue
+            Case "steam", "epic", "gog", "ea app", "ubisoft", "battle.net"
+                score += 600
+            Case "registry"
+                score += 500
+            Case "drive scan"
+                score += 300
+            Case Else
+                score += 350
+        End Select
+
+        Dim pathValue As String = NormalizePathSafe(If(game.InstallDir, "")).ToLowerInvariant()
+        If pathValue.Contains("\backup\") OrElse pathValue.Contains("\backups\") Then
+            score -= 120
+        End If
+        If pathValue.Contains("\documents\") Then
+            score -= 40
+        End If
+        If pathValue.Contains("\bin\x64_dx12") Then
+            score += 40
+        ElseIf pathValue.Contains("\x64_dx12") Then
+            score += 25
+        End If
+
+        Return score
     End Function
 
     Private Function BuildInstallStatusLookup(results As IEnumerable(Of DetectedGame)) As Dictionary(Of String, OptiScalerInstallInfo)
@@ -2212,7 +2352,7 @@ Public Class MainForm
         If detectedLookup IsNot Nothing AndAlso detectedLookup.Count > 0 Then
             canonicalByName = New Dictionary(Of String, DetectedGame)(detectedLookup, StringComparer.OrdinalIgnoreCase)
         ElseIf detectedGames IsNot Nothing AndAlso detectedGames.Count > 0 Then
-            canonicalByName = BuildDetectedLookup(detectedGames)
+            canonicalByName = BuildDetectedLookup(detectedGames, detectedInstallLookup)
         Else
             canonicalByName = New Dictionary(Of String, DetectedGame)(StringComparer.OrdinalIgnoreCase)
         End If
@@ -4047,8 +4187,8 @@ Public Class MainForm
         toolTip.SetToolTip(tabMain, "Main pages of the installer. Typical flow: Game Detection -> Install -> Add-ons -> optional FSR4 INT8 -> Settings.")
 
         toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
-        toolTip.SetToolTip(btnScanDetected, "Fast launcher-based scan. Checks Steam, Epic, GOG, EA, and Ubisoft metadata and marks matching supported games.")
-        toolTip.SetToolTip(btnDeepScanDrives, "Manual deep scan for launcher-independent installs. You choose drives, then the installer scans folders/executables asynchronously and shows live progress.")
+        toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then asynchronous drive scan augmentation. Use this as the primary refresh button.")
+        toolTip.SetToolTip(btnDeepScanDrives, "Manually add a game by selecting its executable. The installer matches it to the compatibility list and persists it for future sessions.")
         toolTip.SetToolTip(btnUseDetected, "Use the selected detected row as the active install target. Automatically switches to Install tab and fills Game EXE/Game folder.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
@@ -4110,7 +4250,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnBrowseFsr4PackageFolder, "Browse for local FSR4 INT8 package folder.")
         toolTip.SetToolTip(txtFsr4TargetGameFolder, "Target game folder for experimental package apply/remove operations.")
         toolTip.SetToolTip(btnFsr4PickGame, "Jump to Install tab to pick or change the active game target, then return here.")
-        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run detection and repopulate the detected supported games list used by this experimental workflow.")
+        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run the unified detection pipeline and repopulate the detected supported games list used by this experimental workflow.")
         toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use selected row from detected games list as FSR4 INT8 target folder.")
         toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: choose a game executable directly if automatic detection misses it.")
         toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. Select one and use it, or double-click.")
@@ -4343,11 +4483,9 @@ Public Class MainForm
         End If
 
         Dim isDeepScan As Boolean = manualDriveRoots.Count > 0
-        Dim label As String
-        If isDeepScan Then
-            label = If(isInitialDeepScan, "Initial deep scan", "Manual deep scan")
-        Else
-            label = If(isAuto, "Auto detection", "Detection")
+        Dim label As String = If(isAuto, "Auto detection", "Detection")
+        If isInitialDeepScan Then
+            label = "Initial deep scan"
         End If
         Dim progressSync As New Object()
         Dim lastProgressValue As Integer = -1
@@ -4359,6 +4497,9 @@ Public Class MainForm
             btnUseDetected.Enabled = False
             toolDetectedLabel.Text = "Detected: scanning..."
             AppendLog(label & " started.")
+            If isDeepScan AndAlso Not isInitialDeepScan Then
+                AppendLog("Detection mode: launcher/registry + deep scan augmentation.")
+            End If
             detectedGames.Clear()
             detectedLookup.Clear()
             detectedOptiPatcherLookup.Clear()
@@ -4468,8 +4609,8 @@ Public Class MainForm
             End If
 
             detectedGames = results
-            detectedLookup = BuildDetectedLookup(results)
             detectedInstallLookup = Await Task.Run(Function() BuildInstallStatusLookup(results))
+            detectedLookup = BuildDetectedLookup(results, detectedInstallLookup)
             detectedOptiPatcherLookup = Await Task.Run(Function() BuildOptiPatcherStatusLookup(results))
             ApplyCompatibilityFilter()
             UpdateExperimentalDetectedGamesList()

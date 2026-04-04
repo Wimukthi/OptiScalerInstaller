@@ -39,6 +39,153 @@ Public Class DetectionService
         Return results
     End Function
 
+    ' Matches a manually selected game executable to a supported compatibility entry.
+    Public Shared Function DetectSupportedGameFromExecutable(entries As IEnumerable(Of CompatibilityEntry),
+                                                             executablePath As String,
+                                                             Optional platform As String = "Manual") As DetectedGame
+        If entries Is Nothing OrElse String.IsNullOrWhiteSpace(executablePath) Then
+            Return Nothing
+        End If
+
+        Dim normalizedExe As String = NormalizeInstallPath(executablePath)
+        If String.IsNullOrWhiteSpace(normalizedExe) OrElse Not File.Exists(normalizedExe) Then
+            Return Nothing
+        End If
+
+        Dim executableDirectory As String = NormalizeInstallPath(Path.GetDirectoryName(normalizedExe))
+        If String.IsNullOrWhiteSpace(executableDirectory) OrElse Not Directory.Exists(executableDirectory) Then
+            Return Nothing
+        End If
+
+        Dim matcher As New CompatibilityMatcher(entries)
+        Dim installDirectory As String = ResolveManualInstallDir(executableDirectory)
+        If String.IsNullOrWhiteSpace(installDirectory) Then
+            installDirectory = executableDirectory
+        End If
+
+        For Each candidateName As String In BuildManualMatchCandidates(normalizedExe, installDirectory)
+            Dim matchedEntry As CompatibilityEntry = matcher.Match(candidateName)
+            If matchedEntry Is Nothing Then
+                Continue For
+            End If
+
+            Dim antiCheat As AntiCheatScanResult = AntiCheatService.Detect(installDirectory)
+            Return New DetectedGame With {
+                .DisplayName = matchedEntry.Name,
+                .Platform = platform,
+                .InstallDir = installDirectory,
+                .MatchedEntry = matchedEntry,
+                .SourceName = candidateName,
+                .AntiCheat = If(antiCheat?.Detected, antiCheat.Provider, "")
+            }
+        Next
+
+        Return Nothing
+    End Function
+
+    Private Shared Function ResolveManualInstallDir(executableDirectory As String) As String
+        Dim normalizedDirectory As String = NormalizeInstallPath(executableDirectory)
+        If String.IsNullOrWhiteSpace(normalizedDirectory) OrElse Not Directory.Exists(normalizedDirectory) Then
+            Return ""
+        End If
+
+        If HasUsableExecutable(normalizedDirectory) Then
+            Return normalizedDirectory
+        End If
+
+        Dim nestedCandidate As String = ResolveMatchedFolderInstallDir(normalizedDirectory)
+        If Not String.IsNullOrWhiteSpace(nestedCandidate) Then
+            Return nestedCandidate
+        End If
+
+        Dim parent As String = NormalizeInstallPath(Path.GetDirectoryName(normalizedDirectory))
+        If Not String.IsNullOrWhiteSpace(parent) Then
+            nestedCandidate = ResolveMatchedFolderInstallDir(parent)
+            If Not String.IsNullOrWhiteSpace(nestedCandidate) Then
+                Return nestedCandidate
+            End If
+        End If
+
+        Return normalizedDirectory
+    End Function
+
+    Private Shared Function BuildManualMatchCandidates(executablePath As String,
+                                                       installDirectory As String) As IEnumerable(Of String)
+        Dim results As New List(Of String)()
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+
+        Dim executableName As String = Path.GetFileNameWithoutExtension(executablePath)
+        AddManualCandidateName(results, seen, executableName)
+
+        Dim fileName As String = Path.GetFileName(executablePath)
+        AddManualCandidateName(results, seen, fileName)
+
+        Dim currentPath As String = NormalizeInstallPath(installDirectory)
+        Dim depth As Integer = 0
+        Do While Not String.IsNullOrWhiteSpace(currentPath) AndAlso depth < 7
+            Dim folderName As String = Path.GetFileName(currentPath)
+            If Not IsGenericManualFolderName(folderName) Then
+                AddManualCandidateName(results, seen, folderName)
+            End If
+
+            depth += 1
+            currentPath = NormalizeInstallPath(Path.GetDirectoryName(currentPath))
+        Loop
+
+        Return results
+    End Function
+
+    Private Shared Sub AddManualCandidateName(target As List(Of String),
+                                              seen As HashSet(Of String),
+                                              value As String)
+        If target Is Nothing OrElse seen Is Nothing OrElse String.IsNullOrWhiteSpace(value) Then
+            Return
+        End If
+
+        Dim trimmed As String = value.Trim()
+        If String.IsNullOrWhiteSpace(trimmed) Then
+            Return
+        End If
+
+        If seen.Add(trimmed) Then
+            target.Add(trimmed)
+        End If
+
+        Dim normalizedTokenFriendly As String = trimmed.Replace("_", " ").Replace("-", " ")
+        If Not String.Equals(normalizedTokenFriendly, trimmed, StringComparison.OrdinalIgnoreCase) AndAlso seen.Add(normalizedTokenFriendly) Then
+            target.Add(normalizedTokenFriendly)
+        End If
+    End Sub
+
+    Private Shared Function IsGenericManualFolderName(folderName As String) As Boolean
+        If String.IsNullOrWhiteSpace(folderName) Then
+            Return True
+        End If
+
+        Dim lowered As String = folderName.Trim().ToLowerInvariant()
+        Dim genericNames As String() = {
+            "bin",
+            "binaries",
+            "x64",
+            "x86",
+            "x64_dx12",
+            "x64_dx11",
+            "win64",
+            "win32",
+            "wingdk",
+            "release",
+            "shipping"
+        }
+
+        For Each genericName As String In genericNames
+            If lowered = genericName Then
+                Return True
+            End If
+        Next
+
+        Return False
+    End Function
+
     Private Shared Sub AddSteamGames(matcher As CompatibilityMatcher, results As List(Of DetectedGame), seenPaths As HashSet(Of String), log As Action(Of String))
         ' Steam installs are read from libraryfolders.vdf and appmanifest_*.acf.
         Dim steamPath As String = GetSteamPath()

@@ -458,7 +458,7 @@ Partial Class MainForm
         btnDeepScanDrives.Name = "btnDeepScanDrives"
         btnDeepScanDrives.Size = New Size(130, 27)
         btnDeepScanDrives.TabIndex = 3
-        btnDeepScanDrives.Text = "Deep scan drives"
+        btnDeepScanDrives.Text = "Add game manually"
         btnDeepScanDrives.UseVisualStyleBackColor = True
         ' 
         ' btnUseDetected

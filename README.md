@@ -4,8 +4,8 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 
 ## Features
 
-- Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect) and prefill install settings.
-- Manual deep-drive scan mode (select drives at runtime) for launcher-independent game detection.
+- Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect, registry) with deep-scan augmentation and prefill install settings.
+- Manual game add flow: pick a game executable to force-match and persist supported installs that automated scans miss.
 - Compatibility list view with detection plus both OptiScaler and OptiPatcher install status/version.
 - Optional `Hide non-detected` filter to focus only on detected installs.
 - Install from stable, alternate release source, or local OptiScaler archive (.7z).
@@ -60,8 +60,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 ### Game Detection tab
 
 - Search/filter the compatibility list.
-- Click "Scan installed games" to detect Steam/Epic/GOG/EA/Ubisoft installs.
-- Click "Deep scan drives" to select one or more drives and run a launcher-independent async deep scan.
+- Click "Scan installed games" to run the unified detection pipeline (launcher/registry scan + deep scan augmentation).
+- Click "Add game manually" to browse to a game executable and persist a supported manual detection.
 - Enable "Hide non-detected" to show only rows that are currently detected.
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
 
@@ -129,6 +129,7 @@ Settings:
 
 ## Version History
 
+- v1.1.0.8 - Merge launcher and deep scan into a single "Scan installed games" pipeline, repurpose the secondary button into "Add game manually" (EXE-based forced match + persistence), and improve install-state path selection/probing for nested DX11/DX12 binary folders.
 - v1.1.0.5 - Align FSR INT8 detected-games list with the canonical Game Detection result set so counts and entries match (fixes duplicate/multi-path variants appearing only in the experimental list).
 - v1.1.0.3 - Add one-time first-start deep scan across all available drives, make deep scan always augment launcher detection (never replace it), add uninstall-registry detection fallback for broader launcher coverage (including Battle.net-style installs), and de-duplicate FSR INT8 detected-game entries after merged scans.
 - v1.1.0.1 - Generalize deep-scan game-name matching for edge-case installs by improving title tokenization (digits/apostrophes), adding ambiguity-safe relaxed prefix matching, and expanding executable probe paths (`x64_dx12`, `x64_dx11`, nested bin/binaries subfolders).
