@@ -129,6 +129,7 @@ Settings:
 
 ## Version History
 
+- v1.1.1.1 - Drive selection is now always explicit for deep-scan augmentation: first-run one-time scan prompts for selected drives, and manual "Scan installed games" runs now prompt for drives instead of scanning all drives automatically.
 - v1.1.0.9 - Merge launcher and deep scan into a single "Scan installed games" pipeline, repurpose the secondary button into "Add game manually" (EXE-based forced match + persistence), and improve install-state path selection/probing for nested DX11/DX12 binary folders.
 - v1.1.0.5 - Align FSR INT8 detected-games list with the canonical Game Detection result set so counts and entries match (fixes duplicate/multi-path variants appearing only in the experimental list).
 - v1.1.0.3 - Add one-time first-start deep scan across all available drives, make deep scan always augment launcher detection (never replace it), add uninstall-registry detection fallback for broader launcher coverage (including Battle.net-style installs), and de-duplicate FSR INT8 detected-game entries after merged scans.
