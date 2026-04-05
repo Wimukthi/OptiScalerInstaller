@@ -127,10 +127,14 @@ Public Class MainForm
             End If
 
             If runInitialDeepScan Then
-                AppendLog("First start detected: running one-time deep scan across available drives.")
-                Dim initialRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
-                If initialRoots.Count > 0 Then
+                AppendLog("First start detected: select drives for one-time deep scan.")
+                Dim initialRoots As List(Of String) = PromptForDeepScanRoots("First start deep scan")
+                If initialRoots IsNot Nothing AndAlso initialRoots.Count > 0 Then
                     Await RunDetectionAsync(True, initialRoots, True)
+                    AppendLog("One-time first-start deep scan completed.")
+                ElseIf initialRoots Is Nothing Then
+                    AppendLog("One-time deep scan skipped by user; running launcher/registry detection only.")
+                    Await RunDetectionAsync(True)
                 Else
                     AppendLog("One-time deep scan skipped: no scannable drives found.")
                     Await RunDetectionAsync(True)
@@ -138,7 +142,6 @@ Public Class MainForm
 
                 settings.HasCompletedInitialDeepScan = True
                 AppSettings.Save(settings)
-                AppendLog("One-time first-start deep scan completed.")
             Else
                 Await RunDetectionAsync(True)
             End If
@@ -2007,16 +2010,41 @@ Public Class MainForm
 
     Private Async Function RunUnifiedDetectionAsync(isAuto As Boolean,
                                                     Optional isInitialDeepScan As Boolean = False) As Task
-        Dim scanRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
-        If scanRoots IsNot Nothing AndAlso scanRoots.Count > 0 Then
-            Await RunDetectionAsync(isAuto, scanRoots, isInitialDeepScan)
+        Dim selectedRoots As List(Of String) = PromptForDeepScanRoots("Detection scan")
+        If selectedRoots Is Nothing Then
+            AppendLog("Drive selection cancelled; running launcher/registry detection only.")
+            Await RunDetectionAsync(isAuto, Nothing, isInitialDeepScan)
             Return
         End If
 
-        If Not isAuto Then
-            AppendLog("Drive scan roots unavailable; running launcher/registry detection only.")
+        If selectedRoots.Count > 0 Then
+            Await RunDetectionAsync(isAuto, selectedRoots, isInitialDeepScan)
+            Return
         End If
+
+        AppendLog("Drive scan roots unavailable; running launcher/registry detection only.")
         Await RunDetectionAsync(isAuto, Nothing, isInitialDeepScan)
+    End Function
+
+    Private Function PromptForDeepScanRoots(scanContext As String) As List(Of String)
+        Dim availableRoots As List(Of String) = DetectionService.GetScannableDriveRoots(AddressOf AppendLog)
+        If availableRoots Is Nothing OrElse availableRoots.Count = 0 Then
+            Return New List(Of String)()
+        End If
+
+        Using picker As New frmDriveSelection(availableRoots)
+            picker.Text = "Select Drives for " & scanContext
+            If picker.ShowDialog(Me) <> DialogResult.OK Then
+                Return Nothing
+            End If
+
+            Dim selectedRoots As List(Of String) = picker.GetSelectedDriveRoots()
+            If selectedRoots Is Nothing Then
+                Return New List(Of String)()
+            End If
+
+            Return selectedRoots
+        End Using
     End Function
 
     Private Async Function AddManualDetectedGameAsync(exePath As String) As Task
@@ -4187,7 +4215,7 @@ Public Class MainForm
         toolTip.SetToolTip(tabMain, "Main pages of the installer. Typical flow: Game Detection -> Install -> Add-ons -> optional FSR4 INT8 -> Settings.")
 
         toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
-        toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then asynchronous drive scan augmentation. Use this as the primary refresh button.")
+        toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then drive-scan augmentation. You will be prompted to choose drives each run.")
         toolTip.SetToolTip(btnDeepScanDrives, "Manually add a game by selecting its executable. The installer matches it to the compatibility list and persists it for future sessions.")
         toolTip.SetToolTip(btnUseDetected, "Use the selected detected row as the active install target. Automatically switches to Install tab and fills Game EXE/Game folder.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
@@ -4250,7 +4278,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnBrowseFsr4PackageFolder, "Browse for local FSR4 INT8 package folder.")
         toolTip.SetToolTip(txtFsr4TargetGameFolder, "Target game folder for experimental package apply/remove operations.")
         toolTip.SetToolTip(btnFsr4PickGame, "Jump to Install tab to pick or change the active game target, then return here.")
-        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run the unified detection pipeline and repopulate the detected supported games list used by this experimental workflow.")
+        toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run the unified detection pipeline for this tab and choose which drives to include in deep-scan augmentation.")
         toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use selected row from detected games list as FSR4 INT8 target folder.")
         toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: choose a game executable directly if automatic detection misses it.")
         toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. Select one and use it, or double-click.")

@@ -60,7 +60,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 ### Game Detection tab
 
 - Search/filter the compatibility list.
-- Click "Scan installed games" to run the unified detection pipeline (launcher/registry scan + deep scan augmentation).
+- Click "Scan installed games" to run the unified detection pipeline (launcher/registry scan + deep scan augmentation). The app prompts you to choose drives before deep scan starts.
 - Click "Add game manually" to browse to a game executable and persist a supported manual detection.
 - Enable "Hide non-detected" to show only rows that are currently detected.
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
