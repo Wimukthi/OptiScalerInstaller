@@ -32,6 +32,15 @@ Partial Class MainForm
         colCompatAntiCheat = New ColumnHeader()
         colCompatPath = New ColumnHeader()
         compatFooterPanel = New Panel()
+        compatActionsPanel = New FlowLayoutPanel()
+        btnCompatOpenFolder = New Button()
+        btnCompatEditIni = New Button()
+        btnCompatInstallUpdate = New Button()
+        btnCompatUninstall = New Button()
+        btnCompatInstallPatcher = New Button()
+        btnCompatRemovePatcher = New Button()
+        btnCompatCopyInfo = New Button()
+        compatStatusPanel = New Panel()
         lblCompatibilityNote = New Label()
         chkHideNonDetected = New CheckBox()
         compatHeaderPanel = New Panel()
@@ -83,6 +92,7 @@ Partial Class MainForm
         btnInstall = New Button()
         btnUninstall = New Button()
         btnOpenGameFolder = New Button()
+        btnEditIni = New Button()
         lblInstalledStatus = New Label()
         chkInstallOptiPatcher = New CheckBox()
         lblInstallOptiPatcherStatus = New Label()
@@ -160,6 +170,7 @@ Partial Class MainForm
         lvFsr4DetectedGames = New ThemedListView()
         colFsr4Game = New ColumnHeader()
         colFsr4Platform = New ColumnHeader()
+        colFsr4Installed = New ColumnHeader()
         colFsr4DetectedPath = New ColumnHeader()
         tabSettings = New TabPage()
         grpSettings = New ThemedGroupBox()
@@ -212,10 +223,24 @@ Partial Class MainForm
         toolDetectedLabel = New ToolStripStatusLabel()
         toolProgressBar = New ToolStripProgressBar()
         toolTip = New ToolTip(components)
+        compatContextMenu = New ContextMenuStrip(components)
+        mnuCompatUseDetected = New ToolStripMenuItem()
+        mnuCompatOpenFolder = New ToolStripMenuItem()
+        mnuCompatEditIni = New ToolStripMenuItem()
+        mnuCompatSep1 = New ToolStripSeparator()
+        mnuCompatInstallUpdate = New ToolStripMenuItem()
+        mnuCompatUninstall = New ToolStripMenuItem()
+        mnuCompatInstallPatcher = New ToolStripMenuItem()
+        mnuCompatRemovePatcher = New ToolStripMenuItem()
+        mnuCompatSep2 = New ToolStripSeparator()
+        mnuCompatOpenWiki = New ToolStripMenuItem()
+        mnuCompatCopyInfo = New ToolStripMenuItem()
         mainLayout.SuspendLayout()
         tabMain.SuspendLayout()
         tabCompatibility.SuspendLayout()
         compatFooterPanel.SuspendLayout()
+        compatActionsPanel.SuspendLayout()
+        compatStatusPanel.SuspendLayout()
         compatHeaderPanel.SuspendLayout()
         compatHeaderLeftPanel.SuspendLayout()
         compatHeaderRightPanel.SuspendLayout()
@@ -303,8 +328,79 @@ Partial Class MainForm
         lvCompatibility.OwnerDraw = True
         lvCompatibility.Size = New Size(1240, 605)
         lvCompatibility.TabIndex = 6
+        lvCompatibility.ContextMenuStrip = compatContextMenu
         lvCompatibility.UseCompatibleStateImageBehavior = False
         lvCompatibility.View = View.Details
+        '
+        ' compatContextMenu
+        '
+        compatContextMenu.Items.AddRange(New ToolStripItem() {mnuCompatUseDetected, mnuCompatOpenFolder, mnuCompatEditIni, mnuCompatSep1, mnuCompatInstallUpdate, mnuCompatUninstall, mnuCompatInstallPatcher, mnuCompatRemovePatcher, mnuCompatSep2, mnuCompatOpenWiki, mnuCompatCopyInfo})
+        compatContextMenu.Name = "compatContextMenu"
+        compatContextMenu.Size = New Size(211, 214)
+        '
+        ' mnuCompatUseDetected
+        '
+        mnuCompatUseDetected.Name = "mnuCompatUseDetected"
+        mnuCompatUseDetected.Size = New Size(210, 22)
+        mnuCompatUseDetected.Text = "Use selected"
+        '
+        ' mnuCompatOpenFolder
+        '
+        mnuCompatOpenFolder.Name = "mnuCompatOpenFolder"
+        mnuCompatOpenFolder.Size = New Size(210, 22)
+        mnuCompatOpenFolder.Text = "Open game folder"
+        '
+        ' mnuCompatEditIni
+        '
+        mnuCompatEditIni.Name = "mnuCompatEditIni"
+        mnuCompatEditIni.Size = New Size(210, 22)
+        mnuCompatEditIni.Text = "Edit OptiScaler.ini"
+        '
+        ' mnuCompatSep1
+        '
+        mnuCompatSep1.Name = "mnuCompatSep1"
+        mnuCompatSep1.Size = New Size(207, 6)
+        '
+        ' mnuCompatInstallUpdate
+        '
+        mnuCompatInstallUpdate.Name = "mnuCompatInstallUpdate"
+        mnuCompatInstallUpdate.Size = New Size(210, 22)
+        mnuCompatInstallUpdate.Text = "Quick install OptiScaler"
+        '
+        ' mnuCompatUninstall
+        '
+        mnuCompatUninstall.Name = "mnuCompatUninstall"
+        mnuCompatUninstall.Size = New Size(210, 22)
+        mnuCompatUninstall.Text = "Uninstall OptiScaler"
+        '
+        ' mnuCompatInstallPatcher
+        '
+        mnuCompatInstallPatcher.Name = "mnuCompatInstallPatcher"
+        mnuCompatInstallPatcher.Size = New Size(210, 22)
+        mnuCompatInstallPatcher.Text = "Install/Update OptiPatcher"
+        '
+        ' mnuCompatRemovePatcher
+        '
+        mnuCompatRemovePatcher.Name = "mnuCompatRemovePatcher"
+        mnuCompatRemovePatcher.Size = New Size(210, 22)
+        mnuCompatRemovePatcher.Text = "Remove OptiPatcher"
+        '
+        ' mnuCompatSep2
+        '
+        mnuCompatSep2.Name = "mnuCompatSep2"
+        mnuCompatSep2.Size = New Size(207, 6)
+        '
+        ' mnuCompatOpenWiki
+        '
+        mnuCompatOpenWiki.Name = "mnuCompatOpenWiki"
+        mnuCompatOpenWiki.Size = New Size(210, 22)
+        mnuCompatOpenWiki.Text = "Open wiki page"
+        '
+        ' mnuCompatCopyInfo
+        '
+        mnuCompatCopyInfo.Name = "mnuCompatCopyInfo"
+        mnuCompatCopyInfo.Size = New Size(210, 22)
+        mnuCompatCopyInfo.Text = "Copy game info"
         ' 
         ' colCompatName
         ' 
@@ -343,13 +439,129 @@ Partial Class MainForm
         ' 
         ' compatFooterPanel
         ' 
-        compatFooterPanel.Controls.Add(lblCompatibilityNote)
-        compatFooterPanel.Controls.Add(chkHideNonDetected)
+        compatFooterPanel.Controls.Add(compatActionsPanel)
+        compatFooterPanel.Controls.Add(compatStatusPanel)
         compatFooterPanel.Dock = DockStyle.Bottom
-        compatFooterPanel.Location = New Point(3, 652)
+        compatFooterPanel.Location = New Point(3, 612)
         compatFooterPanel.Name = "compatFooterPanel"
-        compatFooterPanel.Size = New Size(1240, 24)
+        compatFooterPanel.Size = New Size(1240, 64)
         compatFooterPanel.TabIndex = 2
+        ' 
+        ' compatActionsPanel
+        ' 
+        compatActionsPanel.Controls.Add(btnUseDetected)
+        compatActionsPanel.Controls.Add(btnCompatOpenFolder)
+        compatActionsPanel.Controls.Add(btnCompatEditIni)
+        compatActionsPanel.Controls.Add(btnCompatInstallUpdate)
+        compatActionsPanel.Controls.Add(btnCompatUninstall)
+        compatActionsPanel.Controls.Add(btnCompatInstallPatcher)
+        compatActionsPanel.Controls.Add(btnCompatRemovePatcher)
+        compatActionsPanel.Controls.Add(btnCompatCopyInfo)
+        compatActionsPanel.Dock = DockStyle.Fill
+        compatActionsPanel.Location = New Point(0, 0)
+        compatActionsPanel.Name = "compatActionsPanel"
+        compatActionsPanel.Padding = New Padding(8, 4, 8, 4)
+        compatActionsPanel.Size = New Size(1240, 40)
+        compatActionsPanel.TabIndex = 10
+        compatActionsPanel.WrapContents = False
+        '
+        ' btnUseDetected
+        '
+        btnUseDetected.Anchor = AnchorStyles.None
+        btnUseDetected.Location = New Point(8, 6)
+        btnUseDetected.Margin = New Padding(0)
+        btnUseDetected.Name = "btnUseDetected"
+        btnUseDetected.Size = New Size(130, 27)
+        btnUseDetected.TabIndex = 6
+        btnUseDetected.Text = "Use selected"
+        btnUseDetected.UseVisualStyleBackColor = True
+        '
+        ' btnCompatOpenFolder
+        '
+        btnCompatOpenFolder.Anchor = AnchorStyles.None
+        btnCompatOpenFolder.Location = New Point(144, 6)
+        btnCompatOpenFolder.Margin = New Padding(6, 0, 0, 0)
+        btnCompatOpenFolder.Name = "btnCompatOpenFolder"
+        btnCompatOpenFolder.Size = New Size(130, 27)
+        btnCompatOpenFolder.TabIndex = 7
+        btnCompatOpenFolder.Text = "Open game folder"
+        btnCompatOpenFolder.UseVisualStyleBackColor = True
+        '
+        ' btnCompatEditIni
+        '
+        btnCompatEditIni.Anchor = AnchorStyles.None
+        btnCompatEditIni.Location = New Point(280, 6)
+        btnCompatEditIni.Margin = New Padding(6, 0, 0, 0)
+        btnCompatEditIni.Name = "btnCompatEditIni"
+        btnCompatEditIni.Size = New Size(130, 27)
+        btnCompatEditIni.TabIndex = 8
+        btnCompatEditIni.Text = "Edit OptiScaler.ini"
+        btnCompatEditIni.UseVisualStyleBackColor = True
+        '
+        ' btnCompatInstallUpdate
+        '
+        btnCompatInstallUpdate.Anchor = AnchorStyles.None
+        btnCompatInstallUpdate.Location = New Point(416, 6)
+        btnCompatInstallUpdate.Margin = New Padding(6, 0, 0, 0)
+        btnCompatInstallUpdate.Name = "btnCompatInstallUpdate"
+        btnCompatInstallUpdate.Size = New Size(145, 27)
+        btnCompatInstallUpdate.TabIndex = 9
+        btnCompatInstallUpdate.Text = "Quick install"
+        btnCompatInstallUpdate.UseVisualStyleBackColor = True
+        '
+        ' btnCompatUninstall
+        '
+        btnCompatUninstall.Anchor = AnchorStyles.None
+        btnCompatUninstall.Location = New Point(567, 6)
+        btnCompatUninstall.Margin = New Padding(6, 0, 0, 0)
+        btnCompatUninstall.Name = "btnCompatUninstall"
+        btnCompatUninstall.Size = New Size(130, 27)
+        btnCompatUninstall.TabIndex = 10
+        btnCompatUninstall.Text = "Uninstall OptiScaler"
+        btnCompatUninstall.UseVisualStyleBackColor = True
+        '
+        ' btnCompatInstallPatcher
+        '
+        btnCompatInstallPatcher.Anchor = AnchorStyles.None
+        btnCompatInstallPatcher.Location = New Point(703, 6)
+        btnCompatInstallPatcher.Margin = New Padding(6, 0, 0, 0)
+        btnCompatInstallPatcher.Name = "btnCompatInstallPatcher"
+        btnCompatInstallPatcher.Size = New Size(145, 27)
+        btnCompatInstallPatcher.TabIndex = 11
+        btnCompatInstallPatcher.Text = "Install/Update OptiPatcher"
+        btnCompatInstallPatcher.UseVisualStyleBackColor = True
+        '
+        ' btnCompatRemovePatcher
+        '
+        btnCompatRemovePatcher.Anchor = AnchorStyles.None
+        btnCompatRemovePatcher.Location = New Point(854, 6)
+        btnCompatRemovePatcher.Margin = New Padding(6, 0, 0, 0)
+        btnCompatRemovePatcher.Name = "btnCompatRemovePatcher"
+        btnCompatRemovePatcher.Size = New Size(145, 27)
+        btnCompatRemovePatcher.TabIndex = 12
+        btnCompatRemovePatcher.Text = "Remove OptiPatcher"
+        btnCompatRemovePatcher.UseVisualStyleBackColor = True
+        '
+        ' btnCompatCopyInfo
+        '
+        btnCompatCopyInfo.Anchor = AnchorStyles.None
+        btnCompatCopyInfo.Location = New Point(1005, 6)
+        btnCompatCopyInfo.Margin = New Padding(6, 0, 0, 0)
+        btnCompatCopyInfo.Name = "btnCompatCopyInfo"
+        btnCompatCopyInfo.Size = New Size(130, 27)
+        btnCompatCopyInfo.TabIndex = 13
+        btnCompatCopyInfo.Text = "Copy game info"
+        btnCompatCopyInfo.UseVisualStyleBackColor = True
+        '
+        ' compatStatusPanel
+        '
+        compatStatusPanel.Controls.Add(lblCompatibilityNote)
+        compatStatusPanel.Controls.Add(chkHideNonDetected)
+        compatStatusPanel.Dock = DockStyle.Bottom
+        compatStatusPanel.Location = New Point(0, 40)
+        compatStatusPanel.Name = "compatStatusPanel"
+        compatStatusPanel.Size = New Size(1240, 24)
+        compatStatusPanel.TabIndex = 11
         ' 
         ' lblCompatibilityNote
         ' 
@@ -396,7 +608,7 @@ Partial Class MainForm
         compatHeaderLeftPanel.Name = "compatHeaderLeftPanel"
         compatHeaderLeftPanel.RowCount = 1
         compatHeaderLeftPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100F))
-        compatHeaderLeftPanel.Size = New Size(676, 32)
+        compatHeaderLeftPanel.Size = New Size(540, 32)
         compatHeaderLeftPanel.TabIndex = 0
         ' 
         ' lblSearch
@@ -419,7 +631,7 @@ Partial Class MainForm
         txtGameSearch.MinimumSize = New Size(0, 24)
         txtGameSearch.Name = "txtGameSearch"
         txtGameSearch.Padding = New Padding(6, 3, 6, 3)
-        txtGameSearch.Size = New Size(595, 24)
+        txtGameSearch.Size = New Size(459, 24)
         txtGameSearch.TabIndex = 1
         ' 
         ' compatHeaderRightPanel
@@ -428,14 +640,13 @@ Partial Class MainForm
         compatHeaderRightPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink
         compatHeaderRightPanel.Controls.Add(btnScanDetected)
         compatHeaderRightPanel.Controls.Add(btnDeepScanDrives)
-        compatHeaderRightPanel.Controls.Add(btnUseDetected)
         compatHeaderRightPanel.Controls.Add(btnRefreshCompatibility)
         compatHeaderRightPanel.Controls.Add(btnOpenWiki)
         compatHeaderRightPanel.Dock = DockStyle.Right
-        compatHeaderRightPanel.Location = New Point(546, 6)
+        compatHeaderRightPanel.Location = New Point(671, 6)
         compatHeaderRightPanel.Margin = New Padding(0)
         compatHeaderRightPanel.Name = "compatHeaderRightPanel"
-        compatHeaderRightPanel.Size = New Size(688, 32)
+        compatHeaderRightPanel.Size = New Size(563, 32)
         compatHeaderRightPanel.TabIndex = 1
         compatHeaderRightPanel.WrapContents = False
         ' 
@@ -461,36 +672,25 @@ Partial Class MainForm
         btnDeepScanDrives.Text = "Add game manually"
         btnDeepScanDrives.UseVisualStyleBackColor = True
         ' 
-        ' btnUseDetected
-        ' 
-        btnUseDetected.Anchor = AnchorStyles.None
-        btnUseDetected.Location = New Point(276, 0)
-        btnUseDetected.Margin = New Padding(6, 0, 0, 0)
-        btnUseDetected.Name = "btnUseDetected"
-        btnUseDetected.Size = New Size(130, 27)
-        btnUseDetected.TabIndex = 4
-        btnUseDetected.Text = "Use detected"
-        btnUseDetected.UseVisualStyleBackColor = True
-        ' 
         ' btnRefreshCompatibility
-        ' 
+        '
         btnRefreshCompatibility.Anchor = AnchorStyles.None
-        btnRefreshCompatibility.Location = New Point(412, 0)
+        btnRefreshCompatibility.Location = New Point(276, 0)
         btnRefreshCompatibility.Margin = New Padding(6, 0, 0, 0)
         btnRefreshCompatibility.Name = "btnRefreshCompatibility"
         btnRefreshCompatibility.Size = New Size(130, 27)
-        btnRefreshCompatibility.TabIndex = 5
+        btnRefreshCompatibility.TabIndex = 4
         btnRefreshCompatibility.Text = "Refresh lists"
         btnRefreshCompatibility.UseVisualStyleBackColor = True
         ' 
         ' btnOpenWiki
-        ' 
+        '
         btnOpenWiki.Anchor = AnchorStyles.None
-        btnOpenWiki.Location = New Point(548, 0)
+        btnOpenWiki.Location = New Point(412, 0)
         btnOpenWiki.Margin = New Padding(6, 0, 0, 0)
         btnOpenWiki.Name = "btnOpenWiki"
         btnOpenWiki.Size = New Size(140, 27)
-        btnOpenWiki.TabIndex = 6
+        btnOpenWiki.TabIndex = 5
         btnOpenWiki.Text = "Open wiki page"
         btnOpenWiki.UseVisualStyleBackColor = True
         ' 
@@ -902,6 +1102,7 @@ Partial Class MainForm
         grpActions.Controls.Add(btnInstall)
         grpActions.Controls.Add(btnUninstall)
         grpActions.Controls.Add(btnOpenGameFolder)
+        grpActions.Controls.Add(btnEditIni)
         grpActions.Controls.Add(lblInstalledStatus)
         grpActions.Controls.Add(chkInstallOptiPatcher)
         grpActions.Controls.Add(lblInstallOptiPatcherStatus)
@@ -942,6 +1143,15 @@ Partial Class MainForm
         btnOpenGameFolder.TabIndex = 2
         btnOpenGameFolder.Text = "Open game folder"
         btnOpenGameFolder.UseVisualStyleBackColor = True
+        ' 
+        ' btnEditIni
+        ' 
+        btnEditIni.Location = New Point(496, 30)
+        btnEditIni.Name = "btnEditIni"
+        btnEditIni.Size = New Size(140, 40)
+        btnEditIni.TabIndex = 3
+        btnEditIni.Text = "Edit OptiScaler.ini"
+        btnEditIni.UseVisualStyleBackColor = True
         ' 
         ' lblInstalledStatus
         ' 
@@ -1722,7 +1932,7 @@ Partial Class MainForm
         lblFsr4ActionHint.Name = "lblFsr4ActionHint"
         lblFsr4ActionHint.Size = New Size(843, 15)
         lblFsr4ActionHint.TabIndex = 7
-        lblFsr4ActionHint.Text = "Workflow: pick game on Install tab (or from Game Detection -> Use detected), return here, choose package folder, then Apply package."
+        lblFsr4ActionHint.Text = "Workflow: pick game on Install tab (or from Game Detection -> Use selected), return here, choose package folder, then Apply package."
         ' 
         ' lblFsr4DetectedGames
         ' 
@@ -1766,7 +1976,7 @@ Partial Class MainForm
         ' lvFsr4DetectedGames
         ' 
         lvFsr4DetectedGames.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
-        lvFsr4DetectedGames.Columns.AddRange(New ColumnHeader() {colFsr4Game, colFsr4Platform, colFsr4DetectedPath})
+        lvFsr4DetectedGames.Columns.AddRange(New ColumnHeader() {colFsr4Game, colFsr4Platform, colFsr4Installed, colFsr4DetectedPath})
         lvFsr4DetectedGames.FullRowSelect = True
         lvFsr4DetectedGames.Location = New Point(12, 196)
         lvFsr4DetectedGames.MultiSelect = False
@@ -1786,11 +1996,16 @@ Partial Class MainForm
         ' 
         colFsr4Platform.Text = "Platform"
         colFsr4Platform.Width = 120
-        ' 
+        '
+        ' colFsr4Installed
+        '
+        colFsr4Installed.Text = "INT8"
+        colFsr4Installed.Width = 160
+        '
         ' colFsr4DetectedPath
-        ' 
+        '
         colFsr4DetectedPath.Text = "Install Path"
-        colFsr4DetectedPath.Width = 760
+        colFsr4DetectedPath.Width = 600
         ' 
         ' tabSettings
         ' 
@@ -2353,7 +2568,9 @@ Partial Class MainForm
         tabMain.ResumeLayout(False)
         tabCompatibility.ResumeLayout(False)
         compatFooterPanel.ResumeLayout(False)
-        compatFooterPanel.PerformLayout()
+        compatActionsPanel.ResumeLayout(False)
+        compatStatusPanel.ResumeLayout(False)
+        compatStatusPanel.PerformLayout()
         compatHeaderPanel.ResumeLayout(False)
         compatHeaderPanel.PerformLayout()
         compatHeaderLeftPanel.ResumeLayout(False)
@@ -2501,6 +2718,7 @@ Partial Class MainForm
     Friend WithEvents lblOnlineWarning As System.Windows.Forms.Label
     Friend WithEvents DarkThemeCheckBox As System.Windows.Forms.CheckBox
     Friend WithEvents btnOpenGameFolder As System.Windows.Forms.Button
+    Friend WithEvents btnEditIni As System.Windows.Forms.Button
     Friend WithEvents btnUninstall As System.Windows.Forms.Button
     Friend WithEvents btnInstall As System.Windows.Forms.Button
     Friend WithEvents lblInstalledStatus As System.Windows.Forms.Label
@@ -2574,8 +2792,11 @@ Partial Class MainForm
     Friend WithEvents lvFsr4DetectedGames As OptiScalerInstaller.ThemedListView
     Friend WithEvents colFsr4Game As System.Windows.Forms.ColumnHeader
     Friend WithEvents colFsr4Platform As System.Windows.Forms.ColumnHeader
+    Friend WithEvents colFsr4Installed As System.Windows.Forms.ColumnHeader
     Friend WithEvents colFsr4DetectedPath As System.Windows.Forms.ColumnHeader
     Friend WithEvents compatFooterPanel As System.Windows.Forms.Panel
+    Friend WithEvents compatActionsPanel As System.Windows.Forms.FlowLayoutPanel
+    Friend WithEvents compatStatusPanel As System.Windows.Forms.Panel
     Friend WithEvents compatHeaderPanel As System.Windows.Forms.Panel
     Friend WithEvents compatHeaderLeftPanel As System.Windows.Forms.TableLayoutPanel
     Friend WithEvents compatHeaderRightPanel As System.Windows.Forms.FlowLayoutPanel
@@ -2596,11 +2817,30 @@ Partial Class MainForm
     Friend WithEvents btnScanDetected As System.Windows.Forms.Button
     Friend WithEvents btnDeepScanDrives As System.Windows.Forms.Button
     Friend WithEvents btnUseDetected As System.Windows.Forms.Button
+    Friend WithEvents btnCompatOpenFolder As System.Windows.Forms.Button
+    Friend WithEvents btnCompatEditIni As System.Windows.Forms.Button
+    Friend WithEvents btnCompatInstallUpdate As System.Windows.Forms.Button
+    Friend WithEvents btnCompatUninstall As System.Windows.Forms.Button
+    Friend WithEvents btnCompatInstallPatcher As System.Windows.Forms.Button
+    Friend WithEvents btnCompatRemovePatcher As System.Windows.Forms.Button
+    Friend WithEvents btnCompatCopyInfo As System.Windows.Forms.Button
     Friend WithEvents txtLog As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents statusStrip As System.Windows.Forms.StatusStrip
     Friend WithEvents toolStatusLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolDetectedLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolProgressBar As System.Windows.Forms.ToolStripProgressBar
     Friend WithEvents toolTip As System.Windows.Forms.ToolTip
+    Friend WithEvents compatContextMenu As System.Windows.Forms.ContextMenuStrip
+    Friend WithEvents mnuCompatUseDetected As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatOpenFolder As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatEditIni As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatSep1 As System.Windows.Forms.ToolStripSeparator
+    Friend WithEvents mnuCompatInstallUpdate As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatUninstall As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatInstallPatcher As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatRemovePatcher As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatSep2 As System.Windows.Forms.ToolStripSeparator
+    Friend WithEvents mnuCompatOpenWiki As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents mnuCompatCopyInfo As System.Windows.Forms.ToolStripMenuItem
 End Class
 

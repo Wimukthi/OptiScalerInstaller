@@ -23,6 +23,17 @@ Public Class InstallerService
         Public Property AssetName As String
     End Class
 
+    Private Class ArchiveCacheMetadata
+        Public Property SourceChannel As String
+        Public Property TagName As String
+        Public Property AssetName As String
+        Public Property DownloadUrl As String
+        Public Property Size As Long
+        Public Property Digest As String
+        Public Property CachedFileName As String
+        Public Property CachedAtUtc As DateTime
+    End Class
+
     Public Shared Function IsLikelyBundledComponentRelease(config As InstallerConfig) As Boolean
         If config Is Nothing Then
             Return False
@@ -355,36 +366,260 @@ Public Class InstallerService
             }
         End If
 
-        Dim release As ReleaseInfo = Nothing
-        If config.Source = ReleaseSource.Stable Then
-            release = config.StableRelease
-            If release Is Nothing OrElse String.IsNullOrWhiteSpace(release.DownloadUrl) Then
-                release = Await ReleaseService.GetStableReleaseAsync()
-            End If
-        ElseIf config.Source = ReleaseSource.Nightly Then
-            release = config.NightlyRelease
-            If release Is Nothing OrElse String.IsNullOrWhiteSpace(release.DownloadUrl) Then
-                release = Await ReleaseService.GetNightlyReleaseAsync()
-            End If
-        End If
+        Dim release As ReleaseInfo = Await ResolveRemoteReleaseAsync(config, log)
 
         If release Is Nothing OrElse String.IsNullOrWhiteSpace(release.DownloadUrl) Then
             Throw New InvalidOperationException("Release download URL not available.")
         End If
 
+        Dim sourceChannel As String = GetArchiveSourceChannel(config.Source)
         Dim safeName As String = If(String.IsNullOrWhiteSpace(release.AssetName), "OptiScaler.7z", release.AssetName)
-        Dim destination As String = Path.Combine(tempRoot, safeName)
+
+        Dim cachedArchivePath As String = TryResolveCachedArchive(release, sourceChannel, log)
+        If Not String.IsNullOrWhiteSpace(cachedArchivePath) Then
+            ValidateArchiveFile(cachedArchivePath, release.Size, log)
+            Return New ArchiveResult With {
+                .ArchivePath = cachedArchivePath,
+                .Release = release,
+                .SourceUrl = release.DownloadUrl,
+                .ExpectedSize = release.Size,
+                .AssetName = safeName
+            }
+        End If
+
+        log?.Invoke("Cached package not found or out-of-date. Downloading latest archive.")
+        Dim destination As String = Path.Combine(tempRoot, Guid.NewGuid().ToString("N") & "_" & safeName)
         log?.Invoke("Downloading " & release.TagName & "...")
         Await DownloadFileAsync(release.DownloadUrl, destination, log, progress)
         ValidateArchiveFile(destination, release.Size, log)
+
+        Dim finalArchivePath As String = destination
+        Dim cachedPath As String = StoreArchiveInCache(destination, release, sourceChannel, log)
+        If Not String.IsNullOrWhiteSpace(cachedPath) Then
+            finalArchivePath = cachedPath
+        End If
+
         Return New ArchiveResult With {
-            .ArchivePath = destination,
+            .ArchivePath = finalArchivePath,
             .Release = release,
             .SourceUrl = release.DownloadUrl,
             .ExpectedSize = release.Size,
             .AssetName = safeName
         }
     End Function
+
+    Private Shared Async Function ResolveRemoteReleaseAsync(config As InstallerConfig, log As Action(Of String)) As Task(Of ReleaseInfo)
+        If config Is Nothing Then
+            Return Nothing
+        End If
+
+        If config.Source = ReleaseSource.Stable Then
+            Try
+                Return Await ReleaseService.GetStableReleaseAsync()
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "InstallerService.ResolveRemoteRelease.Stable")
+                If config.StableRelease IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(config.StableRelease.DownloadUrl) Then
+                    log?.Invoke("Stable release refresh failed; using already-loaded metadata.")
+                    Return config.StableRelease
+                End If
+                Throw
+            End Try
+        End If
+
+        If config.Source = ReleaseSource.Nightly Then
+            Try
+                Return Await ReleaseService.GetNightlyReleaseAsync()
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "InstallerService.ResolveRemoteRelease.Nightly")
+                If config.NightlyRelease IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(config.NightlyRelease.DownloadUrl) Then
+                    log?.Invoke("Alternate release refresh failed; using already-loaded metadata.")
+                    Return config.NightlyRelease
+                End If
+                Throw
+            End Try
+        End If
+
+        Return Nothing
+    End Function
+
+    Private Shared Function GetArchiveSourceChannel(source As ReleaseSource) As String
+        If source = ReleaseSource.Nightly Then
+            Return "alternate"
+        End If
+        Return "stable"
+    End Function
+
+    Private Shared Function TryResolveCachedArchive(release As ReleaseInfo, sourceChannel As String, log As Action(Of String)) As String
+        If release Is Nothing OrElse String.IsNullOrWhiteSpace(sourceChannel) Then
+            Return ""
+        End If
+
+        Dim metadataPath As String = GetArchiveCacheMetadataPath(sourceChannel)
+        Dim metadata As ArchiveCacheMetadata = TryLoadArchiveCacheMetadata(metadataPath)
+        If metadata Is Nothing OrElse Not IsArchiveCacheMatch(metadata, release) Then
+            Return ""
+        End If
+        If Not String.IsNullOrWhiteSpace(metadata.SourceChannel) AndAlso
+           Not String.Equals(metadata.SourceChannel, sourceChannel, StringComparison.OrdinalIgnoreCase) Then
+            Return ""
+        End If
+
+        Dim cacheRoot As String = GetArchiveCacheRoot()
+        Dim cachedFileName As String = If(metadata.CachedFileName, "").Trim()
+        If String.IsNullOrWhiteSpace(cachedFileName) Then
+            Return ""
+        End If
+
+        Dim cachedPath As String = Path.Combine(cacheRoot, cachedFileName)
+        If Not File.Exists(cachedPath) Then
+            Return ""
+        End If
+
+        Try
+            ValidateArchiveFile(cachedPath, release.Size, Nothing)
+
+            If Not String.IsNullOrWhiteSpace(release.AssetDigest) Then
+                Dim cachedSha As String = ComputeSha256(cachedPath)
+                VerifyReleaseDigest(release, cachedSha, Nothing)
+            End If
+        Catch ex As Exception
+            log?.Invoke("Cached package validation failed; downloading a fresh archive.")
+            ErrorLogger.Log(ex, "InstallerService.TryResolveCachedArchive")
+            Return ""
+        End Try
+
+        log?.Invoke("Using cached package: " & Path.GetFileName(cachedPath))
+        Return cachedPath
+    End Function
+
+    Private Shared Function StoreArchiveInCache(archivePath As String, release As ReleaseInfo, sourceChannel As String, log As Action(Of String)) As String
+        If String.IsNullOrWhiteSpace(archivePath) OrElse Not File.Exists(archivePath) Then
+            Return ""
+        End If
+        If release Is Nothing OrElse String.IsNullOrWhiteSpace(sourceChannel) Then
+            Return ""
+        End If
+
+        Try
+            Dim cacheRoot As String = GetArchiveCacheRoot()
+            Directory.CreateDirectory(cacheRoot)
+
+            Dim cachedFileName As String = BuildCacheFileName(sourceChannel, release.AssetName)
+            Dim cachedPath As String = Path.Combine(cacheRoot, cachedFileName)
+            File.Copy(archivePath, cachedPath, True)
+
+            Dim metadata As New ArchiveCacheMetadata With {
+                .SourceChannel = sourceChannel,
+                .TagName = If(release.TagName, ""),
+                .AssetName = If(release.AssetName, ""),
+                .DownloadUrl = If(release.DownloadUrl, ""),
+                .Size = release.Size,
+                .Digest = If(release.AssetDigest, ""),
+                .CachedFileName = cachedFileName,
+                .CachedAtUtc = DateTime.UtcNow
+            }
+
+            SaveArchiveCacheMetadata(GetArchiveCacheMetadataPath(sourceChannel), metadata)
+            CleanupStaleCachedPackages(cacheRoot, sourceChannel, cachedFileName)
+            log?.Invoke("Cached package updated: " & cachedFileName)
+            Return cachedPath
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.StoreArchiveInCache")
+            Return ""
+        End Try
+    End Function
+
+    Private Shared Function GetArchiveCacheRoot() As String
+        Return Path.Combine(AppContext.BaseDirectory, "Cache", "OptiScaler")
+    End Function
+
+    Private Shared Function GetArchiveCacheMetadataPath(sourceChannel As String) As String
+        Return Path.Combine(GetArchiveCacheRoot(), sourceChannel & ".cache.json")
+    End Function
+
+    Private Shared Function TryLoadArchiveCacheMetadata(filePath As String) As ArchiveCacheMetadata
+        If String.IsNullOrWhiteSpace(filePath) OrElse Not File.Exists(filePath) Then
+            Return Nothing
+        End If
+
+        Try
+            Dim json As String = File.ReadAllText(filePath)
+            Return JsonSerializer.Deserialize(Of ArchiveCacheMetadata)(json)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "InstallerService.TryLoadArchiveCacheMetadata")
+            Return Nothing
+        End Try
+    End Function
+
+    Private Shared Sub SaveArchiveCacheMetadata(filePath As String, metadata As ArchiveCacheMetadata)
+        If String.IsNullOrWhiteSpace(filePath) OrElse metadata Is Nothing Then
+            Return
+        End If
+
+        Dim folder As String = Path.GetDirectoryName(filePath)
+        If Not String.IsNullOrWhiteSpace(folder) Then
+            Directory.CreateDirectory(folder)
+        End If
+
+        Dim options As New JsonSerializerOptions With {
+            .WriteIndented = True
+        }
+        Dim json As String = JsonSerializer.Serialize(metadata, options)
+        File.WriteAllText(filePath, json)
+    End Sub
+
+    Private Shared Function IsArchiveCacheMatch(metadata As ArchiveCacheMetadata, release As ReleaseInfo) As Boolean
+        If metadata Is Nothing OrElse release Is Nothing Then
+            Return False
+        End If
+
+        If Not String.Equals(If(metadata.TagName, ""), If(release.TagName, ""), StringComparison.OrdinalIgnoreCase) Then
+            Return False
+        End If
+        If Not String.Equals(If(metadata.AssetName, ""), If(release.AssetName, ""), StringComparison.OrdinalIgnoreCase) Then
+            Return False
+        End If
+        If Not String.Equals(If(metadata.DownloadUrl, ""), If(release.DownloadUrl, ""), StringComparison.OrdinalIgnoreCase) Then
+            Return False
+        End If
+        If metadata.Size <> release.Size Then
+            Return False
+        End If
+        If Not String.Equals(If(metadata.Digest, ""), If(release.AssetDigest, ""), StringComparison.OrdinalIgnoreCase) Then
+            Return False
+        End If
+
+        Return True
+    End Function
+
+    Private Shared Function BuildCacheFileName(sourceChannel As String, assetName As String) As String
+        Dim safeAssetName As String = If(String.IsNullOrWhiteSpace(assetName), "OptiScaler.7z", assetName.Trim())
+        For Each invalidChar As Char In Path.GetInvalidFileNameChars()
+            safeAssetName = safeAssetName.Replace(invalidChar, "_"c)
+        Next
+
+        Return sourceChannel & "_" & safeAssetName
+    End Function
+
+    Private Shared Sub CleanupStaleCachedPackages(cacheRoot As String, sourceChannel As String, keepFileName As String)
+        If String.IsNullOrWhiteSpace(cacheRoot) OrElse Not Directory.Exists(cacheRoot) Then
+            Return
+        End If
+
+        Dim prefix As String = sourceChannel & "_"
+        For Each filePath As String In Directory.GetFiles(cacheRoot, prefix & "*")
+            Dim fileName As String = Path.GetFileName(filePath)
+            If fileName.Equals(keepFileName, StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+
+            Try
+                File.Delete(filePath)
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "InstallerService.CleanupStaleCachedPackages")
+            End Try
+        Next
+    End Sub
 
     Private Shared Async Function DownloadFileAsync(url As String, destination As String, log As Action(Of String), progress As Action(Of Integer)) As Task
         ' Streamed download with bounded retries for transient HTTP/network errors.

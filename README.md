@@ -129,6 +129,7 @@ Settings:
 
 ## Version History
 
+- v1.1.3.7 - Add full OptiScaler INI editor (form/raw modes, validation, section grouping/filter, descriptions/reference docs, backup/save/revert), expand Game Detection actions and quick-install flow, improve install/uninstall button-state gating, add OptiPatcher/INT8 detection status refinements, and harden Unreal-target preflight by auto-retargeting to `Binaries\Win64`/`WinGDK` when applicable.
 - v1.1.1.1 - Drive selection is now always explicit for deep-scan augmentation: first-run one-time scan prompts for selected drives, and manual "Scan installed games" runs now prompt for drives instead of scanning all drives automatically.
 - v1.1.0.9 - Merge launcher and deep scan into a single "Scan installed games" pipeline, repurpose the secondary button into "Add game manually" (EXE-based forced match + persistence), and improve install-state path selection/probing for nested DX11/DX12 binary folders.
 - v1.1.0.5 - Align FSR INT8 detected-games list with the canonical Game Detection result set so counts and entries match (fixes duplicate/multi-path variants appearing only in the experimental list).

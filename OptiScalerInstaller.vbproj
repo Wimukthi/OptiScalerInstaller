@@ -34,6 +34,9 @@
     <Compile Update="frmDriveSelection.Designer.vb">
       <DependentUpon>frmDriveSelection.vb</DependentUpon>
     </Compile>
+    <Compile Update="frmIniEditor.Designer.vb">
+      <DependentUpon>frmIniEditor.vb</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
@@ -51,7 +54,16 @@
     <Content Include="Data\GameTemplates.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Data\OptiScaler-Config.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Data\OptiPatcher-GameSupport.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Data\OptiScaler-Reference.ini">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Data\OptiScaler-Spoofing.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Icons\com_94698.ico" />
@@ -64,6 +76,9 @@
     </EmbeddedResource>
     <EmbeddedResource Update="frmDriveSelection.resx">
       <DependentUpon>frmDriveSelection.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Update="frmIniEditor.resx">
+      <DependentUpon>frmIniEditor.vb</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
 

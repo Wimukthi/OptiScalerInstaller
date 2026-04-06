@@ -46,6 +46,8 @@ Public Class MainForm
     Private gpuDetectionCandidates As List(Of String) = New List(Of String)()
     Private gpuDetectionLogWritten As Boolean
     Private lastOptiPatcherStatusKey As String
+    Private installOperationInProgress As Boolean
+    Private uninstallOperationInProgress As Boolean
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -95,6 +97,7 @@ Public Class MainForm
         DarkThemeCheckBox.Checked = preferredMode = SystemColorMode.Dark
         _settingThemeState = False
         ThemeManager.ApplyTheme(Me, preferredMode)
+        ApplyCompatibilityContextMenuTheme(preferredMode)
         InitializeToolTips()
         LoadSettingsUi()
         PositionSettingsControls()
@@ -113,6 +116,26 @@ Public Class MainForm
             Dim runInitialDeepScan As Boolean = settings IsNot Nothing AndAlso
                                                 (Not settings.HasCompletedInitialDeepScan.HasValue OrElse
                                                  Not settings.HasCompletedInitialDeepScan.Value)
+            ' Always populate detected games first so the user sees results quickly.
+            Await RunDetectionAsync(True)
+
+            If runInitialDeepScan Then
+                AppendLog("First start detected: select drives for one-time deep scan.")
+                Dim initialRoots As List(Of String) = PromptForDeepScanRoots("First start deep scan")
+                If initialRoots IsNot Nothing AndAlso initialRoots.Count > 0 Then
+                    Await RunDetectionAsync(True, initialRoots, True)
+                    AppendLog("One-time first-start deep scan completed.")
+                ElseIf initialRoots Is Nothing Then
+                    AppendLog("One-time deep scan skipped by user.")
+                Else
+                    AppendLog("One-time deep scan skipped: no scannable drives found.")
+                End If
+
+                settings.HasCompletedInitialDeepScan = True
+                AppSettings.Save(settings)
+            End If
+
+            ' Non-critical startup refreshes run after detection has already rendered.
             If refreshOnStartup Then
                 Await RefreshCompatibilityAsync(False, True)
             End If
@@ -124,26 +147,6 @@ Public Class MainForm
             Else
                 SetUpdateNoticeVisible(False, "")
                 AppendLog("Installer update auto-check disabled.")
-            End If
-
-            If runInitialDeepScan Then
-                AppendLog("First start detected: select drives for one-time deep scan.")
-                Dim initialRoots As List(Of String) = PromptForDeepScanRoots("First start deep scan")
-                If initialRoots IsNot Nothing AndAlso initialRoots.Count > 0 Then
-                    Await RunDetectionAsync(True, initialRoots, True)
-                    AppendLog("One-time first-start deep scan completed.")
-                ElseIf initialRoots Is Nothing Then
-                    AppendLog("One-time deep scan skipped by user; running launcher/registry detection only.")
-                    Await RunDetectionAsync(True)
-                Else
-                    AppendLog("One-time deep scan skipped: no scannable drives found.")
-                    Await RunDetectionAsync(True)
-                End If
-
-                settings.HasCompletedInitialDeepScan = True
-                AppSettings.Save(settings)
-            Else
-                Await RunDetectionAsync(True)
             End If
         Catch ex As Exception
             AppendLog("Startup background task failed: " & ex.Message)
@@ -872,6 +875,45 @@ Public Class MainForm
         UpdateExperimentalDetectedGamesList()
     End Sub
 
+    Private Async Sub btnEditIni_Click(sender As Object, e As EventArgs) Handles btnEditIni.Click
+        Await OpenIniEditorForCurrentTargetAsync()
+    End Sub
+
+    Private Async Function OpenIniEditorForCurrentTargetAsync() As Task
+        Dim gameFolder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            MessageBox.Show(Me, "Select a valid game folder first.", "INI Editor", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim installInfo As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(gameFolder)
+        If installInfo Is Nothing OrElse Not installInfo.IsInstalled Then
+            MessageBox.Show(Me, "OptiScaler is not detected in this folder. Install OptiScaler first, then edit the INI.", "INI Editor", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+        If Not EnsureIniFileForEditor(iniPath) Then
+            Return
+        End If
+
+        AppendLog("Opening INI editor: " & iniPath)
+
+        Using editor As New frmIniEditor(iniPath)
+            editor.ShowDialog(Me)
+            If editor.WasSaved Then
+                AppendLog("INI editor: changes saved.")
+            Else
+                AppendLog("INI editor closed.")
+            End If
+        End Using
+
+        UpdateInstallStatus()
+        UpdateOptiPatcherStatus()
+        UpdateExperimentalStatus()
+        Await RefreshDetectedInstallStatesAsync(False)
+    End Function
+
     Private Sub btnOpenGameFolder_Click(sender As Object, e As EventArgs) Handles btnOpenGameFolder.Click
         If Directory.Exists(txtGameFolder.Text) Then
             Process.Start(New ProcessStartInfo(txtGameFolder.Text) With {.UseShellExecute = True})
@@ -891,6 +933,27 @@ Public Class MainForm
                 AppendLog("Selected OptiScaler archive: " & dialog.FileName)
             End If
         End Using
+    End Sub
+
+    Private Sub txtLocalArchive_TextChanged(sender As Object, e As EventArgs) Handles txtLocalArchive.TextChanged
+        UpdateInstallActionButtons()
+    End Sub
+
+    Private Sub cmbHookName_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbHookName.SelectedIndexChanged
+        UpdateInstallActionButtons()
+    End Sub
+
+    Private Sub InstallReadinessControlChanged(sender As Object, e As EventArgs) Handles cmbFgType.SelectedIndexChanged,
+        txtNukemDll.TextChanged,
+        txtFakenvapiFolder.TextChanged,
+        txtNvngxDll.TextChanged,
+        chkEnableReshade.CheckedChanged,
+        txtReshadeDll.TextChanged,
+        chkEnableSpecialK.CheckedChanged,
+        txtSpecialKDll.TextChanged,
+        chkLoadAsiPlugins.CheckedChanged,
+        txtPluginsPath.TextChanged
+        UpdateInstallActionButtons()
     End Sub
 
     Private Sub btnBrowseDefaultIni_Click(sender As Object, e As EventArgs) Handles btnBrowseDefaultIni.Click
@@ -1206,6 +1269,7 @@ Public Class MainForm
         Dim useLocal As Boolean = rbLocal.Checked
         txtLocalArchive.Enabled = useLocal
         btnBrowseArchive.Enabled = useLocal
+        UpdateInstallActionButtons()
     End Sub
 
     Private Sub rbGpuNvidia_CheckedChanged(sender As Object, e As EventArgs) Handles rbGpuNvidia.CheckedChanged
@@ -1305,6 +1369,8 @@ Public Class MainForm
             End If
             AppendLog("Failed to fetch releases.")
         End If
+
+        UpdateInstallActionButtons()
     End Function
 
     Private Sub UpdateReleaseLabels()
@@ -1568,7 +1634,8 @@ Public Class MainForm
 
     Private Async Sub btnInstall_Click(sender As Object, e As EventArgs) Handles btnInstall.Click
         Try
-            btnInstall.Enabled = False
+            installOperationInProgress = True
+            UpdateInstallActionButtons()
             UpdateProgress(0)
             AppendLog("Starting install...")
 
@@ -1669,7 +1736,7 @@ Public Class MainForm
             MessageBox.Show(Me, ex.Message, "Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             ErrorLogger.Log(ex, "MainForm.Install")
         Finally
-            btnInstall.Enabled = True
+            installOperationInProgress = False
             UpdateProgress(0)
             UpdateInstallStatus()
             UpdateExperimentalStatus()
@@ -1678,7 +1745,8 @@ Public Class MainForm
 
     Private Async Sub btnUninstall_Click(sender As Object, e As EventArgs) Handles btnUninstall.Click
         Try
-            btnUninstall.Enabled = False
+            uninstallOperationInProgress = True
+            UpdateInstallActionButtons()
             AppendLog("Starting uninstall...")
             Await TryUninstallAsync(txtGameFolder.Text, True)
             Await RefreshDetectedInstallStatesAsync(False)
@@ -1687,7 +1755,7 @@ Public Class MainForm
             MessageBox.Show(Me, ex.Message, "Uninstall Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             ErrorLogger.Log(ex, "MainForm.Uninstall")
         Finally
-            btnUninstall.Enabled = True
+            uninstallOperationInProgress = False
             UpdateInstallStatus()
             UpdateExperimentalStatus()
         End Try
@@ -1824,6 +1892,8 @@ Public Class MainForm
             End If
         End If
 
+        TryAutoRetargetUnrealInstall(config)
+
         If ShouldSkipExecutable(Path.GetFileNameWithoutExtension(config.GameExePath)) Then
             warnings.Add("Selected executable looks like a launcher/helper tool. Prefer the main game executable.")
         End If
@@ -1942,7 +2012,15 @@ Public Class MainForm
             Return
         End If
 
-        Dim url As String = BuildWikiUrl(row.Entry.Slug)
+        OpenCompatibilityWiki(row.Entry)
+    End Sub
+
+    Private Sub OpenCompatibilityWiki(entry As CompatibilityEntry)
+        If entry Is Nothing Then
+            Return
+        End If
+
+        Dim url As String = BuildWikiUrl(entry.Slug)
         If String.IsNullOrWhiteSpace(url) Then
             MessageBox.Show(Me, "Wiki base URL is not set. Update it in Settings.", "Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
@@ -2113,7 +2191,7 @@ Public Class MainForm
     Private Sub btnUseDetected_Click(sender As Object, e As EventArgs) Handles btnUseDetected.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         If row Is Nothing OrElse row.Detected Is Nothing Then
-            AppendLog("Use detected skipped: no detected game selected.")
+            AppendLog("Use selected skipped: no detected game selected.")
             MessageBox.Show(Me, "Select a detected game first.", "Detected Games", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
@@ -2134,9 +2212,365 @@ Public Class MainForm
         UpdateUseDetectedState
     End Sub
 
+    Private Sub lvCompatibility_MouseDown(sender As Object, e As MouseEventArgs) Handles lvCompatibility.MouseDown
+        If e.Button <> MouseButtons.Right Then
+            Return
+        End If
+
+        Dim hitItem As ListViewItem = lvCompatibility.GetItemAt(e.X, e.Y)
+        If hitItem Is Nothing Then
+            Return
+        End If
+
+        If Not hitItem.Selected Then
+            lvCompatibility.SelectedItems.Clear()
+            hitItem.Selected = True
+        End If
+        hitItem.Focused = True
+        UpdateUseDetectedState()
+    End Sub
+
+    Private Sub compatContextMenu_Opening(sender As Object, e As System.ComponentModel.CancelEventArgs) Handles compatContextMenu.Opening
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing Then
+            e.Cancel = True
+            Return
+        End If
+
+        Dim isDetected As Boolean = row.Detected IsNot Nothing
+        Dim hasEntry As Boolean = row.Entry IsNot Nothing
+        Dim hasFolder As Boolean = isDetected AndAlso Not String.IsNullOrWhiteSpace(row.Detected.InstallDir) AndAlso Directory.Exists(row.Detected.InstallDir)
+        Dim hasOptiScaler As Boolean = row.InstallInfo IsNot Nothing AndAlso row.InstallInfo.IsInstalled
+        Dim hasOptiPatcherInstalled As Boolean = row.OptiPatcherInfo IsNot Nothing AndAlso row.OptiPatcherInfo.IsInstalled
+        Dim isPatcherSupported As Boolean = isDetected AndAlso ResolveOptiPatcherSupportForGame(row.Detected) IsNot Nothing
+        Dim operationBusy As Boolean = installOperationInProgress OrElse uninstallOperationInProgress
+
+        mnuCompatUseDetected.Enabled = isDetected AndAlso Not operationBusy
+        mnuCompatOpenFolder.Enabled = hasFolder
+        mnuCompatEditIni.Enabled = isDetected AndAlso hasOptiScaler
+        mnuCompatInstallUpdate.Enabled = isDetected AndAlso Not operationBusy
+        mnuCompatUninstall.Enabled = isDetected AndAlso hasOptiScaler AndAlso Not operationBusy
+        mnuCompatInstallPatcher.Enabled = isDetected AndAlso isPatcherSupported AndAlso Not operationBusy
+        mnuCompatRemovePatcher.Enabled = isDetected AndAlso hasOptiPatcherInstalled AndAlso Not operationBusy
+        mnuCompatOpenWiki.Enabled = hasEntry
+        mnuCompatCopyInfo.Enabled = True
+
+        mnuCompatInstallUpdate.Text = If(hasOptiScaler, "Quick update OptiScaler", "Quick install OptiScaler")
+        mnuCompatInstallPatcher.Text = If(hasOptiPatcherInstalled, "Update OptiPatcher", "Install OptiPatcher")
+    End Sub
+
+    Private Sub mnuCompatUseDetected_Click(sender As Object, e As EventArgs) Handles mnuCompatUseDetected.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+
+        UseDetectedGame(row.Detected)
+    End Sub
+
+    Private Sub btnCompatOpenFolder_Click(sender As Object, e As EventArgs) Handles btnCompatOpenFolder.Click
+        mnuCompatOpenFolder_Click(sender, e)
+    End Sub
+
+    Private Async Sub btnCompatEditIni_Click(sender As Object, e As EventArgs) Handles btnCompatEditIni.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+        If row.InstallInfo Is Nothing OrElse Not row.InstallInfo.IsInstalled Then
+            Return
+        End If
+
+        UseDetectedGame(row.Detected)
+        Await OpenIniEditorForCurrentTargetAsync()
+    End Sub
+
+    Private Async Sub btnCompatInstallUpdate_Click(sender As Object, e As EventArgs) Handles btnCompatInstallUpdate.Click
+        Await QuickInstallFromSelectedRowAsync()
+    End Sub
+
+    Private Async Sub btnCompatUninstall_Click(sender As Object, e As EventArgs) Handles btnCompatUninstall.Click
+        Await UninstallFromSelectedRowAsync()
+    End Sub
+
+    Private Sub btnCompatInstallPatcher_Click(sender As Object, e As EventArgs) Handles btnCompatInstallPatcher.Click
+        mnuCompatInstallPatcher_Click(sender, e)
+    End Sub
+
+    Private Sub btnCompatRemovePatcher_Click(sender As Object, e As EventArgs) Handles btnCompatRemovePatcher.Click
+        mnuCompatRemovePatcher_Click(sender, e)
+    End Sub
+
+    Private Sub btnCompatCopyInfo_Click(sender As Object, e As EventArgs) Handles btnCompatCopyInfo.Click
+        mnuCompatCopyInfo_Click(sender, e)
+    End Sub
+
+    Private Sub mnuCompatOpenFolder_Click(sender As Object, e As EventArgs) Handles mnuCompatOpenFolder.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+
+        Dim folder As String = row.Detected.InstallDir
+        If String.IsNullOrWhiteSpace(folder) OrElse Not Directory.Exists(folder) Then
+            MessageBox.Show(Me, "Detected install folder was not found.", "Game Detection", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Process.Start(New ProcessStartInfo(folder) With {.UseShellExecute = True})
+    End Sub
+
+    Private Async Sub mnuCompatEditIni_Click(sender As Object, e As EventArgs) Handles mnuCompatEditIni.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+        If row.InstallInfo Is Nothing OrElse Not row.InstallInfo.IsInstalled Then
+            Return
+        End If
+
+        UseDetectedGame(row.Detected)
+        Await OpenIniEditorForCurrentTargetAsync()
+    End Sub
+
+    Private Async Sub mnuCompatInstallUpdate_Click(sender As Object, e As EventArgs) Handles mnuCompatInstallUpdate.Click
+        Await QuickInstallFromSelectedRowAsync()
+    End Sub
+
+    Private Async Function QuickInstallFromSelectedRowAsync() As Task
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+
+        If installOperationInProgress OrElse uninstallOperationInProgress Then
+            AppendLog("Quick install skipped: another install/uninstall operation is currently running.")
+            Return
+        End If
+
+        If Not TrySetDetectedGameTarget(row.Detected,
+                                        promptForExecutable:=True,
+                                        switchToInstallTab:=False,
+                                        applyDefaultsFromSettings:=True,
+                                        applyTemplate:=False,
+                                        requireExecutable:=True,
+                                        actionPrefix:="Quick install target: ") Then
+            Return
+        End If
+
+        Dim gameExePath As String = txtGameExe.Text.Trim()
+        Dim config As InstallerConfig = BuildQuickInstallConfig(gameExePath)
+
+        Dim existingInfo As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(config.GameFolder)
+        Dim action As InstallAction = If(existingInfo IsNot Nothing AndAlso existingInfo.IsInstalled, InstallAction.Update, InstallAction.Install)
+
+        Try
+            installOperationInProgress = True
+            UpdateUseDetectedState()
+            UpdateInstallActionButtons(existingInfo)
+            UpdateProgress(0)
+
+            AppendLog("Starting quick install...")
+            If action = InstallAction.Update Then
+                AppendLog("Quick install detected existing OptiScaler install. Proceeding with update.")
+            End If
+
+            If Not RunInstallPreflight(config) Then
+                AppendLog("Quick install aborted (preflight).")
+                Return
+            End If
+
+            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+            Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
+            If manifest IsNot Nothing Then
+                manifest.VerificationTimeUtc = DateTime.UtcNow
+            End If
+
+            LogVerificationReport(verification)
+
+            If verification IsNot Nothing AndAlso verification.Errors.Count > 0 Then
+                MessageBox.Show(Me,
+                                "Quick install finished with verification errors." & Environment.NewLine &
+                                "Open diagnostics/log output for details.",
+                                "Quick Install Completed With Issues",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning)
+            Else
+                Dim warningCount As Integer = If(verification Is Nothing, 0, verification.Warnings.Count)
+                Dim message As String = "Quick install completed successfully."
+                If warningCount > 0 Then
+                    message &= Environment.NewLine & warningCount.ToString() & " verification warning(s) were reported."
+                End If
+                MessageBox.Show(Me, message, "Quick Install Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            End If
+
+            AppendLog("Quick install completed.")
+            Await RefreshDetectedInstallStatesAsync(False)
+        Catch ex As Exception
+            AppendLog("Quick install failed: " & ex.Message)
+            MessageBox.Show(Me, ex.Message, "Quick Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            ErrorLogger.Log(ex, "MainForm.QuickInstall")
+        Finally
+            installOperationInProgress = False
+            UpdateProgress(0)
+            UpdateInstallStatus()
+            UpdateExperimentalStatus()
+            UpdateUseDetectedState()
+        End Try
+    End Function
+
+    Private Async Sub mnuCompatUninstall_Click(sender As Object, e As EventArgs) Handles mnuCompatUninstall.Click
+        Await UninstallFromSelectedRowAsync()
+    End Sub
+
+    Private Async Function UninstallFromSelectedRowAsync() As Task
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+        If row.InstallInfo Is Nothing OrElse Not row.InstallInfo.IsInstalled Then
+            Return
+        End If
+        If uninstallOperationInProgress OrElse installOperationInProgress Then
+            AppendLog("Uninstall skipped: another install/uninstall operation is currently running.")
+            Return
+        End If
+
+        Dim preferredUninstallDir As String = If(row.InstallInfo Is Nothing, row.Detected.InstallDir, row.InstallInfo.InstallFolder)
+        If String.IsNullOrWhiteSpace(preferredUninstallDir) Then
+            preferredUninstallDir = row.Detected.InstallDir
+        End If
+
+        Dim installDir As String = NormalizePathSafe(preferredUninstallDir)
+        If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
+            MessageBox.Show(Me, "Detected install folder was not found.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim confirmation As DialogResult = MessageBox.Show(Me,
+                                                           "Uninstall OptiScaler from the selected detected game?" & Environment.NewLine &
+                                                           If(row.Entry?.Name, row.Detected.DisplayName),
+                                                           "Confirm uninstall",
+                                                           MessageBoxButtons.YesNo,
+                                                           MessageBoxIcon.Question)
+        If confirmation <> DialogResult.Yes Then
+            AppendLog("Uninstall canceled.")
+            Return
+        End If
+
+        txtGameFolder.Text = installDir
+        Dim executablePath As String = ResolveDetectedGameExecutable(row.Detected, False)
+        If Not String.IsNullOrWhiteSpace(executablePath) Then
+            txtGameExe.Text = executablePath
+        End If
+
+        Try
+            uninstallOperationInProgress = True
+            UpdateInstallActionButtons(row.InstallInfo)
+            UpdateUseDetectedState()
+            AppendLog("Starting uninstall...")
+            Await TryUninstallAsync(installDir, True)
+            Await RefreshDetectedInstallStatesAsync(False)
+        Catch ex As Exception
+            AppendLog("Uninstall failed: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.UninstallFromSelectedRow")
+            MessageBox.Show(Me, ex.Message, "Uninstall Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            uninstallOperationInProgress = False
+            UpdateInstallStatus()
+            UpdateExperimentalStatus()
+            UpdateUseDetectedState()
+        End Try
+    End Function
+
+    Private Sub mnuCompatInstallPatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatInstallPatcher.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+
+        UseDetectedGame(row.Detected)
+        If btnInstallOptiPatcher IsNot Nothing AndAlso btnInstallOptiPatcher.Enabled Then
+            btnInstallOptiPatcher.PerformClick()
+        Else
+            MessageBox.Show(Me, "OptiPatcher is not available for this selected game.", "OptiPatcher", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        End If
+    End Sub
+
+    Private Sub mnuCompatRemovePatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatRemovePatcher.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Detected Is Nothing Then
+            Return
+        End If
+
+        UseDetectedGame(row.Detected)
+        If btnRemoveOptiPatcher IsNot Nothing AndAlso btnRemoveOptiPatcher.Enabled Then
+            btnRemoveOptiPatcher.PerformClick()
+        End If
+    End Sub
+
+    Private Sub mnuCompatOpenWiki_Click(sender As Object, e As EventArgs) Handles mnuCompatOpenWiki.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing OrElse row.Entry Is Nothing Then
+            Return
+        End If
+
+        OpenCompatibilityWiki(row.Entry)
+    End Sub
+
+    Private Sub mnuCompatCopyInfo_Click(sender As Object, e As EventArgs) Handles mnuCompatCopyInfo.Click
+        Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
+        If row Is Nothing Then
+            Return
+        End If
+
+        Dim installState As String = GetInstallStatusText(row.Detected IsNot Nothing, row.InstallInfo)
+        Dim patcherState As String = GetOptiPatcherStatusText(row.Entry, row.Detected IsNot Nothing, row.OptiPatcherInfo)
+        Dim detectedState As String = If(row.Detected Is Nothing, "No", "Yes")
+        Dim platform As String = If(row.Detected Is Nothing, "", row.Detected.Platform)
+        Dim antiCheat As String = If(row.Detected Is Nothing, "", GetAntiCheatStatusText(row.Detected))
+        Dim pathValue As String = If(row.Detected Is Nothing, "", row.Detected.InstallDir)
+        Dim infoLines As String() = {
+            "Game: " & If(row.Entry?.Name, ""),
+            "Detected: " & detectedState,
+            "OptiScaler: " & installState,
+            "OptiPatcher: " & patcherState,
+            "Platform: " & platform,
+            "Anti-cheat: " & antiCheat,
+            "Install path: " & pathValue
+        }
+
+        Try
+            Clipboard.SetText(String.Join(Environment.NewLine, infoLines))
+            AppendLog("Copied game info to clipboard: " & If(row.Entry?.Name, "(unknown)"))
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.mnuCompatCopyInfo")
+            MessageBox.Show(Me, "Failed to copy game info: " & ex.Message, "Clipboard", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
     Private Sub UpdateUseDetectedState()
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
-        btnUseDetected.Enabled = row IsNot Nothing AndAlso row.Detected IsNot Nothing
+        Dim isDetected As Boolean = row IsNot Nothing AndAlso row.Detected IsNot Nothing
+        Dim hasEntry As Boolean = row IsNot Nothing AndAlso row.Entry IsNot Nothing
+        Dim hasFolder As Boolean = isDetected AndAlso Not String.IsNullOrWhiteSpace(row.Detected.InstallDir) AndAlso Directory.Exists(row.Detected.InstallDir)
+        Dim hasOptiScaler As Boolean = row IsNot Nothing AndAlso row.InstallInfo IsNot Nothing AndAlso row.InstallInfo.IsInstalled
+        Dim hasOptiPatcherInstalled As Boolean = row IsNot Nothing AndAlso row.OptiPatcherInfo IsNot Nothing AndAlso row.OptiPatcherInfo.IsInstalled
+        Dim isPatcherSupported As Boolean = isDetected AndAlso ResolveOptiPatcherSupportForGame(row.Detected) IsNot Nothing
+        Dim operationBusy As Boolean = installOperationInProgress OrElse uninstallOperationInProgress
+
+        btnUseDetected.Enabled = isDetected AndAlso Not operationBusy
+        btnOpenWiki.Enabled = hasEntry
+        btnCompatOpenFolder.Enabled = hasFolder
+        btnCompatEditIni.Enabled = isDetected AndAlso hasOptiScaler
+        btnCompatInstallUpdate.Enabled = isDetected AndAlso Not operationBusy
+        btnCompatUninstall.Enabled = isDetected AndAlso hasOptiScaler AndAlso Not operationBusy
+        btnCompatInstallPatcher.Enabled = isDetected AndAlso isPatcherSupported AndAlso Not operationBusy
+        btnCompatRemovePatcher.Enabled = isDetected AndAlso hasOptiPatcherInstalled AndAlso Not operationBusy
+        btnCompatCopyInfo.Enabled = row IsNot Nothing
+
+        btnCompatInstallUpdate.Text = If(hasOptiScaler, "Quick update", "Quick install")
+        btnCompatInstallPatcher.Text = If(hasOptiPatcherInstalled, "Update OptiPatcher", "Install OptiPatcher")
     End Sub
 
     Private Function GetSelectedCompatibilityRow() As CompatibilityRow
@@ -2395,8 +2829,10 @@ Public Class MainForm
                 Continue For
             End If
 
+            Dim fsr4Status As ExperimentalFsr4Status = ExperimentalFsr4Service.Detect(normalizedPath)
             Dim item As New ListViewItem(game.DisplayName)
             item.SubItems.Add(If(game.Platform, ""))
+            item.SubItems.Add(GetExperimentalListStatusText(fsr4Status))
             item.SubItems.Add(normalizedPath)
             item.Tag = game
             lvFsr4DetectedGames.Items.Add(item)
@@ -2558,38 +2994,159 @@ Public Class MainForm
     End Function
 
     Private Sub UseDetectedGame(game As DetectedGame)
+        TrySetDetectedGameTarget(game,
+                                 promptForExecutable:=True,
+                                 switchToInstallTab:=True,
+                                 applyDefaultsFromSettings:=False,
+                                 applyTemplate:=True,
+                                 requireExecutable:=False,
+                                 actionPrefix:="Using detected game: ")
+    End Sub
+
+    Private Function TrySetDetectedGameTarget(game As DetectedGame,
+                                              promptForExecutable As Boolean,
+                                              switchToInstallTab As Boolean,
+                                              applyDefaultsFromSettings As Boolean,
+                                              applyTemplate As Boolean,
+                                              requireExecutable As Boolean,
+                                              actionPrefix As String) As Boolean
         If game Is Nothing Then
+            Return False
+        End If
+
+        Dim installDir As String = NormalizePathSafe(game.InstallDir)
+        If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
+            MessageBox.Show(Me, "Detected install folder was not found.", "Game Detection", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return False
+        End If
+
+        If Not String.IsNullOrWhiteSpace(actionPrefix) Then
+            AppendLog(actionPrefix & game.DisplayName)
+        End If
+
+        txtGameExe.Text = ""
+        txtGameFolder.Text = installDir
+        UpdateEngineWarningByFolder(installDir)
+
+        Dim executablePath As String = ResolveDetectedGameExecutable(game, promptForExecutable)
+        If Not String.IsNullOrWhiteSpace(executablePath) Then
+            txtGameExe.Text = executablePath
+        ElseIf requireExecutable Then
+            MessageBox.Show(Me,
+                            "No executable was found for this detected game. Select the game EXE manually and try again.",
+                            "Game Detection",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information)
+            Return False
+        End If
+
+        If applyDefaultsFromSettings Then
+            ApplyDefaultInstallOptionsFromSettings(AppSettings.Load(), False)
+        Else
+            ApplyDefaultInstallOptionsFromUi(False)
+        End If
+
+        If applyTemplate Then
+            ApplyGameTemplate(game)
+        End If
+
+        If switchToInstallTab Then
+            tabMain.SelectedTab = tabInstall
+        End If
+
+        UpdateInstallStatus()
+        UpdateUseDetectedState()
+        Return True
+    End Function
+
+    Private Sub TryAutoRetargetUnrealInstall(config As InstallerConfig)
+        If config Is Nothing Then
             Return
         End If
 
-        AppendLog("Using detected game: " & game.DisplayName)
-        txtGameExe.Text = ""
-        txtGameFolder.Text = game.InstallDir
-        UpdateEngineWarningByFolder(game.InstallDir)
-
-        Dim exePath As String = FindPreferredExecutable(game.InstallDir, game.DisplayName, game.SourceName)
-        If String.IsNullOrWhiteSpace(exePath) Then
-            Using dialog As New OpenFileDialog()
-                dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
-                dialog.Title = "Select Game Executable"
-                If Directory.Exists(game.InstallDir) Then
-                    dialog.InitialDirectory = game.InstallDir
-                End If
-
-                If dialog.ShowDialog(Me) = DialogResult.OK Then
-                    exePath = dialog.FileName
-                End If
-            End Using
+        Dim normalizedFolder As String = NormalizePathSafe(config.GameFolder)
+        If String.IsNullOrWhiteSpace(normalizedFolder) OrElse Not Directory.Exists(normalizedFolder) Then
+            Return
         End If
 
-        If Not String.IsNullOrWhiteSpace(exePath) Then
-            txtGameExe.Text = exePath
+        If Not Directory.Exists(Path.Combine(normalizedFolder, "Engine")) Then
+            Return
         End If
 
-        ApplyDefaultInstallOptionsFromUi(False)
-        ApplyGameTemplate(game)
-        tabMain.SelectedTab = tabInstall
+        Dim currentExe As String = NormalizePathSafe(config.GameExePath)
+        If String.IsNullOrWhiteSpace(currentExe) OrElse Not File.Exists(currentExe) Then
+            Return
+        End If
+
+        Dim currentLower As String = currentExe.ToLowerInvariant()
+        If currentLower.Contains("\binaries\win64\") OrElse currentLower.Contains("\binaries\wingdk\") Then
+            Return
+        End If
+
+        Dim currentName As String = Path.GetFileNameWithoutExtension(currentExe)
+        Dim retargetedExe As String = FindPreferredExecutable(normalizedFolder, currentName, currentName)
+        If String.IsNullOrWhiteSpace(retargetedExe) OrElse Not File.Exists(retargetedExe) Then
+            Return
+        End If
+
+        Dim retargetedLower As String = retargetedExe.ToLowerInvariant()
+        If Not retargetedLower.Contains("\binaries\win64\") AndAlso Not retargetedLower.Contains("\binaries\wingdk\") Then
+            Return
+        End If
+
+        Dim retargetedFolder As String = NormalizePathSafe(Path.GetDirectoryName(retargetedExe))
+        If String.IsNullOrWhiteSpace(retargetedFolder) OrElse Not Directory.Exists(retargetedFolder) Then
+            Return
+        End If
+
+        If String.Equals(currentExe, retargetedExe, StringComparison.OrdinalIgnoreCase) Then
+            Return
+        End If
+
+        config.GameExePath = retargetedExe
+        config.GameFolder = retargetedFolder
+
+        If txtGameExe IsNot Nothing Then
+            txtGameExe.Text = retargetedExe
+        End If
+        If txtGameFolder IsNot Nothing Then
+            txtGameFolder.Text = retargetedFolder
+        End If
+
+        AppendLog("Preflight auto-adjusted Unreal target to binaries folder: " & retargetedFolder)
     End Sub
+
+    Private Function ResolveDetectedGameExecutable(game As DetectedGame, promptForExecutable As Boolean) As String
+        If game Is Nothing Then
+            Return ""
+        End If
+
+        Dim installDir As String = NormalizePathSafe(game.InstallDir)
+        If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
+            Return ""
+        End If
+
+        Dim executablePath As String = FindPreferredExecutable(installDir, game.DisplayName, game.SourceName)
+        If Not String.IsNullOrWhiteSpace(executablePath) Then
+            Return executablePath
+        End If
+
+        If Not promptForExecutable Then
+            Return ""
+        End If
+
+        Using dialog As New OpenFileDialog()
+            dialog.Filter = "Executable (*.exe)|*.exe|All files (*.*)|*.*"
+            dialog.Title = "Select Game Executable"
+            dialog.InitialDirectory = installDir
+
+            If dialog.ShowDialog(Me) = DialogResult.OK Then
+                Return dialog.FileName
+            End If
+        End Using
+
+        Return ""
+    End Function
 
     Private Sub ApplyGameTemplate(game As DetectedGame)
         If game Is Nothing Then
@@ -2663,6 +3220,55 @@ Public Class MainForm
         lblEngineWarning.Visible = Directory.Exists(enginePath)
     End Sub
 
+    Private Function EnsureIniFileForEditor(iniPath As String) As Boolean
+        If String.IsNullOrWhiteSpace(iniPath) Then
+            Return False
+        End If
+
+        If File.Exists(iniPath) Then
+            Return True
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim defaultTemplatePath As String = If(settings Is Nothing, "", settings.DefaultIniPath)
+        Dim hasTemplate As Boolean = Not String.IsNullOrWhiteSpace(defaultTemplatePath) AndAlso File.Exists(defaultTemplatePath)
+
+        Dim message As String = "OptiScaler.ini was not found in this folder." & Environment.NewLine &
+                                "Choose Yes to create from default template, No to create a basic template, or Cancel."
+        If Not hasTemplate Then
+            message = "OptiScaler.ini was not found and no default template file is configured." & Environment.NewLine &
+                      "Choose Yes or No to create a basic template, or Cancel."
+        End If
+
+        Dim choice As DialogResult = MessageBox.Show(Me,
+                                                     message,
+                                                     "Create OptiScaler.ini",
+                                                     MessageBoxButtons.YesNoCancel,
+                                                     MessageBoxIcon.Question)
+        If choice = DialogResult.Cancel Then
+            Return False
+        End If
+
+        Try
+            Directory.CreateDirectory(Path.GetDirectoryName(iniPath))
+            If hasTemplate AndAlso choice = DialogResult.Yes Then
+                File.Copy(defaultTemplatePath, iniPath, True)
+                AppendLog("Created OptiScaler.ini from default template: " & defaultTemplatePath)
+            Else
+                Dim content As String = OptiScalerIniEditorService.BuildDefaultIniContent()
+                OptiScalerIniEditorService.SaveTextAtomically(iniPath, content)
+                AppendLog("Created OptiScaler.ini with basic template.")
+            End If
+
+            Return True
+        Catch ex As Exception
+            AppendLog("Failed to create OptiScaler.ini: " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.EnsureIniFileForEditor")
+            MessageBox.Show(Me, "Failed to create OptiScaler.ini: " & ex.Message, "INI Editor", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return False
+        End Try
+    End Function
+
     Private Sub UpdateInstallStatus()
         If lblInstalledStatus Is Nothing Then
             Return
@@ -2676,8 +3282,10 @@ Public Class MainForm
         Dim info As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(txtGameFolder.Text)
         Dim statusText As String = BuildInstallStatusText(info)
         lblInstalledStatus.Text = statusText
+        UpdateIniEditorButtonState(info)
 
         UpdateInstallButtonText(info)
+        UpdateInstallActionButtons(info)
 
         Dim key As String = If(info Is Nothing, "none", $"{info.IsInstalled}|{info.Version}|{info.Source}")
         If key <> lastInstallStatusKey Then
@@ -2709,6 +3317,153 @@ Public Class MainForm
         End If
     End Sub
 
+    Private Sub UpdateInstallActionButtons(Optional info As OptiScalerInstallInfo = Nothing)
+        If btnInstall Is Nothing OrElse btnUninstall Is Nothing Then
+            Return
+        End If
+
+        Dim folder As String = If(txtGameFolder Is Nothing, "", txtGameFolder.Text.Trim())
+        Dim hasFolder As Boolean = Not String.IsNullOrWhiteSpace(folder) AndAlso Directory.Exists(folder)
+        If btnOpenGameFolder IsNot Nothing Then
+            btnOpenGameFolder.Enabled = hasFolder
+        End If
+
+        Dim gameExePath As String = If(txtGameExe Is Nothing, "", txtGameExe.Text.Trim())
+        Dim hasGameExe As Boolean = Not String.IsNullOrWhiteSpace(gameExePath) AndAlso File.Exists(gameExePath)
+
+        Dim hasHook As Boolean = cmbHookName IsNot Nothing AndAlso
+                                 cmbHookName.SelectedItem IsNot Nothing AndAlso
+                                 Not String.IsNullOrWhiteSpace(cmbHookName.SelectedItem.ToString())
+
+        Dim sourceReady As Boolean = IsSelectedInstallSourceReady()
+        Dim autoOptiPatcherReady As Boolean = True
+        If chkInstallOptiPatcher IsNot Nothing AndAlso chkInstallOptiPatcher.Checked Then
+            autoOptiPatcherReady = chkInstallOptiPatcher.Enabled
+        End If
+
+        Dim canInstall As Boolean = Not installOperationInProgress AndAlso
+                                    Not uninstallOperationInProgress AndAlso
+                                    hasFolder AndAlso
+                                    hasGameExe AndAlso
+                                    hasHook AndAlso
+                                    sourceReady AndAlso
+                                    autoOptiPatcherReady AndAlso
+                                    Not HasBlockingInstallInputErrors()
+        btnInstall.Enabled = canInstall
+
+        Dim installInfo As OptiScalerInstallInfo = info
+        If installInfo Is Nothing AndAlso hasFolder Then
+            installInfo = OptiScalerInstallDetector.Detect(folder)
+        End If
+
+        Dim canUninstall As Boolean = Not installOperationInProgress AndAlso
+                                      Not uninstallOperationInProgress AndAlso
+                                      hasFolder AndAlso
+                                      installInfo IsNot Nothing AndAlso
+                                      installInfo.IsInstalled
+        btnUninstall.Enabled = canUninstall
+    End Sub
+
+    Private Function IsSelectedInstallSourceReady() As Boolean
+        If rbLocal IsNot Nothing AndAlso rbLocal.Checked Then
+            Dim localPath As String = If(txtLocalArchive Is Nothing, "", txtLocalArchive.Text.Trim())
+            If String.IsNullOrWhiteSpace(localPath) OrElse Not File.Exists(localPath) Then
+                Return False
+            End If
+
+            Try
+                Return New FileInfo(localPath).Length > 0
+            Catch
+                Return False
+            End Try
+        End If
+
+        If rbStable IsNot Nothing AndAlso rbStable.Checked Then
+            Return stableRelease IsNot Nothing
+        End If
+
+        If rbNightly IsNot Nothing AndAlso rbNightly.Checked Then
+            Return nightlyRelease IsNot Nothing
+        End If
+
+        Return False
+    End Function
+
+    Private Function HasBlockingInstallInputErrors() As Boolean
+        If cmbFgType IsNot Nothing AndAlso cmbFgType.SelectedIndex = 3 Then
+            Dim nukemPath As String = If(txtNukemDll Is Nothing, "", txtNukemDll.Text.Trim())
+            If String.IsNullOrWhiteSpace(nukemPath) OrElse Not File.Exists(nukemPath) Then
+                Return True
+            End If
+            If Not Path.GetExtension(nukemPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        End If
+
+        Dim fakenvapiPath As String = If(txtFakenvapiFolder Is Nothing, "", txtFakenvapiFolder.Text.Trim())
+        If Not String.IsNullOrWhiteSpace(fakenvapiPath) Then
+            Dim fakenvapiRoot As String = fakenvapiPath
+            If File.Exists(fakenvapiRoot) Then
+                fakenvapiRoot = Path.GetDirectoryName(fakenvapiRoot)
+            End If
+
+            If String.IsNullOrWhiteSpace(fakenvapiRoot) OrElse Not Directory.Exists(fakenvapiRoot) Then
+                Return True
+            End If
+        End If
+
+        Dim nvngxPath As String = If(txtNvngxDll Is Nothing, "", txtNvngxDll.Text.Trim())
+        If Not String.IsNullOrWhiteSpace(nvngxPath) AndAlso Not File.Exists(nvngxPath) Then
+            Return True
+        End If
+
+        If chkEnableReshade IsNot Nothing AndAlso chkEnableReshade.Checked Then
+            Dim reshadePath As String = If(txtReshadeDll Is Nothing, "", txtReshadeDll.Text.Trim())
+            If String.IsNullOrWhiteSpace(reshadePath) OrElse Not File.Exists(reshadePath) Then
+                Return True
+            End If
+            If Not Path.GetExtension(reshadePath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        End If
+
+        If chkEnableSpecialK IsNot Nothing AndAlso chkEnableSpecialK.Checked Then
+            Dim specialKPath As String = If(txtSpecialKDll Is Nothing, "", txtSpecialKDll.Text.Trim())
+            If String.IsNullOrWhiteSpace(specialKPath) OrElse Not File.Exists(specialKPath) Then
+                Return True
+            End If
+            If Not Path.GetExtension(specialKPath).Equals(".dll", StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        End If
+
+        If chkLoadAsiPlugins IsNot Nothing AndAlso chkLoadAsiPlugins.Checked Then
+            Dim pluginsPath As String = If(txtPluginsPath Is Nothing, "", txtPluginsPath.Text.Trim())
+            If String.IsNullOrWhiteSpace(pluginsPath) OrElse Not Directory.Exists(pluginsPath) Then
+                Return True
+            End If
+        End If
+
+        Return False
+    End Function
+
+    Private Sub UpdateIniEditorButtonState(info As OptiScalerInstallInfo)
+        If btnEditIni Is Nothing Then
+            Return
+        End If
+
+        Dim folder As String = txtGameFolder.Text.Trim()
+        If String.IsNullOrWhiteSpace(folder) OrElse Not Directory.Exists(folder) Then
+            btnEditIni.Enabled = False
+            Return
+        End If
+
+        Dim iniPath As String = Path.Combine(folder, "OptiScaler.ini")
+        Dim hasIni As Boolean = File.Exists(iniPath)
+        Dim isInstalled As Boolean = info IsNot Nothing AndAlso info.IsInstalled
+        btnEditIni.Enabled = isInstalled OrElse hasIni
+    End Sub
+
     Private Sub UpdateOptiPatcherStatus()
         If lblOptiPatcherStatus Is Nothing Then
             Return
@@ -2733,6 +3488,7 @@ Public Class MainForm
             End If
             SyncAutoOptiPatcherUiState(False)
             UpdateInstallButtonText(OptiScalerInstallDetector.Detect(txtGameFolder.Text))
+            UpdateInstallActionButtons()
             lastOptiPatcherStatusKey = "no-folder"
             Return
         End If
@@ -2755,6 +3511,7 @@ Public Class MainForm
         End If
         SyncAutoOptiPatcherUiState(False)
         UpdateInstallButtonText(OptiScalerInstallDetector.Detect(txtGameFolder.Text))
+        UpdateInstallActionButtons()
 
         Dim statusText As String = BuildOptiPatcherStatusText(installInfo, supportEntry)
         lblOptiPatcherStatus.Text = statusText
@@ -2853,6 +3610,14 @@ Public Class MainForm
         End If
 
         detectedGame = FindDetectedGameByInstallDir(folder)
+        If detectedGame Is Nothing Then
+            Return Nothing
+        End If
+
+        Return OptiPatcherSupportService.FindByGameName(optiPatcherSupportLookup, detectedGame.DisplayName)
+    End Function
+
+    Private Function ResolveOptiPatcherSupportForGame(detectedGame As DetectedGame) As OptiPatcherSupportEntry
         If detectedGame Is Nothing Then
             Return Nothing
         End If
@@ -3108,6 +3873,20 @@ Public Class MainForm
         Return $"Experimental package: installed ({versionText}, {sourceText}, {managedText})"
     End Function
 
+    Private Function GetExperimentalListStatusText(status As ExperimentalFsr4Status) As String
+        If status Is Nothing OrElse Not status.IsInstalled Then
+            Return "No"
+        End If
+
+        Dim versionText As String = If(String.IsNullOrWhiteSpace(status.Version), "", status.Version.Trim())
+        Dim managedText As String = If(status.IsManaged, "Managed", "Unmanaged")
+        If String.IsNullOrWhiteSpace(versionText) Then
+            Return "Yes (" & managedText & ")"
+        End If
+
+        Return "Yes (" & versionText & ", " & managedText & ")"
+    End Function
+
     Private Enum InstallAction
         Install
         Update
@@ -3195,8 +3974,10 @@ Public Class MainForm
 
         Dim bestPath As String = ""
         Dim bestScore As Integer = Integer.MinValue
+        Dim preferUnrealBinaries As Boolean = Directory.Exists(Path.Combine(installDir, "Engine"))
+
         For Each exePath As String In candidates
-            Dim score As Integer = ScoreExecutableCandidate(exePath, displayName, sourceName)
+            Dim score As Integer = ScoreExecutableCandidate(exePath, displayName, sourceName, installDir, preferUnrealBinaries)
             If score > bestScore Then
                 bestScore = score
                 bestPath = exePath
@@ -3298,7 +4079,11 @@ Public Class MainForm
         Return False
     End Function
 
-    Private Function ScoreExecutableCandidate(exePath As String, displayName As String, sourceName As String) As Integer
+    Private Function ScoreExecutableCandidate(exePath As String,
+                                              displayName As String,
+                                              sourceName As String,
+                                              installDir As String,
+                                              preferUnrealBinaries As Boolean) As Integer
         If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
             Return Integer.MinValue
         End If
@@ -3343,6 +4128,26 @@ Public Class MainForm
         End If
         If lowerPath.Contains("\binaries\") OrElse lowerPath.Contains("\bin\") Then
             score += 25
+        End If
+
+        If preferUnrealBinaries Then
+            If lowerPath.Contains("\binaries\wingdk\") Then
+                score += 260
+            End If
+            If lowerPath.Contains("\binaries\win64\") Then
+                score += 250
+            End If
+            If lowerPath.Contains("-shipping") Then
+                score += 170
+            End If
+
+            Dim normalizedInstallDir As String = NormalizePathSafe(installDir)
+            Dim normalizedExeDir As String = NormalizePathSafe(Path.GetDirectoryName(exePath))
+            If Not String.IsNullOrWhiteSpace(normalizedInstallDir) AndAlso
+               Not String.IsNullOrWhiteSpace(normalizedExeDir) AndAlso
+               String.Equals(normalizedInstallDir, normalizedExeDir, StringComparison.OrdinalIgnoreCase) Then
+                score -= 220
+            End If
         End If
 
         Try
@@ -3640,6 +4445,115 @@ Public Class MainForm
         End Using
     End Sub
 
+    Private Function BuildQuickInstallConfig(gameExePath As String) As InstallerConfig
+        Dim normalizedExe As String = NormalizePathSafe(gameExePath)
+        If String.IsNullOrWhiteSpace(normalizedExe) OrElse Not File.Exists(normalizedExe) Then
+            Throw New InvalidOperationException("Quick install requires a valid game executable.")
+        End If
+
+        Dim gameFolder As String = NormalizePathSafe(Path.GetDirectoryName(normalizedExe))
+        If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
+            Throw New InvalidOperationException("Quick install requires a valid game folder.")
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim hookName As String = ResolveQuickInstallHookName(settings)
+        Dim gpuVendor As GpuVendor = ResolveQuickInstallGpuVendor(settings)
+        Dim dlssInputs As Boolean = True
+        If settings IsNot Nothing AndAlso settings.DefaultDlssInputs.HasValue Then
+            dlssInputs = settings.DefaultDlssInputs.Value
+        End If
+
+        Dim fgSelection As FgTypeSelection = ResolveQuickInstallFgSelection(settings)
+        If fgSelection = FgTypeSelection.Nukem Then
+            AppendLog("Quick install: default frame generation is Nukem but requires manual DLL input. Using Auto instead.")
+            fgSelection = FgTypeSelection.Auto
+        End If
+
+        Dim conflictMode As ConflictMode = GetConflictModeFromIndex(GetDefaultConflictModeIndex(If(settings?.DefaultConflictMode, "")))
+        Dim defaultIniMode As DefaultIniMode = ParseDefaultIniMode(If(settings?.DefaultIniMode, ""))
+
+        Return New InstallerConfig With {
+            .GameExePath = normalizedExe,
+            .GameFolder = gameFolder,
+            .HookName = hookName,
+            .ConflictMode = conflictMode,
+            .Source = ReleaseSource.Stable,
+            .StableRelease = stableRelease,
+            .NightlyRelease = nightlyRelease,
+            .ComponentRelease = componentRelease,
+            .LocalArchivePath = "",
+            .GpuVendor = gpuVendor,
+            .EnableDlssInputs = dlssInputs,
+            .FgType = fgSelection,
+            .FakenvapiFolder = "",
+            .NukemDllPath = "",
+            .NvngxDllPath = "",
+            .EnableReshade = False,
+            .ReshadeDllPath = "",
+            .EnableSpecialK = False,
+            .SpecialKDllPath = "",
+            .CreateSpecialKMarker = False,
+            .LoadAsiPlugins = False,
+            .PluginsPath = "",
+            .DefaultIniMode = defaultIniMode,
+            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath)
+        }
+    End Function
+
+    Private Function ResolveQuickInstallHookName(settings As AppSettingsModel) As String
+        Dim hookName As String = If(settings?.DefaultHookName, "").Trim()
+        If String.IsNullOrWhiteSpace(hookName) Then
+            Return "dxgi.dll"
+        End If
+
+        Dim supportedHooks As String() = {
+            "dxgi.dll",
+            "winmm.dll",
+            "version.dll",
+            "dbghelp.dll",
+            "d3d12.dll",
+            "wininet.dll",
+            "winhttp.dll",
+            "OptiScaler.asi"
+        }
+        For Each supportedHook As String In supportedHooks
+            If hookName.Equals(supportedHook, StringComparison.OrdinalIgnoreCase) Then
+                Return supportedHook
+            End If
+        Next
+
+        Return "dxgi.dll"
+    End Function
+
+    Private Function ResolveQuickInstallGpuVendor(settings As AppSettingsModel) As GpuVendor
+        Select Case GetDefaultGpuVendorIndex(If(settings?.DefaultGpuVendor, ""))
+            Case 1
+                Return GpuVendor.Nvidia
+            Case 2
+                Return GpuVendor.AmdIntel
+            Case Else
+                EnsureGpuDetectionInitialized()
+                If gpuDetectionVendor = GpuVendor.Nvidia OrElse gpuDetectionVendor = GpuVendor.AmdIntel Then
+                    Return gpuDetectionVendor
+                End If
+                Return GpuVendor.Nvidia
+        End Select
+    End Function
+
+    Private Function ResolveQuickInstallFgSelection(settings As AppSettingsModel) As FgTypeSelection
+        Select Case GetDefaultFrameGenerationIndex(If(settings?.DefaultFrameGeneration, ""))
+            Case 1
+                Return FgTypeSelection.None
+            Case 2
+                Return FgTypeSelection.OptiFg
+            Case 3
+                Return FgTypeSelection.Nukem
+            Case Else
+                Return FgTypeSelection.Auto
+        End Select
+    End Function
+
     Private Function BuildConfig() As InstallerConfig
         If cmbHookName.SelectedItem Is Nothing Then
             Throw New InvalidOperationException("Select a hook filename.")
@@ -3748,6 +4662,28 @@ Public Class MainForm
 
         txtLog.AppendText("[" & DateTime.Now.ToString("HH:mm:ss") & "] " & message & Environment.NewLine)
         txtLog.ScrollToEnd()
+    End Sub
+
+    Private Sub ApplyCompatibilityContextMenuTheme(mode As SystemColorMode)
+        If compatContextMenu Is Nothing Then
+            Return
+        End If
+
+        If mode = SystemColorMode.Dark Then
+            compatContextMenu.BackColor = Color.FromArgb(32, 32, 32)
+            compatContextMenu.ForeColor = Color.Gainsboro
+            For Each item As ToolStripItem In compatContextMenu.Items
+                item.BackColor = Color.FromArgb(32, 32, 32)
+                item.ForeColor = Color.Gainsboro
+            Next
+        Else
+            compatContextMenu.BackColor = SystemColors.Control
+            compatContextMenu.ForeColor = SystemColors.ControlText
+            For Each item As ToolStripItem In compatContextMenu.Items
+                item.BackColor = SystemColors.Control
+                item.ForeColor = SystemColors.ControlText
+            Next
+        End If
     End Sub
 
     Private Sub DarkThemeCheckBox_CheckedChanged(sender As Object, e As EventArgs) Handles DarkThemeCheckBox.CheckedChanged
@@ -4217,10 +5153,17 @@ Public Class MainForm
         toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
         toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then drive-scan augmentation. You will be prompted to choose drives each run.")
         toolTip.SetToolTip(btnDeepScanDrives, "Manually add a game by selecting its executable. The installer matches it to the compatibility list and persists it for future sessions.")
-        toolTip.SetToolTip(btnUseDetected, "Use the selected detected row as the active install target. Automatically switches to Install tab and fills Game EXE/Game folder.")
+        toolTip.SetToolTip(btnUseDetected, "Use selected game for advanced install setup. Switches to Install tab and fills Game EXE/Game folder without starting installation.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
         toolTip.SetToolTip(btnOpenWiki, "Open the wiki page for the currently selected compatibility entry using the configured wiki base URL.")
+        toolTip.SetToolTip(btnCompatOpenFolder, "Open the install folder of the selected detected game in Windows Explorer.")
+        toolTip.SetToolTip(btnCompatEditIni, "Use the selected detected game as target and open its OptiScaler.ini in the editor.")
+        toolTip.SetToolTip(btnCompatInstallUpdate, "Quick install OptiScaler to the selected detected game using saved default install settings.")
+        toolTip.SetToolTip(btnCompatUninstall, "Use the selected detected game as target and run OptiScaler uninstall.")
+        toolTip.SetToolTip(btnCompatInstallPatcher, "Use the selected detected game as target and install/update OptiPatcher when supported.")
+        toolTip.SetToolTip(btnCompatRemovePatcher, "Use the selected detected game as target and remove OptiPatcher.")
+        toolTip.SetToolTip(btnCompatCopyInfo, "Copy selected game detection/install information to clipboard.")
         toolTip.SetToolTip(lvCompatibility, "Master game list. Columns show detection state, OptiScaler/OptiPatcher status, platform, anti-cheat hint, and install path. Double-click a detected row to prefill install target.")
 
         toolTip.SetToolTip(txtGameExe, "Full path to the game executable you want to patch. Prefer the real game .exe in the binaries folder, not launcher/setup/uninstall executables.")
@@ -4241,6 +5184,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnInstall, "Install or update OptiScaler into the selected game folder using current options from Install and Add-ons.")
         toolTip.SetToolTip(btnUninstall, "Remove OptiScaler from the selected game folder using installer manifest data, with fallback cleanup paths when possible.")
         toolTip.SetToolTip(btnOpenGameFolder, "Open the currently selected game folder in Windows Explorer.")
+        toolTip.SetToolTip(btnEditIni, "Open a feature-rich editor for OptiScaler.ini in the selected game folder. Includes visual fields, raw mode, validation, backup, and atomic save.")
         toolTip.SetToolTip(chkInstallOptiPatcher, "If enabled, OptiPatcher is installed automatically right after OptiScaler install. Only available for supported detected games.")
         toolTip.SetToolTip(lblInstallOptiPatcherStatus, "Read-only status telling whether OptiPatcher auto-install is available for the current target.")
 
@@ -4281,7 +5225,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run the unified detection pipeline for this tab and choose which drives to include in deep-scan augmentation.")
         toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use selected row from detected games list as FSR4 INT8 target folder.")
         toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: choose a game executable directly if automatic detection misses it.")
-        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. Select one and use it, or double-click.")
+        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. INT8 column shows per-game package status. Select one and use it, or double-click.")
         toolTip.SetToolTip(lblFsr4DetectedGames, "Shows detected-game count for the experimental tab picker.")
         toolTip.SetToolTip(chkFsr4EnableUpdate, "When checked, installer sets Fsr4Update=true in OptiScaler.ini during apply.")
         toolTip.SetToolTip(chkFsr4EnableAgility, "When checked, installer sets FsrAgilitySDKUpgrade=true to help selected Windows 10 titles.")
