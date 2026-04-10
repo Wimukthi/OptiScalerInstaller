@@ -1,0 +1,128 @@
+[
+  {
+    "Name": "Luma Unreal Engine - Luma UE",
+    "Slug": "Luma-Unreal-Engine---Luma-UE",
+    "Aliases": [
+      "Luma UE"
+    ],
+    "InstallSubfolderHints": [
+      "Binaries\\Win64",
+      "Binaries\\WinGDK"
+    ],
+    "Notes": "Use the actual game Win64/WinGDK executable folder instead of launcher/root directories."
+  },
+  {
+    "Name": "Control Ultimate Edition",
+    "Slug": "Control-Ultimate-Edition",
+    "Aliases": [
+      "Control"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "Notes": "If launch fails, verify the selected game executable in the install folder and reinstall."
+  },
+  {
+    "Name": "Cyberpunk 2077",
+    "Slug": "Cyberpunk-2077",
+    "Aliases": [
+      "Cyberpunk"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "InstallSubfolderHints": [
+      "bin\\x64"
+    ],
+    "ExecutableNameHints": [
+      "Cyberpunk2077.exe"
+    ],
+    "Notes": "Prefer the game binary folder (bin\\x64), not launcher/helper executables."
+  },
+  {
+    "Name": "Dead Space (2023)",
+    "Slug": "Dead-Space-(2023)",
+    "Aliases": [
+      "Dead Space 2023"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite"
+  },
+  {
+    "Name": "The Witcher 3: Wild Hunt",
+    "Slug": "The-Witcher-3-Wild-Hunt",
+    "Aliases": [
+      "The Witcher 3",
+      "Witcher 3"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "InstallSubfolderHints": [
+      "bin\\x64_dx12",
+      "bin\\x64"
+    ],
+    "ExecutableNameHints": [
+      "witcher3.exe"
+    ],
+    "Notes": "Prefer bin\\x64_dx12 for DX12 mode."
+  },
+  {
+    "Name": "Death Stranding Director's Cut",
+    "Slug": "Death-Stranding-Directors-Cut",
+    "Aliases": [
+      "Death Stranding",
+      "Death Stranding DC"
+    ],
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "ExecutableNameHints": [
+      "ds.exe"
+    ]
+  },
+  {
+    "Name": "Ghostrunner",
+    "Slug": "Ghostrunner",
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "InstallSubfolderHints": [
+      "Ghostrunner\\Binaries\\Win64",
+      "Binaries\\Win64"
+    ],
+    "ExecutableNameHints": [
+      "Ghostrunner-Win64-Shipping.exe",
+      "Ghostrunner.exe"
+    ]
+  },
+  {
+    "Name": "Ghostrunner 2",
+    "Slug": "Ghostrunner-2",
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "InstallSubfolderHints": [
+      "Ghostrunner2\\Binaries\\Win64",
+      "Binaries\\Win64"
+    ],
+    "ExecutableNameHints": [
+      "Ghostrunner2-Win64-Shipping.exe",
+      "Ghostrunner2.exe"
+    ],
+    "Notes": "For Unreal builds, target the Binaries\\Win64 folder used by the game executable."
+  },
+  {
+    "Name": "Hogwarts Legacy",
+    "Slug": "Hogwarts-Legacy",
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite",
+    "InstallSubfolderHints": [
+      "Phoenix\\Binaries\\Win64",
+      "Binaries\\Win64"
+    ],
+    "ExecutableNameHints": [
+      "HogwartsLegacy.exe"
+    ]
+  },
+  {
+    "Name": "DOOM The Dark Ages",
+    "Slug": "DOOM-The-Dark-Ages",
+    "HookName": "dxgi.dll",
+    "ConflictMode": "BackupAndOverwrite"
+  }
+]

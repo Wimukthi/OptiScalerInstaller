@@ -7,12 +7,14 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Auto-detect supported games (Steam, Epic, GOG, EA App, Ubisoft Connect, registry) with deep-scan augmentation and prefill install settings.
 - Manual game add flow: pick a game executable to force-match and persist supported installs that automated scans miss.
 - Compatibility list view with detection plus both OptiScaler and OptiPatcher install status/version.
+- Inline update visibility on Game Detection for installed OptiScaler/OptiPatcher (shows installed vs latest when newer releases are available).
 - Optional `Hide non-detected` filter to focus only on detected installs.
 - Install from stable, alternate release source, or local OptiScaler archive (.7z).
 - GPU vendor settings and OptiFG/Nukem frame generation options.
 - Add-ons: Fakenvapi, Nukem FG DLL, nvngx_dlss.dll, ReShade, Special K, ASI plugins.
 - OptiPatcher integration with rolling/stable/alternate/local source selection, supported-game enforcement, manual install/remove, and manifest-aware detection.
 - One-click Install-tab OptiPatcher flow (`Install OptiPatcher after OptiScaler install`) with install summary and preflight validation.
+- Integrated OptiScaler INI editor with grouped form view, raw view, validation, filtering, and backup/save/revert workflow.
 - Global OptiScaler.ini defaults (merge or replace) during install.
 - Default install option presets (hook, GPU, DLSS inputs, frame generation, conflict mode).
 - Detect existing OptiScaler installs and offer update/reinstall/uninstall.
@@ -63,7 +65,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 - Click "Scan installed games" to run the unified detection pipeline (launcher/registry scan + deep scan augmentation). The app prompts you to choose drives before deep scan starts.
 - Click "Add game manually" to browse to a game executable and persist a supported manual detection.
 - Enable "Hide non-detected" to show only rows that are currently detected.
+- OptiScaler/OptiPatcher columns also show update state for detected installed games (example: `Yes (0.9.0 -> v0.9.1)`).
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
+- Right-click a detected row for shortcuts (use selected, open folder, edit INI, quick install/uninstall, OptiPatcher actions, wiki, copy info).
 
 ### Install tab
 
@@ -79,6 +83,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 - Configure advanced OptiPatcher source options (rolling/stable/alternate/local .asi) and manual install/remove.
 - Enable only what your game needs.
 
+### FSR4 INT8 (Experimental) tab
+
+- Apply/remove the INT8 package to a selected game folder.
+- Pick targets from detected supported games or browse manually to a game EXE.
+- Optional INI toggles (`Fsr4Update`, `FsrAgilitySDKUpgrade`) are applied/restored by installer-managed state.
+
 ### Settings tab
 
 - Update list URLs and release endpoints.
@@ -89,6 +99,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
 - Export diagnostics bundles for support/debugging.
 - Save, reload, or load defaults.
 - Open the settings file directly from the UI.
+
+### INI Editor
+
+- Open from Install tab (`Edit OptiScaler.ini`) or from the Game Detection context menu.
+- Form view groups keys by INI section with known-setting descriptions and validation hints.
+- Raw view supports direct text editing when needed.
+- Includes reload, backup, revert, and save operations.
 
 ## Configuration
 
@@ -113,19 +130,27 @@ The window title shows `vMajor.Minor.Patch.Build` and, when detected, the active
 
 Game Detection:
 
-![Game Detection](docs/screenshots/game-detection.png)
+![Game Detection](Screenshots/game-detection.png)
 
 Install:
 
-![Install](docs/screenshots/install.png)
+![Install](Screenshots/install.png)
 
 Add-ons:
 
-![Add-ons](docs/screenshots/addons.png)
+![Add-ons](Screenshots/add-ons.png)
+
+FSR4 INT8 (Experimental):
+
+![FSR4 INT8](Screenshots/fsr4-int8.png)
 
 Settings:
 
-![Settings](docs/screenshots/settings.png)
+![Settings](Screenshots/settings.png)
+
+INI Editor:
+
+![INI Editor](Screenshots/ini-editor.png)
 
 ## Version History
 

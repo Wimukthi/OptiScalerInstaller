@@ -10,6 +10,7 @@ Imports System.Text.Json
 Imports System.Net
 Imports System.Net.Http
 Imports System.Linq
+Imports System.Text.RegularExpressions
 
 Public Class MainForm
     ' Main UI surface for detection, install, add-ons, settings, and logging.
@@ -112,6 +113,7 @@ Public Class MainForm
         Try
             Dim settings As AppSettingsModel = AppSettings.Load()
             Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
+            Dim refreshProfilesOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshGameProfilesOnStartup.HasValue AndAlso settings.AutoRefreshGameProfilesOnStartup.Value
             Dim checkUpdatesOnStartup As Boolean = settings Is Nothing OrElse Not settings.AutoCheckInstallerUpdates.HasValue OrElse settings.AutoCheckInstallerUpdates.Value
             Dim runInitialDeepScan As Boolean = settings IsNot Nothing AndAlso
                                                 (Not settings.HasCompletedInitialDeepScan.HasValue OrElse
@@ -138,6 +140,9 @@ Public Class MainForm
             ' Non-critical startup refreshes run after detection has already rendered.
             If refreshOnStartup Then
                 Await RefreshCompatibilityAsync(False, True)
+            End If
+            If refreshProfilesOnStartup Then
+                Await RefreshGameProfilesCatalogAsync(False, True)
             End If
 
             Await RefreshReleaseInfoAsync(False)
@@ -278,6 +283,7 @@ Public Class MainForm
         chkFsr4EnableUpdate.Checked = True
         chkFsr4EnableAgility.Checked = False
         chkAutoRefreshCompatibilityOnStartup.Checked = True
+        chkAutoRefreshGameProfilesOnStartup.Checked = False
         chkAutoCheckInstallerUpdates.Checked = True
         chkShowExperimentalTabOnUnsupportedGpu.Checked = False
         cmbOptiPatcherSource.SelectedIndex = 0
@@ -831,16 +837,29 @@ Public Class MainForm
                     detectedOptiPatcherLookup.TryGetValue(lookupKey, patcherInfo)
                 End If
 
+                Dim optiScalerUpdateAvailable As Boolean = IsOptiScalerUpdateAvailable(installInfo)
+                Dim optiPatcherUpdateAvailable As Boolean = IsOptiPatcherUpdateAvailable(patcherInfo)
+                Dim optiScalerStatusText As String = GetInstallStatusText(isDetected, installInfo)
+                Dim optiPatcherStatusText As String = GetOptiPatcherStatusText(entry, isDetected, patcherInfo)
+
                 Dim item As New ListViewItem(entry.Name)
                 item.SubItems.Add(If(isDetected, "Yes", ""))
-                item.SubItems.Add(GetInstallStatusText(isDetected, installInfo))
-                item.SubItems.Add(GetOptiPatcherStatusText(entry, isDetected, patcherInfo))
+                item.SubItems.Add(optiScalerStatusText)
+                item.SubItems.Add(optiPatcherStatusText)
                 item.SubItems.Add(If(isDetected, detected.Platform, ""))
                 item.SubItems.Add(If(isDetected, GetAntiCheatStatusText(detected), ""))
                 item.SubItems.Add(If(isDetected, detected.InstallDir, ""))
                 Dim isChanged As Boolean = highlightChanges AndAlso compatibilityChangedNames.Contains(normalizedKey)
-                item.Tag = New CompatibilityRow With {.Entry = entry, .Detected = detected, .InstallInfo = installInfo, .OptiPatcherInfo = patcherInfo, .IsRecentlyChanged = isChanged}
-                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged, isDetected AndAlso Not String.IsNullOrWhiteSpace(detected.AntiCheat))
+                item.Tag = New CompatibilityRow With {
+                    .Entry = entry,
+                    .Detected = detected,
+                    .InstallInfo = installInfo,
+                    .OptiPatcherInfo = patcherInfo,
+                    .IsRecentlyChanged = isChanged,
+                    .OptiScalerUpdateAvailable = optiScalerUpdateAvailable,
+                    .OptiPatcherUpdateAvailable = optiPatcherUpdateAvailable
+                }
+                ApplyInstallRowColors(item, installInfo, isDetected, lvCompatibility.Items.Count, isChanged, isDetected AndAlso Not String.IsNullOrWhiteSpace(detected.AntiCheat), optiScalerUpdateAvailable, optiPatcherUpdateAvailable)
                 lvCompatibility.Items.Add(item)
             End If
         Next
@@ -1370,6 +1389,7 @@ Public Class MainForm
             AppendLog("Failed to fetch releases.")
         End If
 
+        ApplyCompatibilityFilter()
         UpdateInstallActionButtons()
     End Function
 
@@ -1438,6 +1458,7 @@ Public Class MainForm
         End If
 
         UpdateOptiPatcherReleaseLabel()
+        ApplyCompatibilityFilter()
         If reportStatus Then
             SetStatus("OptiPatcher release info updated.")
         End If
@@ -2031,6 +2052,7 @@ Public Class MainForm
 
     Private Async Sub btnRefreshCompatibility_Click(sender As Object, e As EventArgs) Handles btnRefreshCompatibility.Click
         Await RefreshCompatibilityAsync(True, False)
+        Await RefreshGameProfilesCatalogAsync(False, False)
     End Sub
 
     Private Async Function RefreshCompatibilityAsync(reportStatus As Boolean, isAuto As Boolean) As Task
@@ -2102,6 +2124,32 @@ Public Class MainForm
 
         AppendLog("Drive scan roots unavailable; running launcher/registry detection only.")
         Await RunDetectionAsync(isAuto, Nothing, isInitialDeepScan)
+    End Function
+
+    Private Async Function RefreshGameProfilesCatalogAsync(reportStatus As Boolean, isAuto As Boolean) As Task
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim catalogUrl As String = If(settings?.GameProfilesCatalogUrl, "").Trim()
+        If String.IsNullOrWhiteSpace(catalogUrl) Then
+            If Not isAuto Then
+                AppendLog("Game profile catalog URL not set; using built-in profiles only.")
+            End If
+            Return
+        End If
+
+        AppendLog(If(isAuto, "Auto-refreshing game profile catalog...", "Refreshing game profile catalog..."))
+        Try
+            Dim profileCount As Integer = Await GameProfileService.RefreshCatalogFromUrlAsync(catalogUrl)
+            AppendLog("Game profile catalog updated: " & profileCount.ToString() & " profile(s).")
+            If reportStatus Then
+                SetStatus("Game profiles updated.")
+            End If
+        Catch ex As Exception
+            AppendLog("Game profile refresh failed: " & ex.Message)
+            If reportStatus Then
+                SetStatus("Game profile refresh failed.")
+            End If
+            ErrorLogger.Log(ex, "MainForm.RefreshGameProfilesCatalog")
+        End Try
     End Function
 
     Private Function PromptForDeepScanRoots(scanContext As String) As List(Of String)
@@ -2352,7 +2400,7 @@ Public Class MainForm
                                         promptForExecutable:=True,
                                         switchToInstallTab:=False,
                                         applyDefaultsFromSettings:=True,
-                                        applyTemplate:=False,
+                                        applyTemplate:=True,
                                         requireExecutable:=True,
                                         actionPrefix:="Quick install target: ") Then
             Return
@@ -2889,11 +2937,17 @@ Public Class MainForm
             Return "No"
         End If
 
-        If String.IsNullOrWhiteSpace(info.Version) Then
-            Return "Unknown"
+        Dim versionLabel As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version.Trim())
+        Dim latestRelease As ReleaseInfo = ResolveOptiScalerReferenceRelease(info)
+        If IsReleaseNewerThanInstalled(info.Version, latestRelease) Then
+            Dim latestLabel As String = GetReleaseVersionLabel(latestRelease)
+            If String.IsNullOrWhiteSpace(latestLabel) Then
+                latestLabel = "newer"
+            End If
+            Return "Yes (" & versionLabel & " -> " & latestLabel & ")"
         End If
 
-        Return "Yes (" & info.Version & ")"
+        Return "Yes (" & versionLabel & ")"
     End Function
 
     Private Function GetOptiPatcherStatusText(entry As CompatibilityEntry, isDetected As Boolean, info As OptiPatcherInstallInfo) As String
@@ -2905,11 +2959,125 @@ Public Class MainForm
             Return "No"
         End If
 
-        If String.IsNullOrWhiteSpace(info.Version) Then
-            Return "Yes"
+        Dim versionLabel As String = If(String.IsNullOrWhiteSpace(info.Version), "unknown", info.Version.Trim())
+        Dim latestRelease As ReleaseInfo = ResolveOptiPatcherReferenceRelease(info)
+        If IsReleaseNewerThanInstalled(info.Version, latestRelease) Then
+            Dim latestLabel As String = GetReleaseVersionLabel(latestRelease)
+            If String.IsNullOrWhiteSpace(latestLabel) Then
+                latestLabel = "newer"
+            End If
+            Return "Yes (" & versionLabel & " -> " & latestLabel & ")"
         End If
 
-        Return "Yes (" & info.Version & ")"
+        Return "Yes (" & versionLabel & ")"
+    End Function
+
+    Private Function IsOptiScalerUpdateAvailable(info As OptiScalerInstallInfo) As Boolean
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return False
+        End If
+
+        Dim latestRelease As ReleaseInfo = ResolveOptiScalerReferenceRelease(info)
+        Return IsReleaseNewerThanInstalled(info.Version, latestRelease)
+    End Function
+
+    Private Function IsOptiPatcherUpdateAvailable(info As OptiPatcherInstallInfo) As Boolean
+        If info Is Nothing OrElse Not info.IsInstalled Then
+            Return False
+        End If
+
+        Dim latestRelease As ReleaseInfo = ResolveOptiPatcherReferenceRelease(info)
+        Return IsReleaseNewerThanInstalled(info.Version, latestRelease)
+    End Function
+
+    Private Function ResolveOptiScalerReferenceRelease(info As OptiScalerInstallInfo) As ReleaseInfo
+        If info IsNot Nothing AndAlso info.Manifest IsNot Nothing Then
+            Dim sourceToken As String = If(info.Manifest.OptiScalerSource, "").Trim().ToLowerInvariant()
+            Select Case sourceToken
+                Case "nightly", "alternate"
+                    Return nightlyRelease
+                Case "localarchive", "local_archive", "local"
+                    Return Nothing
+                Case "stable"
+                    Return stableRelease
+            End Select
+        End If
+
+        Return stableRelease
+    End Function
+
+    Private Function ResolveOptiPatcherReferenceRelease(info As OptiPatcherInstallInfo) As ReleaseInfo
+        If info IsNot Nothing AndAlso info.Manifest IsNot Nothing Then
+            Dim sourceToken As String = If(info.Manifest.OptiPatcherSource, "").Trim().ToLowerInvariant()
+            Select Case sourceToken
+                Case "stable"
+                    Return optiPatcherStableRelease
+                Case "alternate"
+                    Return optiPatcherAlternateRelease
+                Case "localfile", "local_file", "local"
+                    Return Nothing
+                Case "rolling"
+                    Return optiPatcherRollingRelease
+            End Select
+        End If
+
+        If optiPatcherStableRelease IsNot Nothing Then
+            Return optiPatcherStableRelease
+        End If
+        If optiPatcherRollingRelease IsNot Nothing Then
+            Return optiPatcherRollingRelease
+        End If
+        Return optiPatcherAlternateRelease
+    End Function
+
+    Private Function IsReleaseNewerThanInstalled(installedVersionText As String, latestRelease As ReleaseInfo) As Boolean
+        If latestRelease Is Nothing Then
+            Return False
+        End If
+
+        Dim installedVersion As Version = Nothing
+        If Not TryParseComparableVersion(installedVersionText, installedVersion) Then
+            Return False
+        End If
+
+        Dim latestVersion As Version = Nothing
+        If Not TryParseComparableVersion(latestRelease.TagName, latestVersion) Then
+            If Not TryParseComparableVersion(latestRelease.AssetName, latestVersion) Then
+                Return False
+            End If
+        End If
+
+        Return UpdateService.NormalizeVersionForCompare(latestVersion).CompareTo(UpdateService.NormalizeVersionForCompare(installedVersion)) > 0
+    End Function
+
+    Private Function TryParseComparableVersion(rawText As String, ByRef parsedVersion As Version) As Boolean
+        parsedVersion = Nothing
+        If String.IsNullOrWhiteSpace(rawText) Then
+            Return False
+        End If
+
+        Dim match As Match = Regex.Match(rawText, "\d+(?:\.\d+){0,3}")
+        If Not match.Success Then
+            Return False
+        End If
+
+        Return Version.TryParse(match.Value, parsedVersion)
+    End Function
+
+    Private Function GetReleaseVersionLabel(release As ReleaseInfo) As String
+        If release Is Nothing Then
+            Return ""
+        End If
+
+        If Not String.IsNullOrWhiteSpace(release.TagName) Then
+            Return release.TagName.Trim()
+        End If
+
+        If Not String.IsNullOrWhiteSpace(release.AssetName) Then
+            Return release.AssetName.Trim()
+        End If
+
+        Return ""
     End Function
 
     Private Function GetAntiCheatStatusText(game As DetectedGame) As String
@@ -2929,7 +3097,9 @@ Public Class MainForm
                                       isDetected As Boolean,
                                       rowIndex As Integer,
                                       isRecentlyChanged As Boolean,
-                                      antiCheatDetected As Boolean)
+                                      antiCheatDetected As Boolean,
+                                      optiScalerUpdateAvailable As Boolean,
+                                      optiPatcherUpdateAvailable As Boolean)
         If item Is Nothing Then
             Return
         End If
@@ -2957,11 +3127,15 @@ Public Class MainForm
         If info Is Nothing OrElse Not info.IsInstalled Then
             Dim missingTint As Color = Color.FromArgb(160, 70, 70)
             item.BackColor = BlendColors(item.BackColor, missingTint, tintAlpha)
-            Return
+        Else
+            Dim installedTint As Color = Color.FromArgb(70, 140, 90)
+            item.BackColor = BlendColors(item.BackColor, installedTint, tintAlpha)
         End If
 
-        Dim installedTint As Color = Color.FromArgb(70, 140, 90)
-        item.BackColor = BlendColors(item.BackColor, installedTint, tintAlpha)
+        If optiScalerUpdateAvailable OrElse optiPatcherUpdateAvailable Then
+            Dim updateTint As Color = Color.FromArgb(190, 145, 60)
+            item.BackColor = BlendColors(item.BackColor, updateTint, If(mode = SystemColorMode.Dark, 75, 45))
+        End If
     End Sub
 
     Private Function BlendColors(baseColor As Color, overlay As Color, alpha As Integer) As Color
@@ -3047,7 +3221,8 @@ Public Class MainForm
         End If
 
         If applyTemplate Then
-            ApplyGameTemplate(game)
+            EnsureGameProfileForInstall(game)
+            ApplyGameProfile(game)
         End If
 
         If switchToInstallTab Then
@@ -3058,6 +3233,27 @@ Public Class MainForm
         UpdateUseDetectedState()
         Return True
     End Function
+
+    Private Sub EnsureGameProfileForInstall(game As DetectedGame)
+        If game Is Nothing Then
+            Return
+        End If
+
+        Try
+            Dim settings As AppSettingsModel = AppSettings.Load()
+            Dim wikiBaseUrl As String = If(settings?.WikiBaseUrl, "")
+            Dim updated As Boolean = GameProfileService.
+                EnsureProfileForGameAsync(game, wikiBaseUrl, False, AddressOf AppendLog).
+                GetAwaiter().
+                GetResult()
+            If updated Then
+                AppendLog("Applied latest wiki-derived profile data for: " & game.DisplayName)
+            End If
+        Catch ex As Exception
+            AppendLog("Profile refresh skipped for " & game.DisplayName & ": " & ex.Message)
+            ErrorLogger.Log(ex, "MainForm.EnsureGameProfileForInstall")
+        End Try
+    End Sub
 
     Private Sub TryAutoRetargetUnrealInstall(config As InstallerConfig)
         If config Is Nothing Then
@@ -3148,7 +3344,7 @@ Public Class MainForm
         Return ""
     End Function
 
-    Private Sub ApplyGameTemplate(game As DetectedGame)
+    Private Sub ApplyGameProfile(game As DetectedGame)
         If game Is Nothing Then
             Return
         End If
@@ -3158,23 +3354,24 @@ Public Class MainForm
             Return
         End If
 
-        Dim template As GameWorkaroundTemplate = GameTemplateService.FindTemplate(game.DisplayName)
-        If template Is Nothing Then
+        Dim profile As GameInstallProfile = GameProfileService.FindProfile(game)
+        If profile Is Nothing Then
             Return
         End If
 
         Dim appliedParts As New List(Of String)()
+        ApplyProfilePathHints(game, profile, appliedParts)
 
-        If Not String.IsNullOrWhiteSpace(template.HookName) Then
-            Dim hookIndex As Integer = GetHookIndex(cmbHookName, template.HookName)
+        If Not String.IsNullOrWhiteSpace(profile.HookName) Then
+            Dim hookIndex As Integer = GetHookIndex(cmbHookName, profile.HookName)
             If hookIndex >= 0 Then
                 cmbHookName.SelectedIndex = hookIndex
-                appliedParts.Add("hook=" & template.HookName)
+                appliedParts.Add("hook=" & profile.HookName)
             End If
         End If
 
-        If Not String.IsNullOrWhiteSpace(template.GpuVendor) Then
-            Select Case GetDefaultGpuVendorIndex(template.GpuVendor)
+        If Not String.IsNullOrWhiteSpace(profile.GpuVendor) Then
+            Select Case GetDefaultGpuVendorIndex(profile.GpuVendor)
                 Case 1
                     rbGpuNvidia.Checked = True
                     appliedParts.Add("gpu=NVIDIA")
@@ -3184,31 +3381,174 @@ Public Class MainForm
             End Select
         End If
 
-        If template.DlssInputs.HasValue Then
-            chkDlssInputs.Checked = template.DlssInputs.Value
-            appliedParts.Add("dlssInputs=" & If(template.DlssInputs.Value, "on", "off"))
+        If profile.DlssInputs.HasValue Then
+            chkDlssInputs.Checked = profile.DlssInputs.Value
+            appliedParts.Add("dlssInputs=" & If(profile.DlssInputs.Value, "on", "off"))
         End If
 
-        If Not String.IsNullOrWhiteSpace(template.FrameGeneration) Then
-            cmbFgType.SelectedIndex = GetDefaultFrameGenerationIndex(template.FrameGeneration)
-            appliedParts.Add("fg=" & template.FrameGeneration)
+        If Not String.IsNullOrWhiteSpace(profile.FrameGeneration) Then
+            cmbFgType.SelectedIndex = GetDefaultFrameGenerationIndex(profile.FrameGeneration)
+            appliedParts.Add("fg=" & profile.FrameGeneration)
         End If
 
-        If Not String.IsNullOrWhiteSpace(template.ConflictMode) Then
-            cmbConflictMode.SelectedIndex = GetDefaultConflictModeIndex(template.ConflictMode)
-            appliedParts.Add("conflict=" & template.ConflictMode)
+        If Not String.IsNullOrWhiteSpace(profile.ConflictMode) Then
+            cmbConflictMode.SelectedIndex = GetDefaultConflictModeIndex(profile.ConflictMode)
+            appliedParts.Add("conflict=" & profile.ConflictMode)
         End If
 
         If appliedParts.Count > 0 Then
-            AppendLog("Applied game template: " & template.Name & " (" & String.Join(", ", appliedParts) & ")")
+            AppendLog("Applied game profile: " & profile.Name & " (" & String.Join(", ", appliedParts) & ")")
         Else
-            AppendLog("Matched game template: " & template.Name)
+            AppendLog("Matched game profile: " & profile.Name)
         End If
 
-        If Not String.IsNullOrWhiteSpace(template.Notes) Then
-            AppendLog("Template note: " & template.Notes)
+        If Not String.IsNullOrWhiteSpace(profile.Notes) Then
+            AppendLog("Profile note: " & profile.Notes)
         End If
     End Sub
+
+    Private Sub ApplyProfilePathHints(game As DetectedGame, profile As GameInstallProfile, appliedParts As List(Of String))
+        If game Is Nothing OrElse profile Is Nothing Then
+            Return
+        End If
+
+        Dim baseInstallDir As String = NormalizePathSafe(game.InstallDir)
+        If String.IsNullOrWhiteSpace(baseInstallDir) OrElse Not Directory.Exists(baseInstallDir) Then
+            Return
+        End If
+
+        Dim selectedFolder As String = NormalizePathSafe(If(txtGameFolder.Text, ""))
+        If String.IsNullOrWhiteSpace(selectedFolder) OrElse Not Directory.Exists(selectedFolder) Then
+            selectedFolder = baseInstallDir
+        End If
+
+        Dim candidateFolders As New List(Of String)()
+        Dim seenFolders As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        AddProfileFolderCandidate(candidateFolders, seenFolders, selectedFolder)
+        AddProfileFolderCandidate(candidateFolders, seenFolders, baseInstallDir)
+
+        If profile.InstallSubfolderHints IsNot Nothing Then
+            For Each hint As String In profile.InstallSubfolderHints
+                Dim normalizedHint As String = NormalizeProfileRelativePath(hint)
+                If String.IsNullOrWhiteSpace(normalizedHint) Then
+                    Continue For
+                End If
+
+                Dim combined As String = NormalizePathSafe(Path.Combine(baseInstallDir, normalizedHint))
+                AddProfileFolderCandidate(candidateFolders, seenFolders, combined)
+            Next
+        End If
+
+        Dim preferredFolder As String = selectedFolder
+        Dim preferredExe As String = ""
+
+        For Each folder As String In candidateFolders
+            Dim exeFromHints As String = FindExecutableByProfileHints(folder, profile)
+            If Not String.IsNullOrWhiteSpace(exeFromHints) Then
+                preferredFolder = folder
+                preferredExe = exeFromHints
+                Exit For
+            End If
+        Next
+
+        If String.IsNullOrWhiteSpace(preferredExe) Then
+            For Each folder As String In candidateFolders
+                Dim fallbackExe As String = FindPreferredExecutable(folder, game.DisplayName, game.SourceName)
+                If Not String.IsNullOrWhiteSpace(fallbackExe) Then
+                    preferredFolder = folder
+                    preferredExe = fallbackExe
+                    Exit For
+                End If
+            Next
+        End If
+
+        If Not String.Equals(selectedFolder, preferredFolder, StringComparison.OrdinalIgnoreCase) Then
+            txtGameFolder.Text = preferredFolder
+            UpdateEngineWarningByFolder(preferredFolder)
+            appliedParts.Add("folder=" & DescribeRelativeFolder(baseInstallDir, preferredFolder))
+        End If
+
+        Dim currentExe As String = NormalizePathSafe(If(txtGameExe.Text, ""))
+        If Not String.IsNullOrWhiteSpace(preferredExe) AndAlso
+           Not String.Equals(currentExe, preferredExe, StringComparison.OrdinalIgnoreCase) Then
+            txtGameExe.Text = preferredExe
+            appliedParts.Add("exe=" & Path.GetFileName(preferredExe))
+        End If
+    End Sub
+
+    Private Sub AddProfileFolderCandidate(target As List(Of String), seen As HashSet(Of String), candidate As String)
+        Dim normalized As String = NormalizePathSafe(candidate)
+        If String.IsNullOrWhiteSpace(normalized) Then
+            Return
+        End If
+        If Not Directory.Exists(normalized) Then
+            Return
+        End If
+        If seen.Add(normalized) Then
+            target.Add(normalized)
+        End If
+    End Sub
+
+    Private Function NormalizeProfileRelativePath(value As String) As String
+        Dim normalized As String = If(value, "").Trim().Trim(""""c).Replace("/"c, "\"c)
+        If String.IsNullOrWhiteSpace(normalized) Then
+            Return ""
+        End If
+
+        Do While normalized.StartsWith("\", StringComparison.Ordinal)
+            normalized = normalized.Substring(1)
+        Loop
+
+        Return normalized
+    End Function
+
+    Private Function DescribeRelativeFolder(baseFolder As String, selectedFolder As String) As String
+        Try
+            Dim relative As String = Path.GetRelativePath(baseFolder, selectedFolder)
+            If String.IsNullOrWhiteSpace(relative) OrElse relative = "." Then
+                Return Path.GetFileName(selectedFolder)
+            End If
+            Return relative
+        Catch
+            Return selectedFolder
+        End Try
+    End Function
+
+    Private Function FindExecutableByProfileHints(folder As String, profile As GameInstallProfile) As String
+        If String.IsNullOrWhiteSpace(folder) OrElse profile Is Nothing OrElse profile.ExecutableNameHints Is Nothing Then
+            Return ""
+        End If
+
+        For Each hint As String In profile.ExecutableNameHints
+            Dim normalizedHint As String = NormalizeProfileRelativePath(hint)
+            If String.IsNullOrWhiteSpace(normalizedHint) Then
+                Continue For
+            End If
+
+            Dim fullPath As String = normalizedHint
+            If Not Path.IsPathRooted(fullPath) Then
+                fullPath = Path.Combine(folder, normalizedHint)
+            End If
+
+            fullPath = NormalizePathSafe(fullPath)
+            If Not String.IsNullOrWhiteSpace(fullPath) AndAlso File.Exists(fullPath) Then
+                Return fullPath
+            End If
+
+            If normalizedHint.IndexOf("\"c) < 0 AndAlso normalizedHint.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) Then
+                Try
+                    Dim found As String = Directory.EnumerateFiles(folder, normalizedHint, SearchOption.AllDirectories).FirstOrDefault()
+                    If Not String.IsNullOrWhiteSpace(found) AndAlso File.Exists(found) Then
+                        Return NormalizePathSafe(found)
+                    End If
+                Catch
+                    ' Ignore inaccessible subfolders while probing hint executables.
+                End Try
+            End If
+        Next
+
+        Return ""
+    End Function
 
     Private Sub UpdateEngineWarningByFolder(folder As String)
         If String.IsNullOrWhiteSpace(folder) Then
@@ -4716,7 +5056,9 @@ Public Class MainForm
         settings.StableReleaseUrl = txtStableReleaseUrl.Text.Trim()
         settings.NightlyReleaseUrl = txtNightlyReleaseUrl.Text.Trim()
         settings.InstallerReleaseUrl = txtInstallerReleaseUrl.Text.Trim()
+        settings.GameProfilesCatalogUrl = txtGameProfilesCatalogUrl.Text.Trim()
         settings.AutoRefreshCompatibilityOnStartup = chkAutoRefreshCompatibilityOnStartup.Checked
+        settings.AutoRefreshGameProfilesOnStartup = chkAutoRefreshGameProfilesOnStartup.Checked
         settings.AutoCheckInstallerUpdates = chkAutoCheckInstallerUpdates.Checked
         settings.HideNonDetectedGames = chkHideNonDetected.Checked
         settings.ShowExperimentalTabOnUnsupportedGpu = chkShowExperimentalTabOnUnsupportedGpu.Checked
@@ -5164,7 +5506,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnCompatInstallPatcher, "Use the selected detected game as target and install/update OptiPatcher when supported.")
         toolTip.SetToolTip(btnCompatRemovePatcher, "Use the selected detected game as target and remove OptiPatcher.")
         toolTip.SetToolTip(btnCompatCopyInfo, "Copy selected game detection/install information to clipboard.")
-        toolTip.SetToolTip(lvCompatibility, "Master game list. Columns show detection state, OptiScaler/OptiPatcher status, platform, anti-cheat hint, and install path. Double-click a detected row to prefill install target.")
+        toolTip.SetToolTip(lvCompatibility, "Master game list. Columns show detection state, OptiScaler/OptiPatcher install status, update availability (shown as installed -> latest), platform, anti-cheat hint, and install path. Double-click a detected row to prefill install target.")
 
         toolTip.SetToolTip(txtGameExe, "Full path to the game executable you want to patch. Prefer the real game .exe in the binaries folder, not launcher/setup/uninstall executables.")
         toolTip.SetToolTip(btnBrowseGameExe, "Browse to a game .exe file and auto-fill related fields.")
@@ -5242,7 +5584,9 @@ Public Class MainForm
         toolTip.SetToolTip(txtStableReleaseUrl, "GitHub API endpoint for latest stable OptiScaler release metadata.")
         toolTip.SetToolTip(txtNightlyReleaseUrl, "GitHub API endpoint for alternate OptiScaler release metadata. Leave empty to disable alternate source checks.")
         toolTip.SetToolTip(txtInstallerReleaseUrl, "GitHub API endpoint for OptiScaler Installer update checks.")
+        toolTip.SetToolTip(txtGameProfilesCatalogUrl, "Optional URL for remote game profile catalog JSON. Leave empty to use local built-in profiles only.")
         toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "If enabled, compatibility list is refreshed automatically on app start.")
+        toolTip.SetToolTip(chkAutoRefreshGameProfilesOnStartup, "If enabled and profile catalog URL is set, game profiles are refreshed on app start.")
         toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "If enabled, installer checks for updates at startup. When a newer build is found, it shows a Yes/No update prompt and an in-app update notice.")
         toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Force-show FSR4 INT8 experimental tab even when AMD RDNA GPU is not detected.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template file to apply automatically on future installs.")
@@ -5605,6 +5949,9 @@ Public Class MainForm
                     antiCheatCount += 1
                 End If
             Next
+
+            QueueDetectedGameProfileRefresh(detectedGames)
+
             AppendLog("OptiScaler installed in " & installedCount & " detected game(s).")
             AppendLog("OptiPatcher installed in " & patcherInstalledCount & " detected game(s).")
             AppendLog("Anti-cheat flagged in " & antiCheatCount & " detected game(s).")
@@ -5624,6 +5971,38 @@ Public Class MainForm
         End Try
     End Function
 
+    Private Sub QueueDetectedGameProfileRefresh(games As List(Of DetectedGame))
+        If games Is Nothing OrElse games.Count = 0 Then
+            Return
+        End If
+
+        Dim snapshot As List(Of DetectedGame) = games.
+            Where(Function(game) game IsNot Nothing AndAlso game.MatchedEntry IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(game.MatchedEntry.Slug)).
+            Select(Function(game) game).
+            ToList()
+        If snapshot.Count = 0 Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim wikiBaseUrl As String = If(settings?.WikiBaseUrl, "").Trim()
+        If String.IsNullOrWhiteSpace(wikiBaseUrl) Then
+            Return
+        End If
+
+        Task.Run(Async Function()
+                     Try
+                         Dim updatedCount As Integer = Await GameProfileService.RefreshDetectedGameProfilesAsync(snapshot, wikiBaseUrl, AddressOf AppendLog)
+                         If updatedCount > 0 Then
+                             AppendLog("Wiki profile refresh completed: " & updatedCount.ToString() & " detected game profile(s) updated.")
+                         End If
+                     Catch ex As Exception
+                         AppendLog("Wiki profile refresh failed: " & ex.Message)
+                         ErrorLogger.Log(ex, "MainForm.QueueDetectedGameProfileRefresh")
+                     End Try
+                 End Function)
+    End Sub
+
     Private Sub ApplySettingsToUi(settings As AppSettingsModel)
         If settings Is Nothing Then
             Return
@@ -5636,7 +6015,9 @@ Public Class MainForm
             txtStableReleaseUrl.Text = settings.StableReleaseUrl
             txtNightlyReleaseUrl.Text = settings.NightlyReleaseUrl
             txtInstallerReleaseUrl.Text = settings.InstallerReleaseUrl
+            txtGameProfilesCatalogUrl.Text = settings.GameProfilesCatalogUrl
             chkAutoRefreshCompatibilityOnStartup.Checked = If(settings.AutoRefreshCompatibilityOnStartup.HasValue, settings.AutoRefreshCompatibilityOnStartup.Value, True)
+            chkAutoRefreshGameProfilesOnStartup.Checked = If(settings.AutoRefreshGameProfilesOnStartup.HasValue, settings.AutoRefreshGameProfilesOnStartup.Value, False)
             chkAutoCheckInstallerUpdates.Checked = If(settings.AutoCheckInstallerUpdates.HasValue, settings.AutoCheckInstallerUpdates.Value, True)
             chkHideNonDetected.Checked = If(settings.HideNonDetectedGames.HasValue, settings.HideNonDetectedGames.Value, False)
             chkShowExperimentalTabOnUnsupportedGpu.Checked = If(settings.ShowExperimentalTabOnUnsupportedGpu.HasValue, settings.ShowExperimentalTabOnUnsupportedGpu.Value, False)
@@ -5883,5 +6264,7 @@ Public Class MainForm
         Public Property InstallInfo As OptiScalerInstallInfo
         Public Property OptiPatcherInfo As OptiPatcherInstallInfo
         Public Property IsRecentlyChanged As Boolean
+        Public Property OptiScalerUpdateAvailable As Boolean
+        Public Property OptiPatcherUpdateAvailable As Boolean
     End Class
 End Class

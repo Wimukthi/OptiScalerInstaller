@@ -114,7 +114,9 @@ Friend Class AppSettingsModel
     Public Property OptiPatcherAlternateReleaseUrl As String
     Public Property OptiPatcherPreferredSource As String
     Public Property OptiPatcherLocalPath As String
+    Public Property GameProfilesCatalogUrl As String
     Public Property AutoRefreshCompatibilityOnStartup As Boolean?
+    Public Property AutoRefreshGameProfilesOnStartup As Boolean?
     Public Property AutoCheckInstallerUpdates As Boolean?
     Public Property HasCompletedInitialDeepScan As Boolean?
     Public Property HideNonDetectedGames As Boolean?
@@ -192,8 +194,16 @@ Friend Class AppSettingsModel
             OptiPatcherLocalPath = defaults.OptiPatcherLocalPath
             changed = True
         End If
+        If String.IsNullOrWhiteSpace(GameProfilesCatalogUrl) AndAlso Not String.IsNullOrWhiteSpace(defaults.GameProfilesCatalogUrl) Then
+            GameProfilesCatalogUrl = defaults.GameProfilesCatalogUrl
+            changed = True
+        End If
         If Not AutoRefreshCompatibilityOnStartup.HasValue AndAlso defaults.AutoRefreshCompatibilityOnStartup.HasValue Then
             AutoRefreshCompatibilityOnStartup = defaults.AutoRefreshCompatibilityOnStartup
+            changed = True
+        End If
+        If Not AutoRefreshGameProfilesOnStartup.HasValue AndAlso defaults.AutoRefreshGameProfilesOnStartup.HasValue Then
+            AutoRefreshGameProfilesOnStartup = defaults.AutoRefreshGameProfilesOnStartup
             changed = True
         End If
         If Not AutoCheckInstallerUpdates.HasValue AndAlso defaults.AutoCheckInstallerUpdates.HasValue Then

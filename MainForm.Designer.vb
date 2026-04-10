@@ -184,7 +184,10 @@ Partial Class MainForm
         txtNightlyReleaseUrl = New ThemedTextBox()
         lblInstallerReleaseUrl = New Label()
         txtInstallerReleaseUrl = New ThemedTextBox()
+        lblGameProfilesCatalogUrl = New Label()
+        txtGameProfilesCatalogUrl = New ThemedTextBox()
         chkAutoRefreshCompatibilityOnStartup = New CheckBox()
+        chkAutoRefreshGameProfilesOnStartup = New CheckBox()
         chkAutoCheckInstallerUpdates = New CheckBox()
         chkShowExperimentalTabOnUnsupportedGpu = New CheckBox()
         lblDefaultIniPath = New Label()
@@ -2030,7 +2033,10 @@ Partial Class MainForm
         grpSettings.Controls.Add(txtNightlyReleaseUrl)
         grpSettings.Controls.Add(lblInstallerReleaseUrl)
         grpSettings.Controls.Add(txtInstallerReleaseUrl)
+        grpSettings.Controls.Add(lblGameProfilesCatalogUrl)
+        grpSettings.Controls.Add(txtGameProfilesCatalogUrl)
         grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
+        grpSettings.Controls.Add(chkAutoRefreshGameProfilesOnStartup)
         grpSettings.Controls.Add(chkAutoCheckInstallerUpdates)
         grpSettings.Controls.Add(chkShowExperimentalTabOnUnsupportedGpu)
         grpSettings.Controls.Add(lblDefaultIniPath)
@@ -2163,43 +2169,74 @@ Partial Class MainForm
         txtInstallerReleaseUrl.Size = New Size(1018, 24)
         txtInstallerReleaseUrl.TabIndex = 13
         ' 
+        ' lblGameProfilesCatalogUrl
+        ' 
+        lblGameProfilesCatalogUrl.AutoSize = True
+        lblGameProfilesCatalogUrl.Location = New Point(12, 192)
+        lblGameProfilesCatalogUrl.Name = "lblGameProfilesCatalogUrl"
+        lblGameProfilesCatalogUrl.Size = New Size(113, 15)
+        lblGameProfilesCatalogUrl.TabIndex = 14
+        lblGameProfilesCatalogUrl.Text = "Game profiles URL"
+        ' 
+        ' txtGameProfilesCatalogUrl
+        ' 
+        txtGameProfilesCatalogUrl.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        txtGameProfilesCatalogUrl.BackColor = SystemColors.Window
+        txtGameProfilesCatalogUrl.ForeColor = SystemColors.WindowText
+        txtGameProfilesCatalogUrl.Location = New Point(180, 188)
+        txtGameProfilesCatalogUrl.MinimumSize = New Size(0, 24)
+        txtGameProfilesCatalogUrl.Name = "txtGameProfilesCatalogUrl"
+        txtGameProfilesCatalogUrl.Padding = New Padding(6, 3, 6, 3)
+        txtGameProfilesCatalogUrl.Size = New Size(1018, 24)
+        txtGameProfilesCatalogUrl.TabIndex = 15
+        ' 
         ' chkAutoRefreshCompatibilityOnStartup
         ' 
         chkAutoRefreshCompatibilityOnStartup.AutoSize = True
-        chkAutoRefreshCompatibilityOnStartup.Location = New Point(180, 191)
+        chkAutoRefreshCompatibilityOnStartup.Location = New Point(180, 223)
         chkAutoRefreshCompatibilityOnStartup.Name = "chkAutoRefreshCompatibilityOnStartup"
         chkAutoRefreshCompatibilityOnStartup.Size = New Size(268, 19)
-        chkAutoRefreshCompatibilityOnStartup.TabIndex = 14
+        chkAutoRefreshCompatibilityOnStartup.TabIndex = 16
         chkAutoRefreshCompatibilityOnStartup.Text = "Auto-refresh compatibility list on application start"
         chkAutoRefreshCompatibilityOnStartup.UseVisualStyleBackColor = True
+        ' 
+        ' chkAutoRefreshGameProfilesOnStartup
+        ' 
+        chkAutoRefreshGameProfilesOnStartup.AutoSize = True
+        chkAutoRefreshGameProfilesOnStartup.Location = New Point(470, 223)
+        chkAutoRefreshGameProfilesOnStartup.Name = "chkAutoRefreshGameProfilesOnStartup"
+        chkAutoRefreshGameProfilesOnStartup.Size = New Size(248, 19)
+        chkAutoRefreshGameProfilesOnStartup.TabIndex = 17
+        chkAutoRefreshGameProfilesOnStartup.Text = "Auto-refresh game profiles on application start"
+        chkAutoRefreshGameProfilesOnStartup.UseVisualStyleBackColor = True
         ' 
         ' chkAutoCheckInstallerUpdates
         ' 
         chkAutoCheckInstallerUpdates.AutoSize = True
-        chkAutoCheckInstallerUpdates.Location = New Point(470, 191)
+        chkAutoCheckInstallerUpdates.Location = New Point(730, 223)
         chkAutoCheckInstallerUpdates.Name = "chkAutoCheckInstallerUpdates"
         chkAutoCheckInstallerUpdates.Size = New Size(227, 19)
-        chkAutoCheckInstallerUpdates.TabIndex = 15
+        chkAutoCheckInstallerUpdates.TabIndex = 18
         chkAutoCheckInstallerUpdates.Text = "Auto-check installer updates on startup"
         chkAutoCheckInstallerUpdates.UseVisualStyleBackColor = True
         ' 
         ' chkShowExperimentalTabOnUnsupportedGpu
         ' 
         chkShowExperimentalTabOnUnsupportedGpu.AutoSize = True
-        chkShowExperimentalTabOnUnsupportedGpu.Location = New Point(720, 191)
+        chkShowExperimentalTabOnUnsupportedGpu.Location = New Point(969, 223)
         chkShowExperimentalTabOnUnsupportedGpu.Name = "chkShowExperimentalTabOnUnsupportedGpu"
-        chkShowExperimentalTabOnUnsupportedGpu.Size = New Size(286, 19)
-        chkShowExperimentalTabOnUnsupportedGpu.TabIndex = 16
-        chkShowExperimentalTabOnUnsupportedGpu.Text = "Show FSR4 experimental tab on unsupported GPUs"
+        chkShowExperimentalTabOnUnsupportedGpu.Size = New Size(144, 19)
+        chkShowExperimentalTabOnUnsupportedGpu.TabIndex = 19
+        chkShowExperimentalTabOnUnsupportedGpu.Text = "Force-show FSR4 tab"
         chkShowExperimentalTabOnUnsupportedGpu.UseVisualStyleBackColor = True
         ' 
         ' lblDefaultIniPath
         ' 
         lblDefaultIniPath.AutoSize = True
-        lblDefaultIniPath.Location = New Point(12, 226)
+        lblDefaultIniPath.Location = New Point(12, 258)
         lblDefaultIniPath.Name = "lblDefaultIniPath"
         lblDefaultIniPath.Size = New Size(113, 15)
-        lblDefaultIniPath.TabIndex = 18
+        lblDefaultIniPath.TabIndex = 20
         lblDefaultIniPath.Text = "Default INI template"
         ' 
         ' txtDefaultIniPath
@@ -2207,30 +2244,30 @@ Partial Class MainForm
         txtDefaultIniPath.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
         txtDefaultIniPath.BackColor = SystemColors.Window
         txtDefaultIniPath.ForeColor = SystemColors.WindowText
-        txtDefaultIniPath.Location = New Point(180, 222)
+        txtDefaultIniPath.Location = New Point(180, 254)
         txtDefaultIniPath.MinimumSize = New Size(0, 24)
         txtDefaultIniPath.Name = "txtDefaultIniPath"
         txtDefaultIniPath.Padding = New Padding(6, 3, 6, 3)
         txtDefaultIniPath.Size = New Size(910, 24)
-        txtDefaultIniPath.TabIndex = 19
+        txtDefaultIniPath.TabIndex = 21
         ' 
         ' btnBrowseDefaultIni
         ' 
         btnBrowseDefaultIni.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        btnBrowseDefaultIni.Location = New Point(1098, 222)
+        btnBrowseDefaultIni.Location = New Point(1098, 254)
         btnBrowseDefaultIni.Name = "btnBrowseDefaultIni"
         btnBrowseDefaultIni.Size = New Size(100, 24)
-        btnBrowseDefaultIni.TabIndex = 20
+        btnBrowseDefaultIni.TabIndex = 22
         btnBrowseDefaultIni.Text = "Browse"
         btnBrowseDefaultIni.UseVisualStyleBackColor = True
         ' 
         ' lblDefaultIniMode
         ' 
         lblDefaultIniMode.AutoSize = True
-        lblDefaultIniMode.Location = New Point(12, 258)
+        lblDefaultIniMode.Location = New Point(12, 290)
         lblDefaultIniMode.Name = "lblDefaultIniMode"
         lblDefaultIniMode.Size = New Size(112, 15)
-        lblDefaultIniMode.TabIndex = 21
+        lblDefaultIniMode.TabIndex = 23
         lblDefaultIniMode.Text = "Default INI behavior"
         ' 
         ' cmbDefaultIniMode
@@ -2238,10 +2275,10 @@ Partial Class MainForm
         cmbDefaultIniMode.DropDownStyle = ComboBoxStyle.DropDownList
         cmbDefaultIniMode.FormattingEnabled = True
         cmbDefaultIniMode.Items.AddRange(New Object() {"Off", "Merge", "Replace"})
-        cmbDefaultIniMode.Location = New Point(180, 254)
+        cmbDefaultIniMode.Location = New Point(180, 286)
         cmbDefaultIniMode.Name = "cmbDefaultIniMode"
         cmbDefaultIniMode.Size = New Size(220, 23)
-        cmbDefaultIniMode.TabIndex = 22
+        cmbDefaultIniMode.TabIndex = 24
         ' 
         ' grpDefaultInstall
         ' 
@@ -2259,10 +2296,10 @@ Partial Class MainForm
         grpDefaultInstall.Controls.Add(lblDefaultConflictMode)
         grpDefaultInstall.Controls.Add(cmbDefaultConflictMode)
         grpDefaultInstall.Controls.Add(btnApplyDefaults)
-        grpDefaultInstall.Location = New Point(12, 298)
+        grpDefaultInstall.Location = New Point(12, 330)
         grpDefaultInstall.Name = "grpDefaultInstall"
         grpDefaultInstall.Size = New Size(1186, 250)
-        grpDefaultInstall.TabIndex = 23
+        grpDefaultInstall.TabIndex = 25
         grpDefaultInstall.TabStop = False
         grpDefaultInstall.Text = "Default Install Options"
         ' 
@@ -2490,10 +2527,10 @@ Partial Class MainForm
         ' 
         DarkThemeCheckBox.Anchor = AnchorStyles.Top Or AnchorStyles.Right
         DarkThemeCheckBox.AutoSize = True
-        DarkThemeCheckBox.Location = New Point(1111, 191)
+        DarkThemeCheckBox.Location = New Point(1111, 223)
         DarkThemeCheckBox.Name = "DarkThemeCheckBox"
         DarkThemeCheckBox.Size = New Size(87, 19)
-        DarkThemeCheckBox.TabIndex = 26
+        DarkThemeCheckBox.TabIndex = 27
         DarkThemeCheckBox.Text = "Dark theme"
         DarkThemeCheckBox.UseVisualStyleBackColor = True
         ' 
@@ -2649,7 +2686,10 @@ Partial Class MainForm
     Friend WithEvents txtNightlyReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblInstallerReleaseUrl As System.Windows.Forms.Label
     Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents lblGameProfilesCatalogUrl As System.Windows.Forms.Label
+    Friend WithEvents txtGameProfilesCatalogUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
+    Friend WithEvents chkAutoRefreshGameProfilesOnStartup As System.Windows.Forms.CheckBox
     Friend WithEvents chkAutoCheckInstallerUpdates As System.Windows.Forms.CheckBox
     Friend WithEvents chkShowExperimentalTabOnUnsupportedGpu As System.Windows.Forms.CheckBox
     Friend WithEvents lblDefaultIniPath As System.Windows.Forms.Label
