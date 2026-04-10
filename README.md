@@ -154,6 +154,7 @@ INI Editor:
 
 ## Version History
 
+- v1.1.4.3 - Add local `GameProfiles.json` catalog + profile service integration, settings for profile catalog URL and startup profile refresh, and automatic profile-driven install-option application so detected game-specific defaults are applied from local profile data with offline-first behavior.
 - v1.1.3.7 - Add full OptiScaler INI editor (form/raw modes, validation, section grouping/filter, descriptions/reference docs, backup/save/revert), expand Game Detection actions and quick-install flow, improve install/uninstall button-state gating, add OptiPatcher/INT8 detection status refinements, and harden Unreal-target preflight by auto-retargeting to `Binaries\Win64`/`WinGDK` when applicable.
 - v1.1.1.1 - Drive selection is now always explicit for deep-scan augmentation: first-run one-time scan prompts for selected drives, and manual "Scan installed games" runs now prompt for drives instead of scanning all drives automatically.
 - v1.1.0.9 - Merge launcher and deep scan into a single "Scan installed games" pipeline, repurpose the secondary button into "Add game manually" (EXE-based forced match + persistence), and improve install-state path selection/probing for nested DX11/DX12 binary folders.
