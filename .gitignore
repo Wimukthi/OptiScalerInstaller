@@ -3,7 +3,10 @@ bin/
 obj/
 artifacts/
 Release/
+# Keep screenshot assets tracked for README rendering on GitHub.
 Screenshots/
+!Screenshots/
+!Screenshots/*.png
 
 # Visual Studio
 .vs/
