@@ -130,27 +130,27 @@ The window title shows `vMajor.Minor.Patch.Build` and, when detected, the active
 
 Game Detection:
 
-![Game Detection](Screenshots/game-detection.png)
+![Game Detection](docs/screenshots/game-detection.png)
 
 Install:
 
-![Install](Screenshots/install.png)
+![Install](docs/screenshots/install.png)
 
 Add-ons:
 
-![Add-ons](Screenshots/add-ons.png)
+![Add-ons](docs/screenshots/addons.png)
 
 FSR4 INT8 (Experimental):
 
-![FSR4 INT8](Screenshots/fsr4-int8.png)
+![FSR4 INT8](docs/screenshots/fsr4-int8.png)
 
 Settings:
 
-![Settings](Screenshots/settings.png)
+![Settings](docs/screenshots/settings.png)
 
 INI Editor:
 
-![INI Editor](Screenshots/ini-editor.png)
+![INI Editor](docs/screenshots/ini-editor.png)
 
 ## Version History
 
