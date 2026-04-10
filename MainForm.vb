@@ -2236,7 +2236,7 @@ Public Class MainForm
         End Try
     End Function
 
-    Private Sub btnUseDetected_Click(sender As Object, e As EventArgs) Handles btnUseDetected.Click
+    Private Async Sub btnUseDetected_Click(sender As Object, e As EventArgs) Handles btnUseDetected.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         If row Is Nothing OrElse row.Detected Is Nothing Then
             AppendLog("Use selected skipped: no detected game selected.")
@@ -2244,16 +2244,16 @@ Public Class MainForm
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
     End Sub
 
-    Private Sub lvCompatibility_DoubleClick(sender As Object, e As EventArgs) Handles lvCompatibility.DoubleClick
+    Private Async Sub lvCompatibility_DoubleClick(sender As Object, e As EventArgs) Handles lvCompatibility.DoubleClick
         Dim row = GetSelectedCompatibilityRow
         If row Is Nothing OrElse row.Detected Is Nothing Then
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
     End Sub
 
     Private Sub lvCompatibility_SelectedIndexChanged(sender As Object, e As EventArgs) Handles lvCompatibility.SelectedIndexChanged
@@ -2307,13 +2307,13 @@ Public Class MainForm
         mnuCompatInstallPatcher.Text = If(hasOptiPatcherInstalled, "Update OptiPatcher", "Install OptiPatcher")
     End Sub
 
-    Private Sub mnuCompatUseDetected_Click(sender As Object, e As EventArgs) Handles mnuCompatUseDetected.Click
+    Private Async Sub mnuCompatUseDetected_Click(sender As Object, e As EventArgs) Handles mnuCompatUseDetected.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         If row Is Nothing OrElse row.Detected Is Nothing Then
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
     End Sub
 
     Private Sub btnCompatOpenFolder_Click(sender As Object, e As EventArgs) Handles btnCompatOpenFolder.Click
@@ -2329,7 +2329,7 @@ Public Class MainForm
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
         Await OpenIniEditorForCurrentTargetAsync()
     End Sub
 
@@ -2377,7 +2377,7 @@ Public Class MainForm
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
         Await OpenIniEditorForCurrentTargetAsync()
     End Sub
 
@@ -2396,13 +2396,13 @@ Public Class MainForm
             Return
         End If
 
-        If Not TrySetDetectedGameTarget(row.Detected,
-                                        promptForExecutable:=True,
-                                        switchToInstallTab:=False,
-                                        applyDefaultsFromSettings:=True,
-                                        applyTemplate:=True,
-                                        requireExecutable:=True,
-                                        actionPrefix:="Quick install target: ") Then
+        If Not Await TrySetDetectedGameTargetAsync(row.Detected,
+                                                   promptForExecutable:=True,
+                                                   switchToInstallTab:=False,
+                                                   applyDefaultsFromSettings:=True,
+                                                   applyTemplate:=True,
+                                                   requireExecutable:=True,
+                                                   actionPrefix:="Quick install target: ") Then
             Return
         End If
 
@@ -2531,13 +2531,13 @@ Public Class MainForm
         End Try
     End Function
 
-    Private Sub mnuCompatInstallPatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatInstallPatcher.Click
+    Private Async Sub mnuCompatInstallPatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatInstallPatcher.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         If row Is Nothing OrElse row.Detected Is Nothing Then
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
         If btnInstallOptiPatcher IsNot Nothing AndAlso btnInstallOptiPatcher.Enabled Then
             btnInstallOptiPatcher.PerformClick()
         Else
@@ -2545,13 +2545,13 @@ Public Class MainForm
         End If
     End Sub
 
-    Private Sub mnuCompatRemovePatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatRemovePatcher.Click
+    Private Async Sub mnuCompatRemovePatcher_Click(sender As Object, e As EventArgs) Handles mnuCompatRemovePatcher.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         If row Is Nothing OrElse row.Detected Is Nothing Then
             Return
         End If
 
-        UseDetectedGame(row.Detected)
+        Await UseDetectedGameAsync(row.Detected)
         If btnRemoveOptiPatcher IsNot Nothing AndAlso btnRemoveOptiPatcher.Enabled Then
             btnRemoveOptiPatcher.PerformClick()
         End If
@@ -3167,23 +3167,23 @@ Public Class MainForm
         Return value
     End Function
 
-    Private Sub UseDetectedGame(game As DetectedGame)
-        TrySetDetectedGameTarget(game,
-                                 promptForExecutable:=True,
-                                 switchToInstallTab:=True,
-                                 applyDefaultsFromSettings:=False,
-                                 applyTemplate:=True,
-                                 requireExecutable:=False,
-                                 actionPrefix:="Using detected game: ")
-    End Sub
+    Private Async Function UseDetectedGameAsync(game As DetectedGame) As Task(Of Boolean)
+        Return Await TrySetDetectedGameTargetAsync(game,
+                                                   promptForExecutable:=True,
+                                                   switchToInstallTab:=True,
+                                                   applyDefaultsFromSettings:=False,
+                                                   applyTemplate:=True,
+                                                   requireExecutable:=False,
+                                                   actionPrefix:="Using detected game: ")
+    End Function
 
-    Private Function TrySetDetectedGameTarget(game As DetectedGame,
-                                              promptForExecutable As Boolean,
-                                              switchToInstallTab As Boolean,
-                                              applyDefaultsFromSettings As Boolean,
-                                              applyTemplate As Boolean,
-                                              requireExecutable As Boolean,
-                                              actionPrefix As String) As Boolean
+    Private Async Function TrySetDetectedGameTargetAsync(game As DetectedGame,
+                                                         promptForExecutable As Boolean,
+                                                         switchToInstallTab As Boolean,
+                                                         applyDefaultsFromSettings As Boolean,
+                                                         applyTemplate As Boolean,
+                                                         requireExecutable As Boolean,
+                                                         actionPrefix As String) As Task(Of Boolean)
         If game Is Nothing Then
             Return False
         End If
@@ -3221,8 +3221,11 @@ Public Class MainForm
         End If
 
         If applyTemplate Then
-            EnsureGameProfileForInstall(game)
             ApplyGameProfile(game)
+            Dim profileUpdated As Boolean = Await EnsureGameProfileForInstallAsync(game)
+            If profileUpdated Then
+                ApplyGameProfile(game)
+            End If
         End If
 
         If switchToInstallTab Then
@@ -3234,26 +3237,25 @@ Public Class MainForm
         Return True
     End Function
 
-    Private Sub EnsureGameProfileForInstall(game As DetectedGame)
+    Private Async Function EnsureGameProfileForInstallAsync(game As DetectedGame) As Task(Of Boolean)
         If game Is Nothing Then
-            Return
+            Return False
         End If
 
         Try
             Dim settings As AppSettingsModel = AppSettings.Load()
             Dim wikiBaseUrl As String = If(settings?.WikiBaseUrl, "")
-            Dim updated As Boolean = GameProfileService.
-                EnsureProfileForGameAsync(game, wikiBaseUrl, False, AddressOf AppendLog).
-                GetAwaiter().
-                GetResult()
+            Dim updated As Boolean = Await GameProfileService.EnsureProfileForGameAsync(game, wikiBaseUrl, False, AddressOf AppendLog)
             If updated Then
                 AppendLog("Applied latest wiki-derived profile data for: " & game.DisplayName)
             End If
+            Return updated
         Catch ex As Exception
             AppendLog("Profile refresh skipped for " & game.DisplayName & ": " & ex.Message)
             ErrorLogger.Log(ex, "MainForm.EnsureGameProfileForInstall")
+            Return False
         End Try
-    End Sub
+    End Function
 
     Private Sub TryAutoRetargetUnrealInstall(config As InstallerConfig)
         If config Is Nothing Then

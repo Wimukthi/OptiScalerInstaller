@@ -491,13 +491,29 @@ Friend Module GameProfileService
     Private Async Function DownloadWikiMarkdownAsync(url As String) As Task(Of String)
         Using client As New HttpClient() With {.Timeout = RequestTimeout}
             client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Return Await client.GetStringAsync(url)
+            Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
+                If response.StatusCode = System.Net.HttpStatusCode.NotFound Then
+                    Return ""
+                End If
+
+                response.EnsureSuccessStatusCode()
+                Return Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+            End Using
         End Using
     End Function
 
     Private Function BuildWikiRawUrl(wikiBaseUrl As String, slug As String) As String
         Dim slugValue As String = NormalizeSlugDisplay(slug)
         If String.IsNullOrWhiteSpace(slugValue) Then
+            Return ""
+        End If
+        Dim encodedSlug As String = String.Join("/",
+                                                slugValue.
+                                                    Split("/"c).
+                                                    Select(Function(part) part.Trim()).
+                                                    Where(Function(part) Not String.IsNullOrWhiteSpace(part)).
+                                                    Select(Function(part) Uri.EscapeDataString(part)))
+        If String.IsNullOrWhiteSpace(encodedSlug) Then
             Return ""
         End If
 
@@ -510,14 +526,14 @@ Friend Module GameProfileService
         If match.Success Then
             Dim owner As String = match.Groups("owner").Value
             Dim repo As String = match.Groups("repo").Value
-            Return $"https://raw.githubusercontent.com/wiki/{owner}/{repo}/{slugValue}.md"
+            Return $"https://raw.githubusercontent.com/wiki/{owner}/{repo}/{encodedSlug}.md"
         End If
 
         match = Regex.Match(baseValue, "raw\.githubusercontent\.com/wiki/(?<owner>[^/\s]+)/(?<repo>[^/\s]+)/?", RegexOptions.IgnoreCase)
         If match.Success Then
             Dim owner As String = match.Groups("owner").Value
             Dim repo As String = match.Groups("repo").Value
-            Return $"https://raw.githubusercontent.com/wiki/{owner}/{repo}/{slugValue}.md"
+            Return $"https://raw.githubusercontent.com/wiki/{owner}/{repo}/{encodedSlug}.md"
         End If
 
         Return ""
