@@ -1,10 +1,7 @@
-Imports System.Net.Http
 Imports System.Text.Json
 
 Public Class ReleaseService
     ' Fetches OptiScaler release metadata from GitHub and chooses a safe/usable asset.
-    Private Shared ReadOnly ReleaseRequestTimeout As TimeSpan = TimeSpan.FromSeconds(30)
-    Private Const MaxRequestAttempts As Integer = 3
 
     Public Shared Async Function GetStableReleaseAsync() As Task(Of ReleaseInfo)
         Dim url As String = GetStableReleaseUrl()
@@ -47,79 +44,44 @@ Public Class ReleaseService
 
     ' Retrieves the release payload and selects the most installer-appropriate asset.
     Private Shared Async Function GetReleaseAsync(url As String) As Task(Of ReleaseInfo)
-        Using client As New HttpClient() With {.Timeout = ReleaseRequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json")
-            Dim json As String = Await GetStringWithRetryAsync(client, url)
+        Dim json As String = Await HttpClientHelper.GetStringWithRetryAsync(url)
 
-            Using doc As JsonDocument = JsonDocument.Parse(json)
-                Dim root As JsonElement = doc.RootElement
-                Dim tagName As String = ""
-                Dim htmlUrl As String = ""
-                Dim assets As JsonElement
+        Using doc As JsonDocument = JsonDocument.Parse(json)
+            Dim root As JsonElement = doc.RootElement
+            Dim tagName As String = ""
+            Dim htmlUrl As String = ""
+            Dim assets As JsonElement
 
-                If root.TryGetProperty("tag_name", assets) AndAlso assets.ValueKind = JsonValueKind.String Then
-                    tagName = assets.GetString()
-                End If
-                If root.TryGetProperty("html_url", assets) AndAlso assets.ValueKind = JsonValueKind.String Then
-                    htmlUrl = assets.GetString()
-                End If
-
-                Dim selectedAsset As GitHubAsset = Nothing
-                If root.TryGetProperty("assets", assets) AndAlso assets.ValueKind = JsonValueKind.Array Then
-                    selectedAsset = SelectBestAsset(assets)
-                End If
-
-                Dim result As New ReleaseInfo With {
-                    .TagName = tagName,
-                    .AssetName = "",
-                    .DownloadUrl = "",
-                    .Size = 0,
-                    .HtmlUrl = htmlUrl,
-                    .AssetDigest = ""
-                }
-
-                If selectedAsset IsNot Nothing Then
-                    result.AssetName = selectedAsset.Name
-                    result.DownloadUrl = selectedAsset.DownloadUrl
-                    result.Size = selectedAsset.Size
-                    result.AssetDigest = selectedAsset.Digest
-                End If
-
-                Return result
-            End Using
-        End Using
-    End Function
-
-    ' Retries transient HTTP failures to reduce flaky release checks on unstable links.
-    Private Shared Async Function GetStringWithRetryAsync(client As HttpClient, url As String) As Task(Of String)
-        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
-
-        For attempt As Integer = 1 To MaxRequestAttempts
-            Dim retry As Boolean = False
-            Try
-                Return Await client.GetStringAsync(url)
-            Catch ex As HttpRequestException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            Catch ex As TaskCanceledException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            End Try
-
-            If retry Then
-                Await Task.Delay(delay)
-                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
+            If root.TryGetProperty("tag_name", assets) AndAlso assets.ValueKind = JsonValueKind.String Then
+                tagName = assets.GetString()
             End If
-        Next
+            If root.TryGetProperty("html_url", assets) AndAlso assets.ValueKind = JsonValueKind.String Then
+                htmlUrl = assets.GetString()
+            End If
 
-        Return Await client.GetStringAsync(url)
+            Dim selectedAsset As GitHubAsset = Nothing
+            If root.TryGetProperty("assets", assets) AndAlso assets.ValueKind = JsonValueKind.Array Then
+                selectedAsset = SelectBestAsset(assets)
+            End If
+
+            Dim result As New ReleaseInfo With {
+                .TagName = tagName,
+                .AssetName = "",
+                .DownloadUrl = "",
+                .Size = 0,
+                .HtmlUrl = htmlUrl,
+                .AssetDigest = ""
+            }
+
+            If selectedAsset IsNot Nothing Then
+                result.AssetName = selectedAsset.Name
+                result.DownloadUrl = selectedAsset.DownloadUrl
+                result.Size = selectedAsset.Size
+                result.AssetDigest = selectedAsset.Digest
+            End If
+
+            Return result
+        End Using
     End Function
 
     Private Class GitHubAsset

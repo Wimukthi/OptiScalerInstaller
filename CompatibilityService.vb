@@ -1,5 +1,4 @@
 Imports System.IO
-Imports System.Net.Http
 Imports System.Text.Json
 Imports System.Text.RegularExpressions
 
@@ -7,8 +6,6 @@ Public Class CompatibilityService
     ' Loads, caches, and parses the OptiScaler compatibility list.
     Private Shared ReadOnly DefaultListPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "Compatibility-List.md")
     Private Shared ReadOnly CachePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OptiScalerInstaller", "compatibility.json")
-    Private Shared ReadOnly RequestTimeout As TimeSpan = TimeSpan.FromSeconds(30)
-    Private Const MaxRequestAttempts As Integer = 3
 
     Public Shared Function LoadCompatibilityList() As List(Of CompatibilityEntry)
         Dim cached As List(Of CompatibilityEntry) = TryLoadCache()
@@ -40,44 +37,18 @@ Public Class CompatibilityService
         End If
 
         Dim previousEntries As List(Of CompatibilityEntry) = LoadCompatibilityList()
-        Using client As New HttpClient() With {.Timeout = RequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Dim content As String = Await GetStringWithRetryAsync(client, listUrl)
-            Dim entries As List(Of CompatibilityEntry) = ParseCompatibilityList(content)
-            SaveCache(entries)
-            Return BuildUpdateResult(previousEntries, entries)
-        End Using
-    End Function
+        Dim content As String = Await HttpClientHelper.GetStringWithRetryAsync(listUrl)
+        Dim entries As List(Of CompatibilityEntry) = ParseCompatibilityList(content)
 
-    ' Retries transient failures so startup refreshes are less brittle.
-    Private Shared Async Function GetStringWithRetryAsync(client As HttpClient, url As String) As Task(Of String)
-        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
+        If IsCountSuspicious(previousEntries.Count, entries.Count) Then
+            ErrorLogger.LogMessage(
+                $"Parsed {entries.Count} entries but expected at least {previousEntries.Count \ 2} (previous: {previousEntries.Count}). Cache preserved.",
+                "", "CompatibilityService.UpdateValidation")
+            Return BuildUpdateResult(previousEntries, previousEntries)
+        End If
 
-        For attempt As Integer = 1 To MaxRequestAttempts
-            Dim retry As Boolean = False
-            Try
-                Return Await client.GetStringAsync(url)
-            Catch ex As HttpRequestException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            Catch ex As TaskCanceledException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            End Try
-
-            If retry Then
-                Await Task.Delay(delay)
-                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
-            End If
-        Next
-
-        Return Await client.GetStringAsync(url)
+        SaveCache(entries)
+        Return BuildUpdateResult(previousEntries, entries)
     End Function
 
     Private Shared Function GetCompatibilityListUrl() As String
@@ -111,12 +82,45 @@ Public Class CompatibilityService
     End Sub
 
     Public Shared Function ParseCompatibilityList(content As String) As List(Of CompatibilityEntry)
-        ' Extract markdown link entries and ignore non-wiki URLs.
+        ' Handles both table format (remote wiki) and standalone link format (bundled file).
+        ' Only extracts game links from the name column/position to avoid cross-references.
         Dim entries As New List(Of CompatibilityEntry)()
-        Dim regex As New Regex("\[(.*?)\]\((.*?)\)")
+        Dim linkRegex As New Regex("\[(.*?)\]\((.*?)\)")
 
         For Each rawLine As String In content.Split({ControlChars.CrLf, ControlChars.Lf}, StringSplitOptions.None)
-            Dim match As Match = regex.Match(rawLine)
+            Dim line As String = rawLine.Trim()
+            If String.IsNullOrWhiteSpace(line) Then
+                Continue For
+            End If
+
+            ' Determine which part of the line holds the game name.
+            Dim nameCell As String
+
+            If line.StartsWith("|", StringComparison.Ordinal) Then
+                ' Table row: only search for a game link in the first data column.
+                If IsTableHeaderOrSeparator(line) Then
+                    Continue For
+                End If
+
+                Dim columns As String() = line.Split("|"c)
+                If columns.Length < 2 Then
+                    Continue For
+                End If
+
+                nameCell = columns(1).Trim()
+            ElseIf line.StartsWith("[", StringComparison.Ordinal) Then
+                ' Standalone markdown link (bundled file format).
+                nameCell = line
+            Else
+                ' Skip prose, headings, blockquotes, and other non-entry lines.
+                Continue For
+            End If
+
+            If String.IsNullOrWhiteSpace(nameCell) Then
+                Continue For
+            End If
+
+            Dim match As Match = linkRegex.Match(nameCell)
             If Not match.Success Then
                 Continue For
             End If
@@ -128,7 +132,17 @@ Public Class CompatibilityService
                 Continue For
             End If
 
+            ' Skip names that are too short to be real game titles.
+            If name.Length <= 2 Then
+                Continue For
+            End If
+
             If slug.StartsWith("http", StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+
+            ' Slugs containing '#' are anchor or section references, not game pages.
+            If slug.Contains("#"c) Then
                 Continue For
             End If
 
@@ -209,5 +223,18 @@ Public Class CompatibilityService
             .RemovedNames = removed,
             .ChangedNames = changed
         }
+    End Function
+
+    Private Shared Function IsTableHeaderOrSeparator(line As String) As Boolean
+        Return line.StartsWith("| Game ", StringComparison.OrdinalIgnoreCase) OrElse
+               line.StartsWith("| GAME", StringComparison.OrdinalIgnoreCase) OrElse
+               line.StartsWith("| ----", StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Private Shared Function IsCountSuspicious(previousCount As Integer, newCount As Integer) As Boolean
+        If previousCount < 20 Then
+            Return False
+        End If
+        Return newCount < previousCount \ 2
     End Function
 End Class

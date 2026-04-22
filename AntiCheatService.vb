@@ -10,11 +10,14 @@ End Class
 
 Public Module AntiCheatService
     ' Token signatures used for quick best-effort anti-cheat identification.
+    ' Tokens are matched via Contains() on lowercased folder/file names, so keep them
+    ' long enough (5+ chars) to avoid false positives from common substrings.
     Private ReadOnly SignatureMap As Dictionary(Of String, String()) = New Dictionary(Of String, String())(StringComparer.OrdinalIgnoreCase) From {
-        {"Easy Anti-Cheat", New String() {"easyanticheat", "easyanticheat_eos", "easy anti-cheat"}},
+        {"Easy Anti-Cheat", New String() {"easyanticheat", "easyanticheat_eos", "easy anti-cheat", "start_protected_game"}},
         {"BattlEye", New String() {"battleye", "beservice", "beclient"}},
         {"EA AntiCheat", New String() {"eaanticheat", "eacore_anticheat"}},
-        {"Riot Vanguard", New String() {"vanguard", "vgc", "vgk"}},
+        {"Riot Vanguard", New String() {"vanguard"}},
+        {"PunkBuster", New String() {"punkbuster", "pbsvc"}},
         {"XIGNCODE3", New String() {"xigncode", "xhunter", "x3.xem"}},
         {"NProtect GameGuard", New String() {"gameguard", "npgg", "nprotect"}}
     }
@@ -27,7 +30,7 @@ Public Module AntiCheatService
         End If
 
         Try
-            Dim foldersToScan As List(Of String) = EnumerateFolders(gameFolder, 2, 500)
+            Dim foldersToScan As List(Of String) = EnumerateFolders(gameFolder, 3, 750)
             For Each folder As String In foldersToScan
                 Dim folderName As String = Path.GetFileName(folder).ToLowerInvariant()
                 Dim folderMatch As String = MatchProvider(folderName)

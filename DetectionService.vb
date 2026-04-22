@@ -1009,7 +1009,7 @@ Public Class DetectionService
         Dim skipTokens As String() = {
             "unins", "uninstall", "setup", "launcher", "crashreport", "crashreportclient",
             "redist", "vc_redist", "installer", "update", "updater", "patch", "easyanticheat",
-            "eac", "battleye", "unitycrashhandler"
+            "eac", "battleye", "punkbuster", "pbsvc", "unitycrashhandler"
         }
 
         For Each token As String In skipTokens

@@ -56,42 +56,36 @@ Public Module UpdateService
             Throw New InvalidOperationException("Installer release URL is not set. Update it in Settings.")
         End If
 
-        Using client As New HttpClient()
-            client.Timeout = TimeSpan.FromSeconds(15)
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json")
+        Dim json As String = Await HttpClientHelper.GetStringWithRetryAsync(url)
+        Using doc As JsonDocument = JsonDocument.Parse(json)
+            Dim root As JsonElement = doc.RootElement
+            Dim release As New UpdateReleaseInfo()
 
-            Dim json As String = Await client.GetStringAsync(url)
-            Using doc As JsonDocument = JsonDocument.Parse(json)
-                Dim root As JsonElement = doc.RootElement
-                Dim release As New UpdateReleaseInfo()
+            release.TagName = GetJsonString(root, "tag_name")
+            release.Title = GetJsonString(root, "name")
+            release.Notes = GetJsonString(root, "body")
+            release.HtmlUrl = GetJsonString(root, "html_url")
+            release.PublishedAtUtc = ParsePublishedDate(GetJsonString(root, "published_at"))
+            release.Version = ParseVersionSafe(release.TagName)
 
-                release.TagName = GetJsonString(root, "tag_name")
-                release.Title = GetJsonString(root, "name")
-                release.Notes = GetJsonString(root, "body")
-                release.HtmlUrl = GetJsonString(root, "html_url")
-                release.PublishedAtUtc = ParsePublishedDate(GetJsonString(root, "published_at"))
-                release.Version = ParseVersionSafe(release.TagName)
-
-                Dim assets As New List(Of UpdateAssetInfo)()
-                Dim assetsElement As JsonElement
-                If root.TryGetProperty("assets", assetsElement) Then
-                    For Each entry As JsonElement In assetsElement.EnumerateArray()
-                        Dim name As String = GetJsonString(entry, "name")
-                        Dim downloadUrl As String = GetJsonString(entry, "browser_download_url")
-                        Dim size As Long = GetJsonLong(entry, "size")
-                        If Not String.IsNullOrWhiteSpace(name) AndAlso Not String.IsNullOrWhiteSpace(downloadUrl) Then
-                            assets.Add(New UpdateAssetInfo With {
-                                .Name = name,
-                                .DownloadUrl = downloadUrl,
-                                .Size = size
-                            })
-                        End If
-                    Next
-                End If
-                release.Assets = assets
-                Return release
-            End Using
+            Dim assets As New List(Of UpdateAssetInfo)()
+            Dim assetsElement As JsonElement
+            If root.TryGetProperty("assets", assetsElement) Then
+                For Each entry As JsonElement In assetsElement.EnumerateArray()
+                    Dim name As String = GetJsonString(entry, "name")
+                    Dim downloadUrl As String = GetJsonString(entry, "browser_download_url")
+                    Dim size As Long = GetJsonLong(entry, "size")
+                    If Not String.IsNullOrWhiteSpace(name) AndAlso Not String.IsNullOrWhiteSpace(downloadUrl) Then
+                        assets.Add(New UpdateAssetInfo With {
+                            .Name = name,
+                            .DownloadUrl = downloadUrl,
+                            .Size = size
+                        })
+                    End If
+                Next
+            End If
+            release.Assets = assets
+            Return release
         End Using
     End Function
 

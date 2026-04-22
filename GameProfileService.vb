@@ -182,18 +182,15 @@ Friend Module GameProfileService
             Throw New InvalidOperationException("Game profile catalog URL is empty.")
         End If
 
-        Using client As New HttpClient() With {.Timeout = RequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Dim content As String = Await client.GetStringAsync(trimmedUrl)
-            Dim profiles As List(Of GameInstallProfile) = ParseProfilesJson(content, "remote")
-            If profiles.Count = 0 Then
-                Throw New InvalidDataException("Profile catalog response did not contain any valid profiles.")
-            End If
+        Dim content As String = Await HttpClientHelper.GetStringWithRetryAsync(trimmedUrl)
+        Dim profiles As List(Of GameInstallProfile) = ParseProfilesJson(content, "remote")
+        If profiles.Count = 0 Then
+            Throw New InvalidDataException("Profile catalog response did not contain any valid profiles.")
+        End If
 
-            SaveCache(profiles)
-            Reload()
-            Return profiles.Count
-        End Using
+        SaveCache(profiles)
+        Reload()
+        Return profiles.Count
     End Function
 
     Public Function GetProfileCount() As Integer
@@ -489,16 +486,13 @@ Friend Module GameProfileService
     End Function
 
     Private Async Function DownloadWikiMarkdownAsync(url As String) As Task(Of String)
-        Using client As New HttpClient() With {.Timeout = RequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
-                If response.StatusCode = System.Net.HttpStatusCode.NotFound Then
-                    Return ""
-                End If
+        Using response As HttpResponseMessage = Await HttpClientHelper.ApiClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
+            If response.StatusCode = System.Net.HttpStatusCode.NotFound Then
+                Return ""
+            End If
 
-                response.EnsureSuccessStatusCode()
-                Return Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-            End Using
+            response.EnsureSuccessStatusCode()
+            Return Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
         End Using
     End Function
 

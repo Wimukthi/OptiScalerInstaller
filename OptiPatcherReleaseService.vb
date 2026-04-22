@@ -1,11 +1,8 @@
-Imports System.Net.Http
 Imports System.Text.Json
 Imports System.Text.RegularExpressions
 
 Public Class OptiPatcherReleaseService
     ' Fetches OptiPatcher release metadata and resolves an .asi download asset.
-    Private Shared ReadOnly RequestTimeout As TimeSpan = TimeSpan.FromSeconds(30)
-    Private Const MaxRequestAttempts As Integer = 3
 
     Public Shared Async Function GetStableReleaseAsync() As Task(Of ReleaseInfo)
         Dim url As String = GetStableReleaseUrl()
@@ -50,42 +47,38 @@ Public Class OptiPatcherReleaseService
     End Function
 
     Private Shared Async Function GetReleaseAsync(url As String, preferVersionedTag As Boolean) As Task(Of ReleaseInfo)
-        Using client As New HttpClient() With {.Timeout = RequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json")
-            Dim json As String = Await GetStringWithRetryAsync(client, url)
+        Dim json As String = Await HttpClientHelper.GetStringWithRetryAsync(url)
 
-            Using doc As JsonDocument = JsonDocument.Parse(json)
-                Dim releaseNode As JsonElement = ResolveReleaseNode(doc.RootElement, preferVersionedTag)
-                If releaseNode.ValueKind = JsonValueKind.Undefined Then
-                    Return Nothing
-                End If
+        Using doc As JsonDocument = JsonDocument.Parse(json)
+            Dim releaseNode As JsonElement = ResolveReleaseNode(doc.RootElement, preferVersionedTag)
+            If releaseNode.ValueKind = JsonValueKind.Undefined Then
+                Return Nothing
+            End If
 
-                Dim tagName As String = GetJsonString(releaseNode, "tag_name")
-                Dim htmlUrl As String = GetJsonString(releaseNode, "html_url")
+            Dim tagName As String = GetJsonString(releaseNode, "tag_name")
+            Dim htmlUrl As String = GetJsonString(releaseNode, "html_url")
 
-                Dim selectedAsset As GitHubAsset = Nothing
-                Dim assetsNode As JsonElement
-                If releaseNode.TryGetProperty("assets", assetsNode) AndAlso assetsNode.ValueKind = JsonValueKind.Array Then
-                    selectedAsset = SelectBestAsiAsset(assetsNode)
-                End If
+            Dim selectedAsset As GitHubAsset = Nothing
+            Dim assetsNode As JsonElement
+            If releaseNode.TryGetProperty("assets", assetsNode) AndAlso assetsNode.ValueKind = JsonValueKind.Array Then
+                selectedAsset = SelectBestAsiAsset(assetsNode)
+            End If
 
-                If selectedAsset Is Nothing Then
-                    Return New ReleaseInfo With {
-                        .TagName = tagName,
-                        .HtmlUrl = htmlUrl
-                    }
-                End If
-
+            If selectedAsset Is Nothing Then
                 Return New ReleaseInfo With {
                     .TagName = tagName,
-                    .HtmlUrl = htmlUrl,
-                    .AssetName = selectedAsset.Name,
-                    .DownloadUrl = selectedAsset.DownloadUrl,
-                    .Size = selectedAsset.Size,
-                    .AssetDigest = selectedAsset.Digest
+                    .HtmlUrl = htmlUrl
                 }
-            End Using
+            End If
+
+            Return New ReleaseInfo With {
+                .TagName = tagName,
+                .HtmlUrl = htmlUrl,
+                .AssetName = selectedAsset.Name,
+                .DownloadUrl = selectedAsset.DownloadUrl,
+                .Size = selectedAsset.Size,
+                .AssetDigest = selectedAsset.Digest
+            }
         End Using
     End Function
 
@@ -203,34 +196,5 @@ Public Class OptiPatcherReleaseService
         Return 0
     End Function
 
-    Private Shared Async Function GetStringWithRetryAsync(client As HttpClient, url As String) As Task(Of String)
-        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
-
-        For attempt As Integer = 1 To MaxRequestAttempts
-            Dim retry As Boolean = False
-            Try
-                Return Await client.GetStringAsync(url)
-            Catch ex As HttpRequestException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            Catch ex As TaskCanceledException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            End Try
-
-            If retry Then
-                Await Task.Delay(delay)
-                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
-            End If
-        Next
-
-        Return Await client.GetStringAsync(url)
-    End Function
 End Class
 

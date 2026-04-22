@@ -1,13 +1,10 @@
 Imports System.IO
-Imports System.Net.Http
 Imports System.Text.Json
 
 Public Class OptiPatcherSupportService
     ' Loads, caches, and parses OptiPatcher GameSupport markdown entries.
     Private Shared ReadOnly DefaultListPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "OptiPatcher-GameSupport.md")
     Private Shared ReadOnly CachePath As String = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OptiScalerInstaller", "optipatcher-support.json")
-    Private Shared ReadOnly RequestTimeout As TimeSpan = TimeSpan.FromSeconds(30)
-    Private Const MaxRequestAttempts As Integer = 3
 
     Public Shared Function LoadSupportList() As List(Of OptiPatcherSupportEntry)
         Dim cached As List(Of OptiPatcherSupportEntry) = TryLoadCache()
@@ -33,13 +30,19 @@ Public Class OptiPatcherSupportService
             Throw New InvalidOperationException("OptiPatcher support list URL is not set. Update it in settings.")
         End If
 
-        Using client As New HttpClient() With {.Timeout = RequestTimeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-            Dim content As String = Await GetStringWithRetryAsync(client, listUrl)
-            Dim entries As List(Of OptiPatcherSupportEntry) = ParseSupportList(content)
-            SaveCache(entries)
-            Return entries
-        End Using
+        Dim previousEntries As List(Of OptiPatcherSupportEntry) = LoadSupportList()
+        Dim content As String = Await HttpClientHelper.GetStringWithRetryAsync(listUrl)
+        Dim entries As List(Of OptiPatcherSupportEntry) = ParseSupportList(content)
+
+        If IsCountSuspicious(previousEntries.Count, entries.Count) Then
+            ErrorLogger.LogMessage(
+                $"Parsed {entries.Count} entries but expected at least {previousEntries.Count \ 2} (previous: {previousEntries.Count}). Cache preserved.",
+                "", "OptiPatcherSupportService.UpdateValidation")
+            Return previousEntries
+        End If
+
+        SaveCache(entries)
+        Return entries
     End Function
 
     Public Shared Function BuildLookup(entries As IEnumerable(Of OptiPatcherSupportEntry)) As Dictionary(Of String, OptiPatcherSupportEntry)
@@ -256,33 +259,11 @@ Public Class OptiPatcherSupportService
         End Try
     End Sub
 
-    Private Shared Async Function GetStringWithRetryAsync(client As HttpClient, url As String) As Task(Of String)
-        Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
-
-        For attempt As Integer = 1 To MaxRequestAttempts
-            Dim retry As Boolean = False
-            Try
-                Return Await client.GetStringAsync(url)
-            Catch ex As HttpRequestException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            Catch ex As TaskCanceledException
-                If attempt < MaxRequestAttempts Then
-                    retry = True
-                Else
-                    Throw
-                End If
-            End Try
-
-            If retry Then
-                Await Task.Delay(delay)
-                delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2)
-            End If
-        Next
-
-        Return Await client.GetStringAsync(url)
+    Private Shared Function IsCountSuspicious(previousCount As Integer, newCount As Integer) As Boolean
+        If previousCount < 20 Then
+            Return False
+        End If
+        Return newCount < previousCount \ 2
     End Function
+
 End Class

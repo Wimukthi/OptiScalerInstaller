@@ -49,6 +49,8 @@ Public Class MainForm
     Private lastOptiPatcherStatusKey As String
     Private installOperationInProgress As Boolean
     Private uninstallOperationInProgress As Boolean
+    Private searchDebounceTimer As Timer
+    Private gameFolderDebounceTimer As Timer
 
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure DISPLAY_DEVICE
@@ -111,6 +113,12 @@ Public Class MainForm
     ' Run background refreshes after the UI is ready.
     Private Async Sub StartBackgroundTasks()
         Try
+            ' Run the expensive WMI GPU query on a background thread to keep the UI responsive.
+            Dim adapters As List(Of GpuAdapterInfo) = Await Task.Run(Function() GetGpuAdapters())
+            ApplyGpuAdapters(adapters)
+            ApplyDetectedGpuVendor(True)
+            UpdateExperimentalTabAvailability(True)
+
             Dim settings As AppSettingsModel = AppSettings.Load()
             Dim refreshOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshCompatibilityOnStartup.HasValue AndAlso settings.AutoRefreshCompatibilityOnStartup.Value
             Dim refreshProfilesOnStartup As Boolean = settings IsNot Nothing AndAlso settings.AutoRefreshGameProfilesOnStartup.HasValue AndAlso settings.AutoRefreshGameProfilesOnStartup.Value
@@ -237,6 +245,14 @@ Public Class MainForm
         If windowSaveTimer IsNot Nothing Then
             windowSaveTimer.Stop()
         End If
+        If searchDebounceTimer IsNot Nothing Then
+            searchDebounceTimer.Stop()
+            searchDebounceTimer.Dispose()
+        End If
+        If gameFolderDebounceTimer IsNot Nothing Then
+            gameFolderDebounceTimer.Stop()
+            gameFolderDebounceTimer.Dispose()
+        End If
     End Sub
 
     Private Sub MainForm_Shown(sender As Object, e As EventArgs) Handles MyBase.Shown
@@ -289,7 +305,7 @@ Public Class MainForm
         cmbOptiPatcherSource.SelectedIndex = 0
         ToggleOptiPatcherLocalFile()
         ToggleLocalArchive()
-        ApplyDetectedGpuVendor(False)
+        ' GPU detection is deferred to StartBackgroundTasks to keep the UI responsive.
         UpdateExperimentalTabAvailability(False)
         UpdateGpuControls()
         chkEnableReshade_CheckedChanged(Me, EventArgs.Empty)
@@ -381,7 +397,12 @@ Public Class MainForm
             Return
         End If
 
-        gpuDetectionAdapters = GetGpuAdapters()
+        ApplyGpuAdapters(GetGpuAdapters())
+    End Sub
+
+    ' Applies pre-loaded adapters to the GPU detection state. Must run on the UI thread.
+    Private Sub ApplyGpuAdapters(adapters As List(Of GpuAdapterInfo))
+        gpuDetectionAdapters = adapters
         gpuDetectionCandidates.Clear()
 
         Dim seenCandidates As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
@@ -869,7 +890,16 @@ Public Class MainForm
     End Sub
 
     Private Sub txtGameSearch_TextChanged(sender As Object, e As EventArgs) Handles txtGameSearch.TextChanged
-        ApplyCompatibilityFilter
+        If searchDebounceTimer Is Nothing Then
+            searchDebounceTimer = New Timer() With {.Interval = 250}
+            AddHandler searchDebounceTimer.Tick, Sub()
+                                                     searchDebounceTimer.Stop()
+                                                     ApplyCompatibilityFilter()
+                                                 End Sub
+        End If
+
+        searchDebounceTimer.Stop()
+        searchDebounceTimer.Start()
     End Sub
 
     Private Sub btnBrowseGameExe_Click(sender As Object, e As EventArgs) Handles btnBrowseGameExe.Click
@@ -886,12 +916,21 @@ Public Class MainForm
     End Sub
 
     Private Sub txtGameFolder_TextChanged(sender As Object, e As EventArgs) Handles txtGameFolder.TextChanged
-        UpdateEngineWarningByFolder(txtGameFolder.Text)
-        EnsurePluginsFolderReady(False)
-        UpdateInstallStatus()
-        UpdateOptiPatcherStatus()
-        UpdateExperimentalStatus()
-        UpdateExperimentalDetectedGamesList()
+        If gameFolderDebounceTimer Is Nothing Then
+            gameFolderDebounceTimer = New Timer() With {.Interval = 300}
+            AddHandler gameFolderDebounceTimer.Tick, Sub()
+                                                         gameFolderDebounceTimer.Stop()
+                                                         UpdateEngineWarningByFolder(txtGameFolder.Text)
+                                                         EnsurePluginsFolderReady(False)
+                                                         UpdateInstallStatus()
+                                                         UpdateOptiPatcherStatus()
+                                                         UpdateExperimentalStatus()
+                                                         UpdateExperimentalDetectedGamesList()
+                                                     End Sub
+        End If
+
+        gameFolderDebounceTimer.Stop()
+        gameFolderDebounceTimer.Start()
     End Sub
 
     Private Async Sub btnEditIni_Click(sender As Object, e As EventArgs) Handles btnEditIni.Click
