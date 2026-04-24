@@ -33,9 +33,10 @@ Friend Partial Class frmUpdate
         AddHandler btnDownload.Click, AddressOf DownloadClicked
         AddHandler btnCancel.Click, AddressOf CancelClicked
         AddHandler btnRelease.Click, AddressOf OpenReleaseClicked
+        AddHandler txtReleaseNotes.InnerRichTextBox.LinkClicked, AddressOf ReleaseNotesLinkClicked
 
-        PopulateReleaseInfo()
         ApplyTheme()
+        PopulateReleaseInfo()
 
         If _asset Is Nothing Then
             btnDownload.Enabled = False
@@ -47,7 +48,8 @@ Friend Partial Class frmUpdate
         lblCurrentValue.Text = FormatVersionDisplay(_currentVersion, Nothing)
         lblLatestValue.Text = If(_release IsNot Nothing, FormatVersionDisplay(_release.Version, _release.TagName), "Unknown")
         lblPackageValue.Text = If(_asset IsNot Nothing, _asset.Name, "No compatible asset found")
-        txtReleaseNotes.Text = If(_release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(_release.Notes), _release.Notes, "No release notes provided.")
+        Dim releaseNotes As String = If(_release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(_release.Notes), _release.Notes, "No release notes provided.")
+        ReleaseNotesRenderer.Render(releaseNotes, txtReleaseNotes.InnerRichTextBox, ThemeSettings.GetPreferredColorMode())
         btnRelease.Enabled = (_release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(_release.HtmlUrl))
     End Sub
 
@@ -130,6 +132,18 @@ Friend Partial Class frmUpdate
             Process.Start(New ProcessStartInfo(_release.HtmlUrl) With {.UseShellExecute = True})
         Catch ex As Exception
             ErrorLogger.Log(ex, "frmUpdate.OpenRelease")
+        End Try
+    End Sub
+
+    Private Sub ReleaseNotesLinkClicked(sender As Object, e As LinkClickedEventArgs)
+        If e Is Nothing OrElse String.IsNullOrWhiteSpace(e.LinkText) Then
+            Return
+        End If
+
+        Try
+            Process.Start(New ProcessStartInfo(e.LinkText) With {.UseShellExecute = True})
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmUpdate.OpenReleaseNotesLink")
         End Try
     End Sub
 

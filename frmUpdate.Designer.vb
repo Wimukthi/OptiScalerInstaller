@@ -27,7 +27,7 @@ Partial Class frmUpdate
         lblPackageTitle = New Label()
         lblPackageValue = New Label()
         lblNotesTitle = New Label()
-        txtReleaseNotes = New ThemedTextBox()
+        txtReleaseNotes = New ThemedRichTextBox()
         panelProgress = New Panel()
         tableProgress = New TableLayoutPanel()
         progressDownload = New ProgressBar()
@@ -180,10 +180,9 @@ Partial Class frmUpdate
         txtReleaseNotes.Dock = DockStyle.Fill
         txtReleaseNotes.Location = New Point(16, 141)
         txtReleaseNotes.Margin = New Padding(0, 0, 0, 12)
-        txtReleaseNotes.Multiline = True
         txtReleaseNotes.Name = "txtReleaseNotes"
         txtReleaseNotes.ReadOnly = True
-        txtReleaseNotes.ScrollBars = ScrollBars.Vertical
+        txtReleaseNotes.ScrollBars = RichTextBoxScrollBars.Vertical
         txtReleaseNotes.Size = New Size(708, 319)
         txtReleaseNotes.TabIndex = 3
         ' 
@@ -357,7 +356,7 @@ Partial Class frmUpdate
     Friend WithEvents lblPackageTitle As Label
     Friend WithEvents lblPackageValue As Label
     Friend WithEvents lblNotesTitle As Label
-    Friend WithEvents txtReleaseNotes As ThemedTextBox
+    Friend WithEvents txtReleaseNotes As ThemedRichTextBox
     Friend WithEvents panelProgress As Panel
     Friend WithEvents tableProgress As TableLayoutPanel
     Friend WithEvents progressDownload As ProgressBar

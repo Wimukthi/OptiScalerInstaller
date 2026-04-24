@@ -22,6 +22,16 @@ Friend Module ThemeManager
             themedTextBox.ForeColor = palette.Text
             themedTextBox.BorderColor = palette.Border
             themedTextBox.FocusBorderColor = palette.FocusBorder
+        ElseIf TypeOf control Is ThemedRichTextBox Then
+            Dim themedRichTextBox As ThemedRichTextBox = DirectCast(control, ThemedRichTextBox)
+            themedRichTextBox.BackColor = palette.Field
+            themedRichTextBox.ForeColor = palette.Text
+            themedRichTextBox.BorderColor = palette.Border
+            themedRichTextBox.FocusBorderColor = palette.FocusBorder
+        ElseIf TypeOf control Is RichTextBox Then
+            Dim richTextBox As RichTextBox = DirectCast(control, RichTextBox)
+            richTextBox.BackColor = palette.Field
+            richTextBox.ForeColor = palette.Text
         ElseIf TypeOf control Is ThemedListView Then
             Dim themedListView As ThemedListView = DirectCast(control, ThemedListView)
             themedListView.BackColor = palette.Surface
