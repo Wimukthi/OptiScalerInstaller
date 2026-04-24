@@ -656,14 +656,22 @@ Public Class DetectionService
         End If
 
         Parallel.ForEach(roots, options, Sub(root)
-                                             ScanDriveRoot(matcher,
-                                                          root,
-                                                          candidates,
-                                                          log,
-                                                          totalRoots,
-                                                          Function() Volatile.Read(completedRoots),
-                                                          progress)
-                                             Interlocked.Increment(completedRoots)
+                                             Try
+                                                 ScanDriveRoot(matcher,
+                                                              root,
+                                                              candidates,
+                                                              log,
+                                                              totalRoots,
+                                                              Function() Volatile.Read(completedRoots),
+                                                              progress)
+                                             Catch ex As Exception
+                                                 ErrorLogger.Log(ex, "DetectionService.DetectSupportedGamesByDriveScan.ScanRoot")
+                                                 If log IsNot Nothing Then
+                                                     log("Deep scan: skipped " & root & " after an unexpected scan error: " & ex.Message)
+                                                 End If
+                                             Finally
+                                                 Interlocked.Increment(completedRoots)
+                                             End Try
                                          End Sub)
 
         For Each candidate As DeepScanCandidate In candidates.Values.OrderBy(Function(item) item.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -732,12 +740,7 @@ Public Class DetectionService
                 End If
             End If
 
-            Dim executables As IEnumerable(Of String) = Enumerable.Empty(Of String)()
-            Try
-                executables = Directory.EnumerateFiles(normalized, "*.exe", SearchOption.TopDirectoryOnly)
-            Catch ex As Exception
-                ErrorLogger.Log(ex, "DetectionService.ScanDriveRoot.EnumerateExe")
-            End Try
+            Dim executables As List(Of String) = SafeEnumerateFiles(normalized, "*.exe", SearchOption.TopDirectoryOnly, "DetectionService.ScanDriveRoot.EnumerateExe")
 
             For Each exePath As String In executables
                 Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
@@ -768,12 +771,7 @@ Public Class DetectionService
                 Continue While
             End If
 
-            Dim children As IEnumerable(Of String) = Enumerable.Empty(Of String)()
-            Try
-                children = Directory.EnumerateDirectories(normalized, "*", SearchOption.TopDirectoryOnly)
-            Catch ex As Exception
-                ErrorLogger.Log(ex, "DetectionService.ScanDriveRoot.EnumerateDirs")
-            End Try
+            Dim children As List(Of String) = SafeEnumerateDirectories(normalized, "*", SearchOption.TopDirectoryOnly, "DetectionService.ScanDriveRoot.EnumerateDirs")
 
             For Each child As String In children
                 Dim childName As String = Path.GetFileName(child)
@@ -831,6 +829,38 @@ Public Class DetectionService
                  .RootsCompleted = Math.Min(Math.Max(1, totalRoots), completedRoots)
                  })
     End Sub
+
+    Private Shared Function SafeEnumerateFiles(folderPath As String,
+                                               searchPattern As String,
+                                               searchOption As SearchOption,
+                                               context As String) As List(Of String)
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return New List(Of String)()
+        End If
+
+        Try
+            Return Directory.EnumerateFiles(folderPath, searchPattern, searchOption).ToList()
+        Catch ex As Exception
+            ErrorLogger.Log(ex, context)
+            Return New List(Of String)()
+        End Try
+    End Function
+
+    Private Shared Function SafeEnumerateDirectories(folderPath As String,
+                                                     searchPattern As String,
+                                                     searchOption As SearchOption,
+                                                     context As String) As List(Of String)
+        If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
+            Return New List(Of String)()
+        End If
+
+        Try
+            Return Directory.EnumerateDirectories(folderPath, searchPattern, searchOption).ToList()
+        Catch ex As Exception
+            ErrorLogger.Log(ex, context)
+            Return New List(Of String)()
+        End Try
+    End Function
 
     Private Shared Function ResolveMatchedFolderInstallDir(folderPath As String) As String
         If String.IsNullOrWhiteSpace(folderPath) OrElse Not Directory.Exists(folderPath) Then
@@ -891,13 +921,7 @@ Public Class DetectionService
                 Continue For
             End If
 
-            Dim children As IEnumerable(Of String) = Enumerable.Empty(Of String)()
-            Try
-                children = Directory.EnumerateDirectories(normalizedContainer, "*", SearchOption.TopDirectoryOnly)
-            Catch ex As Exception
-                ErrorLogger.Log(ex, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateChildren")
-                Continue For
-            End Try
+            Dim children As List(Of String) = SafeEnumerateDirectories(normalizedContainer, "*", SearchOption.TopDirectoryOnly, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateChildren")
 
             For Each child As String In children
                 Dim normalizedChild As String = NormalizeInstallPath(child)
@@ -909,13 +933,7 @@ Public Class DetectionService
                     Return normalizedChild
                 End If
 
-                Dim grandChildren As IEnumerable(Of String) = Enumerable.Empty(Of String)()
-                Try
-                    grandChildren = Directory.EnumerateDirectories(normalizedChild, "*", SearchOption.TopDirectoryOnly)
-                Catch ex As Exception
-                    ErrorLogger.Log(ex, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateGrandChildren")
-                    Continue For
-                End Try
+                Dim grandChildren As List(Of String) = SafeEnumerateDirectories(normalizedChild, "*", SearchOption.TopDirectoryOnly, "DetectionService.ProbeCommonExecutableSubfolders.EnumerateGrandChildren")
 
                 For Each grandChild As String In grandChildren
                     Dim normalizedGrandChild As String = NormalizeInstallPath(grandChild)
@@ -938,16 +956,12 @@ Public Class DetectionService
             Return False
         End If
 
-        Try
-            For Each exePath As String In Directory.EnumerateFiles(folderPath, "*.exe", SearchOption.TopDirectoryOnly)
-                Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
-                If Not ShouldSkipExecutable(exeName) Then
-                    Return True
-                End If
-            Next
-        Catch ex As Exception
-            ErrorLogger.Log(ex, "DetectionService.HasUsableExecutable")
-        End Try
+        For Each exePath As String In SafeEnumerateFiles(folderPath, "*.exe", SearchOption.TopDirectoryOnly, "DetectionService.HasUsableExecutable")
+            Dim exeName As String = Path.GetFileNameWithoutExtension(exePath)
+            If Not ShouldSkipExecutable(exeName) Then
+                Return True
+            End If
+        Next
 
         Return False
     End Function
