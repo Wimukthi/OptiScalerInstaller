@@ -154,6 +154,7 @@ INI Editor:
 
 ## Version History
 
+- v1.1.5.7 - Harden deep-scan detection against corrupt or unreadable folders by materializing file/folder enumeration inside exception handling and isolating per-drive scan failures so one bad directory no longer aborts the whole scan.
 - v1.1.5.2 - Consolidate HTTP client across services to avoid socket exhaustion and add centralized retry, move WMI GPU detection off the UI thread for faster startup, debounce game-search and game-folder text inputs for snappier filtering, fix compatibility list parsing to handle the remote wiki table format and reject anchor/section-anchor cross-references, add cache-preservation guards that reject suspiciously-low parse counts on remote list refreshes, and broaden anti-cheat detection (deeper folder scan, tighter Riot Vanguard tokens to prevent false positives, EAC `start_protected_game` bootstrapper coverage, and PunkBuster signatures).
 - v1.1.4.5 - Fix detected-game install hangs by removing UI-thread blocking during game-profile refresh, treat missing wiki profile pages (404) as non-fatal during profile fetch, and harden wiki profile URL path handling.
 - v1.1.4.3 - Add local `GameProfiles.json` catalog + profile service integration, settings for profile catalog URL and startup profile refresh, and automatic profile-driven install-option application so detected game-specific defaults are applied from local profile data with offline-first behavior.
