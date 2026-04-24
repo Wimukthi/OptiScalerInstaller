@@ -30,6 +30,10 @@ Friend Class frmIniEditor
     Private _ignoreEvents As Boolean
     Private _isDarkTheme As Boolean
     Private ReadOnly _collapsedSections As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+    Private ReadOnly _validationCache As New Dictionary(Of String, IniValidationResult)(StringComparer.OrdinalIgnoreCase)
+    Private ReadOnly _dirtyKeys As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+    Private _filterDebounceTimer As Timer
+    Private _rowContextMenu As ContextMenuStrip
 
     <Browsable(False), DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)>
     Public Property WasSaved As Boolean
@@ -50,7 +54,39 @@ Friend Class frmIniEditor
         ThemeManager.ApplyTheme(Me, ThemeSettings.GetPreferredColorMode())
         ApplyGridTheme()
         LockGridSorting()
+        InitializeDebounceTimer()
+        InitializeRowContextMenu()
+        InitializePlaceholders()
+        KeyPreview = True
         LoadDocumentFromDisk()
+    End Sub
+
+    Private Sub InitializeDebounceTimer()
+        _filterDebounceTimer = New Timer() With {.Interval = 250}
+        AddHandler _filterDebounceTimer.Tick, Sub(sender, e)
+                                                  _filterDebounceTimer.Stop()
+                                                  RebuildGrid()
+                                              End Sub
+    End Sub
+
+    Private Sub InitializeRowContextMenu()
+        _rowContextMenu = New ContextMenuStrip()
+        Dim resetItem As New ToolStripMenuItem("Reset to default")
+        AddHandler resetItem.Click, AddressOf ResetSelectedRowToDefault
+        _rowContextMenu.Items.Add(resetItem)
+        Dim copyKeyItem As New ToolStripMenuItem("Copy key name")
+        AddHandler copyKeyItem.Click, AddressOf CopySelectedRowKeyName
+        _rowContextMenu.Items.Add(copyKeyItem)
+        dgvSettings.ContextMenuStrip = _rowContextMenu
+        AddHandler _rowContextMenu.Opening, AddressOf OnRowContextMenuOpening
+    End Sub
+
+    Private Sub InitializePlaceholders()
+        Try
+            txtFilter.PlaceholderText = "Search section, key, value, or description..."
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmIniEditor.InitializePlaceholders")
+        End Try
     End Sub
 
     Private Sub LoadDocumentFromDisk()
@@ -59,6 +95,8 @@ Friend Class frmIniEditor
             _document = IniDocument.Load(_iniPath)
             _originalText = _document.ToText()
             _originalValues = BuildValueMap(_document)
+            _dirtyKeys.Clear()
+            _validationCache.Clear()
             lblIniPathValue.Text = _iniPath
             txtFilter.Text = ""
             chkKnownOnly.Checked = False
@@ -121,13 +159,83 @@ Friend Class frmIniEditor
             selectedSection = "All sections"
         End If
 
+        ' Capture current view state before rebuilding so we can restore it.
+        Dim previousSelectedMapKey As String = ""
+        If dgvSettings.SelectedRows.Count > 0 Then
+            Dim previousModel As IniGridRowModel = TryCast(dgvSettings.SelectedRows(0).Tag, IniGridRowModel)
+            If previousModel IsNot Nothing AndAlso Not previousModel.IsSectionHeader Then
+                previousSelectedMapKey = BuildMapKey(previousModel.Section, previousModel.Key)
+            End If
+        End If
+        Dim previousFirstDisplayedRow As Integer = dgvSettings.FirstDisplayedScrollingRowIndex
+
+        Dim finalRows As List(Of IniGridRowModel) = BuildFilteredRowModels(searchText, knownOnly, selectedSection)
+        Dim showHeaders As Boolean = selectedSection.Equals("All sections", StringComparison.OrdinalIgnoreCase)
+        Dim suppressSectionNamesInRows As Boolean = showHeaders OrElse Not selectedSection.Equals("All sections", StringComparison.OrdinalIgnoreCase)
+
+        ' Build all DataGridView rows up front, then add in one batch.
+        Dim newRows As New List(Of DataGridViewRow)(Math.Max(finalRows.Count, 0))
+        For i As Integer = 0 To finalRows.Count - 1
+            Dim rowData As IniGridRowModel = finalRows(i)
+            Dim sectionCellText As String = rowData.Section
+            If suppressSectionNamesInRows AndAlso Not rowData.IsSectionHeader Then
+                sectionCellText = ""
+            End If
+
+            Dim newRow As New DataGridViewRow()
+            newRow.CreateCells(dgvSettings,
+                               If(rowData.IsSectionHeader, rowData.DisplaySection, sectionCellText),
+                               rowData.Key,
+                               rowData.Value,
+                               If(rowData.IsSectionHeader, "Section", If(rowData.Known, "Known", "Custom")),
+                               "",
+                               BuildDescriptionSummary(rowData.Description))
+            newRow.Tag = rowData
+            newRows.Add(newRow)
+        Next
+
+        Dim previousIgnoreEvents As Boolean = _ignoreEvents
+        Dim layoutSuspended As Boolean = False
+        _ignoreEvents = True
+        Try
+            dgvSettings.SuspendLayout()
+            layoutSuspended = True
+            dgvSettings.Rows.Clear()
+            If newRows.Count > 0 Then
+                dgvSettings.Rows.AddRange(newRows.ToArray())
+            End If
+
+            ' Replace Value cell with ComboBox where the setting has enumerable allowed values.
+            For Each row As DataGridViewRow In dgvSettings.Rows
+                Dim rowData As IniGridRowModel = TryCast(row.Tag, IniGridRowModel)
+                If rowData Is Nothing OrElse rowData.IsSectionHeader Then
+                    Continue For
+                End If
+
+                ApplyValueCellEditor(row, rowData)
+                UpdateRowState(row)
+            Next
+
+            RestoreGridViewState(previousSelectedMapKey, previousFirstDisplayedRow)
+        Finally
+            If layoutSuspended Then
+                dgvSettings.ResumeLayout()
+            End If
+            _ignoreEvents = previousIgnoreEvents
+        End Try
+
+        UpdateSelectionDetails()
+    End Sub
+
+    Private Function BuildFilteredRowModels(searchText As String,
+                                            knownOnly As Boolean,
+                                            selectedSection As String) As List(Of IniGridRowModel)
         Dim currentValues As Dictionary(Of String, String) = BuildValueMap(_document)
         Dim pending As New Dictionary(Of String, String)(currentValues, StringComparer.OrdinalIgnoreCase)
 
         Dim rows As New List(Of IniGridRowModel)()
 
-        For Each setting As IniSettingDefinition In _knownSettings.OrderBy(Function(item) item.Section, StringComparer.OrdinalIgnoreCase).
-                                                            ThenBy(Function(item) item.Key, StringComparer.OrdinalIgnoreCase)
+        For Each setting As IniSettingDefinition In _knownSettings
             Dim mapKey As String = BuildMapKey(setting.Section, setting.Key)
             Dim value As String = ""
             If pending.TryGetValue(mapKey, value) Then
@@ -218,46 +326,125 @@ Friend Class frmIniEditor
                 ThenBy(Function(row) row.Key, StringComparer.OrdinalIgnoreCase))
         End If
 
-        dgvSettings.SuspendLayout()
-        dgvSettings.Rows.Clear()
-        Dim suppressSectionNamesInRows As Boolean = showHeaders OrElse Not selectedSection.Equals("All sections", StringComparison.OrdinalIgnoreCase)
-        For Each rowData As IniGridRowModel In finalRows
-            Dim sectionCellText As String = rowData.Section
-            If suppressSectionNamesInRows AndAlso Not rowData.IsSectionHeader Then
-                sectionCellText = ""
-            End If
+        Return finalRows
+    End Function
 
-            Dim rowIndex As Integer = dgvSettings.Rows.Add(If(rowData.IsSectionHeader, rowData.DisplaySection, sectionCellText),
-                                                           rowData.Key,
-                                                           rowData.Value,
-                                                           If(rowData.IsSectionHeader, "Section", If(rowData.Known, "Known", "Custom")),
-                                                           "",
-                                                           BuildDescriptionSummary(rowData.Description))
-            Dim row As DataGridViewRow = dgvSettings.Rows(rowIndex)
-            row.Tag = rowData
-            UpdateRowState(row)
+    Private Sub ApplyValueCellEditor(row As DataGridViewRow, rowData As IniGridRowModel)
+        Dim enumValues As String() = GetEnumValues(rowData.AllowedValues)
+        If enumValues Is Nothing OrElse enumValues.Length = 0 Then
+            Return
+        End If
+
+        Dim comboCell As New DataGridViewComboBoxCell()
+        comboCell.FlatStyle = FlatStyle.Flat
+        For Each token As String In enumValues
+            comboCell.Items.Add(token)
         Next
 
-        If dgvSettings.Rows.Count > 0 Then
-            Dim selected As Boolean = False
-            For Each row As DataGridViewRow In dgvSettings.Rows
-                Dim model As IniGridRowModel = TryCast(row.Tag, IniGridRowModel)
-                If model IsNot Nothing AndAlso Not model.IsSectionHeader Then
-                    row.Selected = True
-                    dgvSettings.CurrentCell = row.Cells(colValue.Index)
-                    selected = True
+        Dim currentValue As String = If(rowData.Value, "")
+        If Not String.IsNullOrWhiteSpace(currentValue) AndAlso Not ContainsOrdinalIgnoreCase(enumValues, currentValue) Then
+            comboCell.Items.Add(currentValue)
+        End If
+
+        comboCell.Value = currentValue
+        row.Cells(colValue.Index) = comboCell
+    End Sub
+
+    Private Function GetEnumValues(allowedValues As String) As String()
+        Dim trimmed As String = If(allowedValues, "").Trim()
+        If String.IsNullOrWhiteSpace(trimmed) Then
+            Return Nothing
+        End If
+
+        ' Numeric ranges aren't enums.
+        If trimmed.StartsWith("Range:", StringComparison.OrdinalIgnoreCase) Then
+            Return Nothing
+        End If
+
+        Dim tokens As String() = trimmed.
+            Split(","c).
+            Select(Function(part) part.Trim()).
+            Where(Function(part) part.Length > 0).
+            ToArray()
+
+        If tokens.Length < 2 Then
+            Return Nothing
+        End If
+
+        Return tokens
+    End Function
+
+    Private Function ContainsOrdinalIgnoreCase(values As String(), candidate As String) As Boolean
+        If values Is Nothing Then
+            Return False
+        End If
+        For Each value As String In values
+            If String.Equals(value, candidate, StringComparison.OrdinalIgnoreCase) Then
+                Return True
+            End If
+        Next
+        Return False
+    End Function
+
+    Private Sub RestoreGridViewState(selectedMapKey As String, previousFirstDisplayedRow As Integer)
+        If dgvSettings.Rows.Count = 0 Then
+            Return
+        End If
+
+        Dim targetRowIndex As Integer = -1
+        If Not String.IsNullOrWhiteSpace(selectedMapKey) Then
+            For i As Integer = 0 To dgvSettings.Rows.Count - 1
+                Dim model As IniGridRowModel = TryCast(dgvSettings.Rows(i).Tag, IniGridRowModel)
+                If model IsNot Nothing AndAlso Not model.IsSectionHeader AndAlso
+                   BuildMapKey(model.Section, model.Key).Equals(selectedMapKey, StringComparison.OrdinalIgnoreCase) Then
+                    targetRowIndex = i
                     Exit For
                 End If
             Next
-
-            If Not selected Then
-                dgvSettings.ClearSelection()
-                dgvSettings.Rows(0).Selected = True
-            End If
         End If
 
-        dgvSettings.ResumeLayout()
-        UpdateSelectionDetails()
+        If targetRowIndex < 0 Then
+            For i As Integer = 0 To dgvSettings.Rows.Count - 1
+                Dim model As IniGridRowModel = TryCast(dgvSettings.Rows(i).Tag, IniGridRowModel)
+                If model IsNot Nothing AndAlso Not model.IsSectionHeader Then
+                    targetRowIndex = i
+                    Exit For
+                End If
+            Next
+        End If
+
+        If targetRowIndex < 0 Then
+            dgvSettings.ClearSelection()
+            dgvSettings.Rows(0).Selected = True
+            Return
+        End If
+
+        dgvSettings.ClearSelection()
+        dgvSettings.Rows(targetRowIndex).Selected = True
+        Try
+            dgvSettings.CurrentCell = dgvSettings.Rows(targetRowIndex).Cells(colValue.Index)
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmIniEditor.RestoreGridViewState.CurrentCell")
+        End Try
+
+        ' Prefer preserving the previous scroll offset. Fall back to keeping the
+        ' selected row visible if the previous offset no longer exists.
+        If previousFirstDisplayedRow >= 0 AndAlso previousFirstDisplayedRow < dgvSettings.Rows.Count Then
+            Try
+                dgvSettings.FirstDisplayedScrollingRowIndex = previousFirstDisplayedRow
+                Return
+            Catch ex As Exception
+                ' Some row states (e.g. not visible) can't be the first displayed row.
+            End Try
+        End If
+
+        Try
+            If Not dgvSettings.Rows(targetRowIndex).Displayed Then
+                dgvSettings.FirstDisplayedScrollingRowIndex = targetRowIndex
+            End If
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmIniEditor.RestoreGridViewState.Scroll")
+        End Try
     End Sub
 
     Private Sub ApplyGridTheme()
@@ -347,7 +534,7 @@ Friend Class frmIniEditor
             row.DefaultCellStyle.BackColor = If(_isDarkTheme, Color.FromArgb(32, 32, 32), SystemColors.Window)
         End If
 
-        Dim validation As IniValidationResult = OptiScalerIniEditorService.Validate(model.Section, model.Key, currentValue)
+        Dim validation As IniValidationResult = GetCachedValidation(model.Section, model.Key, currentValue)
         row.Cells(colValidation.Index).Value = If(String.IsNullOrWhiteSpace(validation.Message), "OK", validation.Message)
         Select Case validation.Severity
             Case IniValidationSeverity.ErrorLevel
@@ -363,6 +550,17 @@ Friend Class frmIniEditor
 
     Private Function BuildMapKey(section As String, key As String) As String
         Return $"{If(section, "").Trim()}|{If(key, "").Trim()}"
+    End Function
+
+    Private Function GetCachedValidation(section As String, key As String, value As String) As IniValidationResult
+        Dim cacheKey As String = $"{If(section, "").Trim()}|{If(key, "").Trim()}|{If(value, "")}"
+        Dim cached As IniValidationResult = Nothing
+        If _validationCache.TryGetValue(cacheKey, cached) Then
+            Return cached
+        End If
+        cached = OptiScalerIniEditorService.Validate(section, key, value)
+        _validationCache(cacheKey) = cached
+        Return cached
     End Function
 
     Private Function BuildDescriptionSummary(description As String) As String
@@ -429,8 +627,53 @@ Friend Class frmIniEditor
             Return Not String.Equals(txtRaw.Text, _originalText, StringComparison.Ordinal)
         End If
 
-        Return Not String.Equals(_document.ToText(), _originalText, StringComparison.Ordinal)
+        Return _dirtyKeys.Count > 0
     End Function
+
+    Private Sub RecomputeDirtyKeysFromDocument()
+        _dirtyKeys.Clear()
+        If _document Is Nothing Then
+            Return
+        End If
+
+        Dim currentValues As Dictionary(Of String, String) = BuildValueMap(_document)
+        For Each kvp As KeyValuePair(Of String, String) In currentValues
+            Dim originalValue As String = ""
+            Dim hadOriginal As Boolean = _originalValues.TryGetValue(kvp.Key, originalValue)
+            If hadOriginal Then
+                If Not String.Equals(originalValue, kvp.Value, StringComparison.Ordinal) Then
+                    _dirtyKeys.Add(kvp.Key)
+                End If
+            ElseIf Not String.IsNullOrWhiteSpace(kvp.Value) Then
+                _dirtyKeys.Add(kvp.Key)
+            End If
+        Next
+
+        For Each originalKey As String In _originalValues.Keys
+            If Not currentValues.ContainsKey(originalKey) Then
+                If Not String.IsNullOrWhiteSpace(_originalValues(originalKey)) Then
+                    _dirtyKeys.Add(originalKey)
+                End If
+            End If
+        Next
+    End Sub
+
+    Private Sub UpdateDirtyKeyForEdit(mapKey As String, newValue As String)
+        Dim originalValue As String = ""
+        Dim hadOriginal As Boolean = _originalValues.TryGetValue(mapKey, originalValue)
+        Dim keyIsDirty As Boolean
+        If hadOriginal Then
+            keyIsDirty = Not String.Equals(originalValue, If(newValue, ""), StringComparison.Ordinal)
+        Else
+            keyIsDirty = Not String.IsNullOrWhiteSpace(newValue)
+        End If
+
+        If keyIsDirty Then
+            _dirtyKeys.Add(mapKey)
+        Else
+            _dirtyKeys.Remove(mapKey)
+        End If
+    End Sub
 
     Private Function TryApplyRawToDocument() As Boolean
         Try
@@ -460,6 +703,7 @@ Friend Class frmIniEditor
             OptiScalerIniEditorService.SaveTextAtomically(_iniPath, currentText)
             _originalText = currentText
             _originalValues = BuildValueMap(_document)
+            _dirtyKeys.Clear()
             WasSaved = True
             SetDirty(False)
             RebuildGrid()
@@ -522,7 +766,8 @@ Friend Class frmIniEditor
         If _ignoreEvents Then
             Return
         End If
-        RebuildGrid()
+        _filterDebounceTimer.Stop()
+        _filterDebounceTimer.Start()
     End Sub
 
     Private Sub chkKnownOnly_CheckedChanged(sender As Object, e As EventArgs) Handles chkKnownOnly.CheckedChanged
@@ -535,9 +780,6 @@ Friend Class frmIniEditor
     Private Sub cmbSectionFilter_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbSectionFilter.SelectedIndexChanged
         If _ignoreEvents Then
             Return
-        End If
-        If cmbSectionFilter.SelectedIndex > 0 Then
-            _collapsedSections.Clear()
         End If
         RebuildGrid()
     End Sub
@@ -634,6 +876,7 @@ Friend Class frmIniEditor
         row.Cells(colValue.Index).Value = model.Value
 
         _document.SetValue(model.Section, model.Key, model.Value)
+        UpdateDirtyKeyForEdit(BuildMapKey(model.Section, model.Key), model.Value)
         UpdateRowState(row)
         SetDirty(IsCurrentStateDirty())
         UpdateSelectionDetails()
@@ -660,6 +903,8 @@ Friend Class frmIniEditor
                 Return
             End If
 
+            RecomputeDirtyKeysFromDocument()
+            _validationCache.Clear()
             RebuildGrid()
             SetDirty(IsCurrentStateDirty())
         End If
@@ -689,6 +934,8 @@ Friend Class frmIniEditor
 
         _ignoreEvents = True
         _document = IniDocument.Parse(_originalText)
+        _dirtyKeys.Clear()
+        _validationCache.Clear()
         RebuildGrid()
         txtRaw.Text = _originalText
         _ignoreEvents = False
@@ -701,6 +948,7 @@ Friend Class frmIniEditor
 
     Private Sub frmIniEditor_FormClosing(sender As Object, e As FormClosingEventArgs) Handles Me.FormClosing
         If Not _isDirty Then
+            DisposeEditorResources()
             Return
         End If
 
@@ -717,5 +965,110 @@ Friend Class frmIniEditor
         If result = DialogResult.Yes Then
             e.Cancel = Not SaveCurrent()
         End If
+
+        If Not e.Cancel Then
+            DisposeEditorResources()
+        End If
+    End Sub
+
+    Private Sub DisposeEditorResources()
+        If _filterDebounceTimer IsNot Nothing Then
+            _filterDebounceTimer.Stop()
+            _filterDebounceTimer.Dispose()
+            _filterDebounceTimer = Nothing
+        End If
+        If _rowContextMenu IsNot Nothing Then
+            _rowContextMenu.Dispose()
+            _rowContextMenu = Nothing
+        End If
+    End Sub
+
+    Private Sub frmIniEditor_KeyDown(sender As Object, e As KeyEventArgs) Handles Me.KeyDown
+        If e.Control AndAlso e.KeyCode = Keys.S Then
+            If btnSave.Enabled Then
+                SaveCurrent()
+            End If
+            e.Handled = True
+            e.SuppressKeyPress = True
+            Return
+        End If
+
+        If e.Control AndAlso e.KeyCode = Keys.F Then
+            txtFilter.Focus()
+            txtFilter.SelectAll()
+            e.Handled = True
+            e.SuppressKeyPress = True
+            Return
+        End If
+
+        If e.KeyCode = Keys.F5 Then
+            btnReload.PerformClick()
+            e.Handled = True
+            e.SuppressKeyPress = True
+            Return
+        End If
+
+        If e.KeyCode = Keys.Escape AndAlso txtFilter.Focused AndAlso txtFilter.Text.Length > 0 Then
+            txtFilter.Text = ""
+            e.Handled = True
+            e.SuppressKeyPress = True
+            Return
+        End If
+    End Sub
+
+    Private Sub OnRowContextMenuOpening(sender As Object, e As CancelEventArgs)
+        Dim model As IniGridRowModel = GetSelectedRowModel()
+        Dim enable As Boolean = model IsNot Nothing AndAlso Not model.IsSectionHeader
+        For Each item As ToolStripItem In _rowContextMenu.Items
+            item.Enabled = enable
+        Next
+    End Sub
+
+    Private Function GetSelectedRowModel() As IniGridRowModel
+        If dgvSettings.SelectedRows.Count = 0 Then
+            Return Nothing
+        End If
+        Return TryCast(dgvSettings.SelectedRows(0).Tag, IniGridRowModel)
+    End Function
+
+    Private Sub ResetSelectedRowToDefault(sender As Object, e As EventArgs)
+        If dgvSettings.SelectedRows.Count = 0 Then
+            Return
+        End If
+
+        Dim row As DataGridViewRow = dgvSettings.SelectedRows(0)
+        Dim model As IniGridRowModel = TryCast(row.Tag, IniGridRowModel)
+        If model Is Nothing OrElse model.IsSectionHeader Then
+            Return
+        End If
+
+        Dim defaultValue As String = If(model.DefaultValue, "").Trim()
+        model.Value = defaultValue
+        Dim valueCell As DataGridViewCell = row.Cells(colValue.Index)
+        Dim comboCell As DataGridViewComboBoxCell = TryCast(valueCell, DataGridViewComboBoxCell)
+        If comboCell IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(defaultValue) AndAlso
+           Not comboCell.Items.Contains(defaultValue) Then
+            comboCell.Items.Add(defaultValue)
+        End If
+        valueCell.Value = defaultValue
+
+        _document.SetValue(model.Section, model.Key, defaultValue)
+        UpdateDirtyKeyForEdit(BuildMapKey(model.Section, model.Key), defaultValue)
+        UpdateRowState(row)
+        SetDirty(IsCurrentStateDirty())
+        UpdateSelectionDetails()
+    End Sub
+
+    Private Sub CopySelectedRowKeyName(sender As Object, e As EventArgs)
+        Dim model As IniGridRowModel = GetSelectedRowModel()
+        If model Is Nothing OrElse model.IsSectionHeader OrElse String.IsNullOrWhiteSpace(model.Key) Then
+            Return
+        End If
+
+        Try
+            Clipboard.SetText($"[{model.Section}] {model.Key}")
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "frmIniEditor.CopySelectedRowKeyName")
+        End Try
     End Sub
 End Class

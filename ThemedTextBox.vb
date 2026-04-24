@@ -102,6 +102,16 @@ Friend Class ThemedTextBox
         End Set
     End Property
 
+    <Browsable(True), DefaultValue("")>
+    Public Property PlaceholderText As String
+        Get
+            Return _textBox.PlaceholderText
+        End Get
+        Set(value As String)
+            _textBox.PlaceholderText = If(value, "")
+        End Set
+    End Property
+
     <Browsable(True), DefaultValue(GetType(Color), "ControlDark")>
     Public Property BorderColor As Color
         Get
@@ -130,6 +140,10 @@ Friend Class ThemedTextBox
 
     Public Sub Clear()
         _textBox.Clear()
+    End Sub
+
+    Public Sub SelectAll()
+        _textBox.SelectAll()
     End Sub
 
     Public Sub ScrollToEnd()
