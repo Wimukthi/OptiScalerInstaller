@@ -154,6 +154,7 @@ INI Editor:
 
 ## Version History
 
+- v1.1.5.9 - Fix Markdown wiki-link parsing for compatibility entries whose game names or page slugs contain parentheses, preventing truncated wiki URLs such as `Dead-Space-(2023`.
 - v1.1.5.8 - Improve INI editor responsiveness and keyboard shortcuts, and render updater release notes as themed rich text with Markdown headings, lists, code formatting, and clickable links.
 - v1.1.5.7 - Harden deep-scan detection against corrupt or unreadable folders by materializing file/folder enumeration inside exception handling and isolating per-drive scan failures so one bad directory no longer aborts the whole scan.
 - v1.1.5.2 - Consolidate HTTP client across services to avoid socket exhaustion and add centralized retry, move WMI GPU detection off the UI thread for faster startup, debounce game-search and game-folder text inputs for snappier filtering, fix compatibility list parsing to handle the remote wiki table format and reject anchor/section-anchor cross-references, add cache-preservation guards that reject suspiciously-low parse counts on remote list refreshes, and broaden anti-cheat detection (deeper folder scan, tighter Riot Vanguard tokens to prevent false positives, EAC `start_protected_game` bootstrapper coverage, and PunkBuster signatures).
