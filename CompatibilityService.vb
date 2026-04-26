@@ -1,6 +1,5 @@
 Imports System.IO
 Imports System.Text.Json
-Imports System.Text.RegularExpressions
 
 Public Class CompatibilityService
     ' Loads, caches, and parses the OptiScaler compatibility list.
@@ -85,7 +84,6 @@ Public Class CompatibilityService
         ' Handles both table format (remote wiki) and standalone link format (bundled file).
         ' Only extracts game links from the name column/position to avoid cross-references.
         Dim entries As New List(Of CompatibilityEntry)()
-        Dim linkRegex As New Regex("\[(.*?)\]\((.*?)\)")
 
         For Each rawLine As String In content.Split({ControlChars.CrLf, ControlChars.Lf}, StringSplitOptions.None)
             Dim line As String = rawLine.Trim()
@@ -120,13 +118,13 @@ Public Class CompatibilityService
                 Continue For
             End If
 
-            Dim match As Match = linkRegex.Match(nameCell)
-            If Not match.Success Then
+            Dim link As New MarkdownLink()
+            If Not MarkdownLinkParser.TryGetFirstLink(nameCell, link) Then
                 Continue For
             End If
 
-            Dim name As String = match.Groups(1).Value.Trim()
-            Dim slug As String = match.Groups(2).Value.Trim()
+            Dim name As String = If(link.Text, "").Trim()
+            Dim slug As String = If(link.Target, "").Trim()
 
             If String.IsNullOrWhiteSpace(name) OrElse String.IsNullOrWhiteSpace(slug) Then
                 Continue For

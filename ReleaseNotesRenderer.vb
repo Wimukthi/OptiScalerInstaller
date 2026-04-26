@@ -205,26 +205,10 @@ Friend Module ReleaseNotesRenderer
             Return String.Empty
         End If
 
-        Dim text As String = value.Trim()
+        Dim text As String = MarkdownLinkParser.ReplaceInlineLinks(value.Trim())
         text = Regex.Replace(text, "<(https?://[^>\s]+)>", "$1", RegexOptions.IgnoreCase Or RegexOptions.CultureInvariant)
-        text = Regex.Replace(text, "!\[([^\]]*)\]\(([^)]+)\)", AddressOf ReplaceMarkdownLink, RegexOptions.CultureInvariant)
-        text = Regex.Replace(text, "\[([^\]]+)\]\(([^)]+)\)", AddressOf ReplaceMarkdownLink, RegexOptions.CultureInvariant)
         text = text.Replace("\*", "*").Replace("\_", "_").Replace("\`", "`").Replace("\[", "[").Replace("\]", "]")
         Return text
-    End Function
-
-    Private Function ReplaceMarkdownLink(match As Match) As String
-        Dim caption As String = match.Groups(1).Value.Trim()
-        Dim url As String = match.Groups(2).Value.Trim()
-
-        If String.IsNullOrWhiteSpace(caption) Then
-            Return url
-        End If
-        If String.Equals(caption, url, StringComparison.OrdinalIgnoreCase) Then
-            Return url
-        End If
-
-        Return $"{caption} ({url})"
     End Function
 
     Private Function FindNextInlineMarker(text As String, startIndex As Integer) As Integer
