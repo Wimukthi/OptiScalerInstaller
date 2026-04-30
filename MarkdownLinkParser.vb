@@ -10,6 +10,10 @@ Friend Structure MarkdownLink
 End Structure
 
 Friend Module MarkdownLinkParser
+    Public Function UnescapeText(value As String) As String
+        Return UnescapeMarkdown(value)
+    End Function
+
     Public Function TryGetFirstLink(value As String, ByRef link As MarkdownLink, Optional allowImages As Boolean = False) As Boolean
         Dim startIndex As Integer = 0
         Dim linkStart As Integer = 0

@@ -19,6 +19,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Default install option presets (hook, GPU, DLSS inputs, frame generation, conflict mode).
 - Detect existing OptiScaler installs and offer update/reinstall/uninstall.
 - Compatibility refresh diff tracking (+added/-removed/~changed) with row highlighting.
+- Compatibility parser validation with JSON-feed support, Markdown fallback, and live-list release canary.
 - Per-game workaround template auto-apply on detected game selection.
 - Version-aware add-on behavior for newer OptiScaler builds (0.9+ bundled component handling).
 - Post-install verification report with INI and file checks.
@@ -55,6 +56,12 @@ Create release package (clean + staged zip):
 
 ```
 powershell -ExecutionPolicy Bypass -File .\scripts\BuildReleasePackage.ps1
+```
+
+Run compatibility parser fixtures and live-list canary:
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\TestCompatibilityParser.ps1 -Live
 ```
 
 ## Usage
@@ -154,6 +161,7 @@ INI Editor:
 
 ## Version History
 
+- v1.1.6.0 - Add a keep-existing-`OptiScaler.ini` option for updates/reinstalls, parse the full official compatibility list including plain table rows, add JSON compatibility feed support with parser diagnostics/cache validation, and gate release packaging with compatibility parser fixtures plus a live official-list canary.
 - v1.1.5.9 - Fix Markdown wiki-link parsing for compatibility entries whose game names or page slugs contain parentheses, preventing truncated wiki URLs such as `Dead-Space-(2023`.
 - v1.1.5.8 - Improve INI editor responsiveness and keyboard shortcuts, and render updater release notes as themed rich text with Markdown headings, lists, code formatting, and clickable links.
 - v1.1.5.7 - Harden deep-scan detection against corrupt or unreadable folders by materializing file/folder enumeration inside exception handling and isolating per-drive scan failures so one bad directory no longer aborts the whole scan.

@@ -125,6 +125,7 @@ Friend Class AppSettingsModel
     Public Property HighlightCompatibilityChanges As Boolean?
     Public Property DefaultIniMode As String
     Public Property DefaultIniPath As String
+    Public Property PreserveExistingIniOnUpdate As Boolean?
     Public Property ExperimentalFsr4PackageFolder As String
     Public Property ExperimentalFsr4EnableUpdate As Boolean?
     Public Property ExperimentalFsr4EnableAgility As Boolean?
@@ -236,6 +237,10 @@ Friend Class AppSettingsModel
         End If
         If String.IsNullOrWhiteSpace(DefaultIniPath) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultIniPath) Then
             DefaultIniPath = defaults.DefaultIniPath
+            changed = True
+        End If
+        If Not PreserveExistingIniOnUpdate.HasValue AndAlso defaults.PreserveExistingIniOnUpdate.HasValue Then
+            PreserveExistingIniOnUpdate = defaults.PreserveExistingIniOnUpdate
             changed = True
         End If
         If String.IsNullOrWhiteSpace(ExperimentalFsr4PackageFolder) AndAlso Not String.IsNullOrWhiteSpace(defaults.ExperimentalFsr4PackageFolder) Then

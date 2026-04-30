@@ -19,6 +19,9 @@ Screenshots/
 *.log
 *.tmp
 *.bak
+.dotnet/
+.nuget/
+Diagnostics/
 
 # OS
 Thumbs.db

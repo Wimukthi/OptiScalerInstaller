@@ -1205,28 +1205,42 @@ Public Class DetectionService
                     Continue For
                 End If
 
-                If Not exactMap.ContainsKey(entry.Name) Then
-                    exactMap(entry.Name) = entry
-                End If
+                AddEntryName(entry.Name, entry)
 
-                Dim normalized As String = NormalizeName(entry.Name)
-                If Not String.IsNullOrWhiteSpace(normalized) AndAlso Not normalizedMap.ContainsKey(normalized) Then
-                    normalizedMap(normalized) = entry
-                End If
-
-                Dim relaxed As String = NormalizeRelaxedName(entry.Name)
-                If Not String.IsNullOrWhiteSpace(relaxed) AndAlso Not relaxedMap.ContainsKey(relaxed) Then
-                    relaxedMap(relaxed) = entry
-                End If
-
-                Dim relaxedTokens As List(Of String) = NameNormalization.TokenizeRelaxed(entry.Name)
-                If relaxedTokens.Count > 0 Then
-                    relaxedTokenEntries.Add(New RelaxedTokenEntry With {
-                                           .Entry = entry,
-                                           .Tokens = relaxedTokens
-                    })
+                If entry.Aliases IsNot Nothing Then
+                    For Each aliasName As String In entry.Aliases
+                        AddEntryName(aliasName, entry)
+                    Next
                 End If
             Next
+        End Sub
+
+        Private Sub AddEntryName(name As String, entry As CompatibilityEntry)
+            If entry Is Nothing OrElse String.IsNullOrWhiteSpace(name) Then
+                Return
+            End If
+
+            If Not exactMap.ContainsKey(name) Then
+                exactMap(name) = entry
+            End If
+
+            Dim normalized As String = NormalizeName(name)
+            If Not String.IsNullOrWhiteSpace(normalized) AndAlso Not normalizedMap.ContainsKey(normalized) Then
+                normalizedMap(normalized) = entry
+            End If
+
+            Dim relaxed As String = NormalizeRelaxedName(name)
+            If Not String.IsNullOrWhiteSpace(relaxed) AndAlso Not relaxedMap.ContainsKey(relaxed) Then
+                relaxedMap(relaxed) = entry
+            End If
+
+            Dim relaxedTokens As List(Of String) = NameNormalization.TokenizeRelaxed(name)
+            If relaxedTokens.Count > 0 Then
+                relaxedTokenEntries.Add(New RelaxedTokenEntry With {
+                                       .Entry = entry,
+                                       .Tokens = relaxedTokens
+                })
+            End If
         End Sub
 
         Public Function Match(name As String) As CompatibilityEntry

@@ -288,6 +288,7 @@ Public Class MainForm
         chkCreateSpecialKMarker.Checked = True
         cmbHookName.SelectedIndex = 0
         cmbConflictMode.SelectedIndex = 0
+        chkPreserveIni.Checked = True
         cmbFgType.SelectedIndex = 0
         cmbDefaultIniMode.SelectedIndex = 0
         cmbDefaultPreset.SelectedIndex = 0
@@ -1717,7 +1718,7 @@ Public Class MainForm
             End If
 
             If action = InstallAction.Reinstall Then
-                Dim removed As Boolean = Await TryUninstallAsync(config.GameFolder, False)
+                Dim removed As Boolean = Await TryUninstallAsync(config.GameFolder, False, config.PreserveExistingIni)
                 If removed Then
                     AppendLog("Reinstalling OptiScaler...")
                 Else
@@ -1821,7 +1822,7 @@ Public Class MainForm
         End Try
     End Sub
 
-    Private Async Function TryUninstallAsync(gameFolder As String, showDialogs As Boolean) As Task(Of Boolean)
+    Private Async Function TryUninstallAsync(gameFolder As String, showDialogs As Boolean, Optional preserveExistingIni As Boolean = False) As Task(Of Boolean)
         If String.IsNullOrWhiteSpace(gameFolder) Then
             AppendLog("Uninstall skipped: no game folder selected.")
             If showDialogs Then
@@ -1830,7 +1831,7 @@ Public Class MainForm
             Return False
         End If
 
-        Dim removed As Boolean = Await InstallerService.UninstallAsync(gameFolder, AddressOf AppendLog)
+        Dim removed As Boolean = Await InstallerService.UninstallAsync(gameFolder, AddressOf AppendLog, preserveExistingIni)
         If showDialogs Then
             If removed Then
                 MessageBox.Show(Me, "OptiScaler removed from this folder.", "Uninstall Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -2080,12 +2081,19 @@ Public Class MainForm
             Return
         End If
 
-        Dim url As String = BuildWikiUrl(entry.Slug)
+        Dim slug As String = If(entry.Slug, "").Trim()
+        Dim url As String = BuildWikiUrl(If(String.IsNullOrWhiteSpace(slug), "Compatibility-List", slug))
         If String.IsNullOrWhiteSpace(url) Then
             MessageBox.Show(Me, "Wiki base URL is not set. Update it in Settings.", "Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
-        AppendLog("Opening wiki page: " & url)
+
+        If String.IsNullOrWhiteSpace(slug) Then
+            AppendLog("Opening compatibility list: " & url)
+        Else
+            AppendLog("Opening wiki page: " & url)
+        End If
+
         Process.Start(New ProcessStartInfo(url) With {.UseShellExecute = True})
     End Sub
 
@@ -2115,6 +2123,9 @@ Public Class MainForm
                 Next
 
                 AppendLog($"Compatibility sync: +{updateResult.AddedNames.Count} added, -{updateResult.RemovedNames.Count} removed, ~{updateResult.ChangedNames.Count} changed.")
+                If updateResult.Warnings IsNot Nothing AndAlso updateResult.Warnings.Count > 0 Then
+                    AppendLog("Compatibility parser warnings: " & String.Join(" ", updateResult.Warnings.Take(3)))
+                End If
 
                 If updateResult.AddedNames.Count > 0 Then
                     AppendLog("Added entries: " & String.Join(", ", updateResult.AddedNames.Take(8)))
@@ -4200,6 +4211,7 @@ Public Class MainForm
         summary.AppendLine("GPU selection: " & If(config.GpuVendor = GpuVendor.AmdIntel, "AMD/Intel", "NVIDIA"))
         summary.AppendLine("Frame generation: " & config.FgType.ToString())
         summary.AppendLine("Add-ons: " & If(addOns.Count = 0, "None", String.Join(", ", addOns)))
+        summary.AppendLine("Keep existing OptiScaler.ini: " & If(config.PreserveExistingIni, "Yes", "No"))
         summary.AppendLine("Install OptiPatcher: " & patcherLine)
         summary.AppendLine()
         summary.AppendLine("Proceed?")
@@ -4853,6 +4865,7 @@ Public Class MainForm
 
         Dim conflictMode As ConflictMode = GetConflictModeFromIndex(GetDefaultConflictModeIndex(If(settings?.DefaultConflictMode, "")))
         Dim defaultIniMode As DefaultIniMode = ParseDefaultIniMode(If(settings?.DefaultIniMode, ""))
+        Dim preserveExistingIni As Boolean = If(settings IsNot Nothing AndAlso settings.PreserveExistingIniOnUpdate.HasValue, settings.PreserveExistingIniOnUpdate.Value, True)
 
         Return New InstallerConfig With {
             .GameExePath = normalizedExe,
@@ -4878,7 +4891,8 @@ Public Class MainForm
             .LoadAsiPlugins = False,
             .PluginsPath = "",
             .DefaultIniMode = defaultIniMode,
-            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath)
+            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath),
+            .PreserveExistingIni = preserveExistingIni
         }
     End Function
 
@@ -4990,7 +5004,8 @@ Public Class MainForm
             .LoadAsiPlugins = chkLoadAsiPlugins.Checked,
             .PluginsPath = txtPluginsPath.Text,
             .DefaultIniMode = defaultIniMode,
-            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath)
+            .DefaultIniPath = If(settings Is Nothing, "", settings.DefaultIniPath),
+            .PreserveExistingIni = chkPreserveIni.Checked
         }
     End Function
 
@@ -5090,6 +5105,17 @@ Public Class MainForm
         UpdateExperimentalTabAvailability(True)
     End Sub
 
+    Private Sub chkPreserveIni_CheckedChanged(sender As Object, e As EventArgs) Handles chkPreserveIni.CheckedChanged
+        If loadingSettingsUi Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        settings.PreserveExistingIniOnUpdate = chkPreserveIni.Checked
+        AppSettings.Save(settings)
+        AppendLog("Keep existing OptiScaler.ini set to " & If(chkPreserveIni.Checked, "On", "Off") & ".")
+    End Sub
+
     Private Sub btnSaveSettings_Click(sender As Object, e As EventArgs) Handles btnSaveSettings.Click
         Dim settings As AppSettingsModel = AppSettings.Load()
         settings.CompatibilityListUrl = txtCompatibilityListUrl.Text.Trim()
@@ -5105,6 +5131,7 @@ Public Class MainForm
         settings.ShowExperimentalTabOnUnsupportedGpu = chkShowExperimentalTabOnUnsupportedGpu.Checked
         settings.DefaultIniPath = txtDefaultIniPath.Text.Trim()
         settings.DefaultIniMode = GetDefaultIniModeFromIndex(cmbDefaultIniMode.SelectedIndex).ToString()
+        settings.PreserveExistingIniOnUpdate = chkPreserveIni.Checked
         settings.ExperimentalFsr4PackageFolder = txtFsr4PackageFolder.Text.Trim()
         settings.ExperimentalFsr4EnableUpdate = chkFsr4EnableUpdate.Checked
         settings.ExperimentalFsr4EnableAgility = chkFsr4EnableAgility.Checked
@@ -5539,7 +5566,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnUseDetected, "Use selected game for advanced install setup. Switches to Install tab and fills Game EXE/Game folder without starting installation.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
-        toolTip.SetToolTip(btnOpenWiki, "Open the wiki page for the currently selected compatibility entry using the configured wiki base URL.")
+        toolTip.SetToolTip(btnOpenWiki, "Open the wiki page for the selected compatibility entry, or the main compatibility list when no entry page is linked.")
         toolTip.SetToolTip(btnCompatOpenFolder, "Open the install folder of the selected detected game in Windows Explorer.")
         toolTip.SetToolTip(btnCompatEditIni, "Use the selected detected game as target and open its OptiScaler.ini in the editor.")
         toolTip.SetToolTip(btnCompatInstallUpdate, "Quick install OptiScaler to the selected detected game using saved default install settings.")
@@ -5564,6 +5591,7 @@ Public Class MainForm
         toolTip.SetToolTip(chkDlssInputs, "Enable DLSS input spoofing for AMD/Intel mode. If disabled, installer writes Dxgi=false in OptiScaler.ini.")
         toolTip.SetToolTip(cmbFgType, "Frame generation mode preference written during install. Auto keeps default behavior; other values force specific FG handling.")
         toolTip.SetToolTip(cmbConflictMode, "How to handle existing files in the target folder (for example backup/overwrite/skip depending on selected mode).")
+        toolTip.SetToolTip(chkPreserveIni, "When checked, update/reinstall keeps an existing OptiScaler.ini instead of replacing it with the package or default template. Selected install options may still update specific INI keys.")
         toolTip.SetToolTip(btnInstall, "Install or update OptiScaler into the selected game folder using current options from Install and Add-ons.")
         toolTip.SetToolTip(btnUninstall, "Remove OptiScaler from the selected game folder using installer manifest data, with fallback cleanup paths when possible.")
         toolTip.SetToolTip(btnOpenGameFolder, "Open the currently selected game folder in Windows Explorer.")
@@ -6064,6 +6092,7 @@ Public Class MainForm
             chkShowExperimentalTabOnUnsupportedGpu.Checked = If(settings.ShowExperimentalTabOnUnsupportedGpu.HasValue, settings.ShowExperimentalTabOnUnsupportedGpu.Value, False)
             txtDefaultIniPath.Text = settings.DefaultIniPath
             cmbDefaultIniMode.SelectedIndex = GetDefaultIniModeIndex(ParseDefaultIniMode(settings.DefaultIniMode))
+            chkPreserveIni.Checked = If(settings.PreserveExistingIniOnUpdate.HasValue, settings.PreserveExistingIniOnUpdate.Value, True)
             txtFsr4PackageFolder.Text = If(settings.ExperimentalFsr4PackageFolder, "")
             chkFsr4EnableUpdate.Checked = If(settings.ExperimentalFsr4EnableUpdate.HasValue, settings.ExperimentalFsr4EnableUpdate.Value, True)
             chkFsr4EnableAgility.Checked = If(settings.ExperimentalFsr4EnableAgility.HasValue, settings.ExperimentalFsr4EnableAgility.Value, False)

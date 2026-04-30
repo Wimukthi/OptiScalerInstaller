@@ -24,4 +24,5 @@ Public Class InstallerConfig
     Public Property PluginsPath As String
     Public Property DefaultIniMode As DefaultIniMode
     Public Property DefaultIniPath As String
+    Public Property PreserveExistingIni As Boolean
 End Class

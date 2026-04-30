@@ -2,7 +2,8 @@
     [string]$Configuration = "Release",
     [string]$ProjectFile = "OptiScalerInstaller.vbproj",
     [switch]$SkipClean,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipCompatibilityValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,19 @@ $targetFramework = "net10.0-windows"
 $buildOutputDir = Join-Path $projectDir "bin/$Configuration/$targetFramework"
 $stagingRoot = Join-Path $projectDir "artifacts/staging"
 $releaseDir = Join-Path $projectDir "Release"
+
+if (-not $SkipCompatibilityValidation) {
+    $compatibilityTestScript = Join-Path $projectDir "scripts/TestCompatibilityParser.ps1"
+    if (-not (Test-Path $compatibilityTestScript)) {
+        throw "Compatibility parser test script not found: $compatibilityTestScript"
+    }
+
+    Write-Host "Validating compatibility parser against fixtures and live wiki..."
+    & $compatibilityTestScript -Live -Configuration $Configuration
+    if ($LASTEXITCODE -ne 0) {
+        throw "Compatibility parser validation failed with exit code $LASTEXITCODE"
+    }
+}
 
 if (-not $SkipBuild) {
     if (-not $SkipClean) {

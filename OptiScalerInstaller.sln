@@ -5,6 +5,10 @@ VisualStudioVersion = 18.3.11312.210 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "OptiScalerInstaller", "OptiScalerInstaller.vbproj", "{E2C081D6-FC0F-DE3B-5399-1239A8E7BDA9}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CompatibilityParser.Tests", "tests\CompatibilityParser.Tests\CompatibilityParser.Tests.csproj", "{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,9 +19,16 @@ Global
 		{E2C081D6-FC0F-DE3B-5399-1239A8E7BDA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E2C081D6-FC0F-DE3B-5399-1239A8E7BDA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E2C081D6-FC0F-DE3B-5399-1239A8E7BDA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{38C1ADE2-796D-4E1E-8D5C-276A750A9DDB} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B55F32D9-04E9-4303-A549-E5BC11105923}

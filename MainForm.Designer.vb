@@ -87,6 +87,7 @@ Partial Class MainForm
         grpBehavior = New ThemedGroupBox()
         lblConflictMode = New Label()
         cmbConflictMode = New ComboBox()
+        chkPreserveIni = New CheckBox()
         lblBehaviorHint = New Label()
         grpActions = New ThemedGroupBox()
         btnInstall = New Button()
@@ -441,7 +442,7 @@ Partial Class MainForm
         colCompatPath.Width = 360
         ' 
         ' compatFooterPanel
-        ' 
+        '
         compatFooterPanel.Controls.Add(compatActionsPanel)
         compatFooterPanel.Controls.Add(compatStatusPanel)
         compatFooterPanel.Dock = DockStyle.Bottom
@@ -449,7 +450,7 @@ Partial Class MainForm
         compatFooterPanel.Name = "compatFooterPanel"
         compatFooterPanel.Size = New Size(1240, 64)
         compatFooterPanel.TabIndex = 2
-        ' 
+        '
         ' compatActionsPanel
         ' 
         compatActionsPanel.Controls.Add(btnUseDetected)
@@ -1060,6 +1061,7 @@ Partial Class MainForm
         ' 
         grpBehavior.Controls.Add(lblConflictMode)
         grpBehavior.Controls.Add(cmbConflictMode)
+        grpBehavior.Controls.Add(chkPreserveIni)
         grpBehavior.Controls.Add(lblBehaviorHint)
         grpBehavior.Dock = DockStyle.Fill
         grpBehavior.Location = New Point(628, 344)
@@ -1089,14 +1091,26 @@ Partial Class MainForm
         cmbConflictMode.Name = "cmbConflictMode"
         cmbConflictMode.Size = New Size(264, 23)
         cmbConflictMode.TabIndex = 1
-        ' 
+        '
+        ' chkPreserveIni
+        '
+        chkPreserveIni.AutoSize = True
+        chkPreserveIni.Checked = True
+        chkPreserveIni.CheckState = CheckState.Checked
+        chkPreserveIni.Location = New Point(160, 60)
+        chkPreserveIni.Name = "chkPreserveIni"
+        chkPreserveIni.Size = New Size(176, 19)
+        chkPreserveIni.TabIndex = 2
+        chkPreserveIni.Text = "Keep existing OptiScaler.ini"
+        chkPreserveIni.UseVisualStyleBackColor = True
+        '
         ' lblBehaviorHint
-        ' 
+        '
         lblBehaviorHint.AutoSize = True
-        lblBehaviorHint.Location = New Point(12, 64)
+        lblBehaviorHint.Location = New Point(12, 92)
         lblBehaviorHint.Name = "lblBehaviorHint"
         lblBehaviorHint.Size = New Size(267, 15)
-        lblBehaviorHint.TabIndex = 2
+        lblBehaviorHint.TabIndex = 3
         lblBehaviorHint.Text = "Backup adds .bak_ timestamp before overwriting."
         ' 
         ' grpActions
@@ -2751,6 +2765,7 @@ Partial Class MainForm
     Friend WithEvents lblFgType As System.Windows.Forms.Label
     Friend WithEvents grpBehavior As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblBehaviorHint As System.Windows.Forms.Label
+    Friend WithEvents chkPreserveIni As System.Windows.Forms.CheckBox
     Friend WithEvents cmbConflictMode As System.Windows.Forms.ComboBox
     Friend WithEvents lblConflictMode As System.Windows.Forms.Label
     Friend WithEvents grpActions As OptiScalerInstaller.ThemedGroupBox

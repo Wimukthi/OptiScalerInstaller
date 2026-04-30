@@ -23,6 +23,7 @@
   "HighlightCompatibilityChanges": true,
   "DefaultIniMode": "Off",
   "DefaultIniPath": "",
+  "PreserveExistingIniOnUpdate": true,
   "ExperimentalFsr4PackageFolder": "",
   "ExperimentalFsr4EnableUpdate": true,
   "ExperimentalFsr4EnableAgility": false,

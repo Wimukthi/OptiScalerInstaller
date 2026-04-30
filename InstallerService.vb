@@ -100,7 +100,7 @@ Public Class InstallerService
             manifest.PackageRoot = packageRoot
             Await Task.Run(Sub()
                                log?.Invoke("Copying OptiScaler files to game folder...")
-                               CopyDirectory(packageRoot, config.GameFolder, config.ConflictMode, manifest, log)
+                               CopyDirectory(packageRoot, config.GameFolder, config.ConflictMode, config.PreserveExistingIni, manifest, log)
                                progress?.Invoke(70)
 
                                RenameOptiScalerDll(config, manifest, log)
@@ -125,11 +125,11 @@ Public Class InstallerService
         End Try
     End Function
 
-    Public Shared Async Function UninstallAsync(gameFolder As String, log As Action(Of String)) As Task(Of Boolean)
+    Public Shared Async Function UninstallAsync(gameFolder As String, log As Action(Of String), Optional preserveExistingIni As Boolean = False) As Task(Of Boolean)
         ' Managed uninstall path: use manifest with root-constrained file operations.
         Dim manifestPath As String = Path.Combine(gameFolder, ManifestName)
         If Not File.Exists(manifestPath) Then
-            Return TryUninstallLegacy(gameFolder, log)
+            Return TryUninstallLegacy(gameFolder, log, preserveExistingIni)
         End If
 
         Dim gameRoot As String = NormalizePath(gameFolder)
@@ -162,6 +162,11 @@ Public Class InstallerService
                 End If
 
                 Try
+                    If preserveExistingIni AndAlso IsOptiScalerIniPath(resolvedFilePath) Then
+                        log?.Invoke("Preserving existing OptiScaler.ini during reinstall/update cleanup.")
+                        Continue For
+                    End If
+
                     If File.Exists(resolvedFilePath) Then
                         File.Delete(resolvedFilePath)
                     End If
@@ -183,6 +188,11 @@ Public Class InstallerService
                 End If
 
                 Try
+                    If preserveExistingIni AndAlso IsOptiScalerIniPath(destinationPath) Then
+                        log?.Invoke("Preserving existing OptiScaler.ini; skipped backup restore.")
+                        Continue For
+                    End If
+
                     If File.Exists(backupPath) Then
                         If File.Exists(destinationPath) Then
                             File.Delete(destinationPath)
@@ -209,7 +219,7 @@ Public Class InstallerService
         Return True
     End Function
 
-    Private Shared Function TryUninstallLegacy(gameFolder As String, log As Action(Of String)) As Boolean
+    Private Shared Function TryUninstallLegacy(gameFolder As String, log As Action(Of String), Optional preserveExistingIni As Boolean = False) As Boolean
         If String.IsNullOrWhiteSpace(gameFolder) OrElse Not Directory.Exists(gameFolder) Then
             Return False
         End If
@@ -217,7 +227,11 @@ Public Class InstallerService
         Dim removedAny As Boolean = False
 
         removedAny = DeleteIfExists(Path.Combine(gameFolder, "OptiScaler.log"), log) OrElse removedAny
-        removedAny = DeleteIfExists(Path.Combine(gameFolder, "OptiScaler.ini"), log) OrElse removedAny
+        If preserveExistingIni Then
+            log?.Invoke("Preserving existing OptiScaler.ini during legacy reinstall cleanup.")
+        Else
+            removedAny = DeleteIfExists(Path.Combine(gameFolder, "OptiScaler.ini"), log) OrElse removedAny
+        End If
 
         Dim hookFromBat As String = GetHookNameFromUninstallBat(gameFolder)
         If Not String.IsNullOrWhiteSpace(hookFromBat) Then
@@ -928,7 +942,7 @@ Public Class InstallerService
         Return parts.Length
     End Function
 
-    Private Shared Sub CopyDirectory(sourceDir As String, targetDir As String, conflictMode As ConflictMode, manifest As InstallManifest, log As Action(Of String))
+    Private Shared Sub CopyDirectory(sourceDir As String, targetDir As String, conflictMode As ConflictMode, preserveExistingIni As Boolean, manifest As InstallManifest, log As Action(Of String))
         For Each dirPath As String In Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories)
             Dim relative As String = Path.GetRelativePath(sourceDir, dirPath)
             Dim destination As String = Path.Combine(targetDir, relative)
@@ -938,6 +952,11 @@ Public Class InstallerService
         For Each filePath As String In Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories)
             Dim relative As String = Path.GetRelativePath(sourceDir, filePath)
             Dim destination As String = Path.Combine(targetDir, relative)
+            If preserveExistingIni AndAlso IsOptiScalerIniPath(destination) AndAlso File.Exists(destination) Then
+                log?.Invoke("Preserved existing OptiScaler.ini; skipped package INI copy.")
+                Continue For
+            End If
+
             If CopyFileWithConflict(filePath, destination, conflictMode, manifest, log) Then
                 ' File recorded inside copy helper.
             End If
@@ -1157,6 +1176,11 @@ Public Class InstallerService
             Return
         End If
 
+        If config.PreserveExistingIni AndAlso File.Exists(iniPath) Then
+            log?.Invoke("Preserved existing OptiScaler.ini; skipped default INI template.")
+            Return
+        End If
+
         Dim sourcePath As String = config.DefaultIniPath
         If String.IsNullOrWhiteSpace(sourcePath) Then
             log?.Invoke("Default OptiScaler.ini path not set. Skipping defaults.")
@@ -1234,6 +1258,14 @@ Public Class InstallerService
             ErrorLogger.Log(ex, "InstallerService.TryGetFileVersion")
             Return ""
         End Try
+    End Function
+
+    Private Shared Function IsOptiScalerIniPath(filePath As String) As Boolean
+        If String.IsNullOrWhiteSpace(filePath) Then
+            Return False
+        End If
+
+        Return String.Equals(Path.GetFileName(filePath), "OptiScaler.ini", StringComparison.OrdinalIgnoreCase)
     End Function
 
     Private Shared Sub SaveManifest(gameFolder As String, manifest As InstallManifest)
