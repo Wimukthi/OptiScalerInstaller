@@ -2226,6 +2226,7 @@ Public Class MainForm
     Private Async Function AddManualDetectedGameAsync(exePath As String) As Task
         Try
             btnDeepScanDrives.Enabled = False
+            btnBulkActions.Enabled = False
             btnUseDetected.Enabled = False
 
             Dim normalizedExe As String = NormalizePathSafe(exePath)
@@ -2402,6 +2403,423 @@ Public Class MainForm
     Private Sub btnCompatCopyInfo_Click(sender As Object, e As EventArgs) Handles btnCompatCopyInfo.Click
         mnuCompatCopyInfo_Click(sender, e)
     End Sub
+
+    Private Async Sub btnBulkActions_Click(sender As Object, e As EventArgs) Handles btnBulkActions.Click
+        If installOperationInProgress OrElse uninstallOperationInProgress Then
+            AppendLog("Bulk actions skipped: another install/uninstall operation is currently running.")
+            Return
+        End If
+
+        Dim plans As List(Of BulkGameOperationPlan) = BuildBulkOperationPlans()
+        If plans.Count = 0 Then
+            MessageBox.Show(Me,
+                            "No detected supported games are available for bulk operations." & Environment.NewLine &
+                            "Run Scan installed games first.",
+                            "Bulk Operations",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information)
+            Return
+        End If
+
+        Using dialog As New frmBulkOperations(plans)
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then
+                AppendLog("Bulk actions canceled.")
+                Return
+            End If
+
+            Await RunBulkOperationsAsync(dialog.SelectedOperation, dialog.SelectedPlans, dialog.StopOnFirstError)
+        End Using
+    End Sub
+
+    Private Function BuildBulkOperationPlans() As List(Of BulkGameOperationPlan)
+        Dim plans As New List(Of BulkGameOperationPlan)()
+        If allCompatibilityEntries Is Nothing OrElse detectedLookup Is Nothing OrElse detectedLookup.Count = 0 Then
+            Return plans
+        End If
+
+        For Each entry As CompatibilityEntry In allCompatibilityEntries
+            If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.Name) Then
+                Continue For
+            End If
+
+            Dim normalizedKey As String = NameNormalization.NormalizeRelaxedName(entry.Name)
+            Dim detected As DetectedGame = Nothing
+            If Not detectedLookup.TryGetValue(normalizedKey, detected) OrElse detected Is Nothing Then
+                Continue For
+            End If
+
+            Dim installInfo As OptiScalerInstallInfo = Nothing
+            Dim patcherInfo As OptiPatcherInstallInfo = Nothing
+            Dim lookupKey As String = GetDetectedInstallLookupKey(detected)
+            If Not String.IsNullOrWhiteSpace(lookupKey) Then
+                detectedInstallLookup.TryGetValue(lookupKey, installInfo)
+                detectedOptiPatcherLookup.TryGetValue(lookupKey, patcherInfo)
+            End If
+
+            Dim resolvedExe As String = ResolveDetectedGameExecutable(detected, promptForExecutable:=False)
+            Dim patcherSupport As OptiPatcherSupportEntry = ResolveOptiPatcherSupportForGame(detected)
+            plans.Add(New BulkGameOperationPlan With {
+                .GameName = entry.Name,
+                .Platform = If(detected.Platform, ""),
+                .InstallPath = NormalizePathSafe(If(detected.InstallDir, "")),
+                .GameExePath = resolvedExe,
+                .AntiCheat = If(detected.AntiCheat, ""),
+                .OptiScalerStatus = GetInstallStatusText(True, installInfo),
+                .OptiPatcherStatus = GetOptiPatcherStatusText(entry, True, patcherInfo),
+                .IsOptiScalerInstalled = installInfo IsNot Nothing AndAlso installInfo.IsInstalled,
+                .IsOptiScalerUpdateAvailable = IsOptiScalerUpdateAvailable(installInfo),
+                .IsOptiPatcherInstalled = patcherInfo IsNot Nothing AndAlso patcherInfo.IsInstalled,
+                .IsOptiPatcherSupported = patcherSupport IsNot Nothing,
+                .IsOptiPatcherUpdateAvailable = IsOptiPatcherUpdateAvailable(patcherInfo),
+                .DetectedGame = detected,
+                .OptiScalerInfo = installInfo,
+                .OptiPatcherInfo = patcherInfo
+            })
+        Next
+
+        Return plans.
+            OrderBy(Function(plan) plan.GameName, StringComparer.OrdinalIgnoreCase).
+            ToList()
+    End Function
+
+    Private Async Function RunBulkOperationsAsync(operation As BulkOperationKind,
+                                                  selectedPlans As IEnumerable(Of BulkGameOperationPlan),
+                                                  stopOnFirstError As Boolean) As Task
+        Dim plans As List(Of BulkGameOperationPlan) = If(selectedPlans, Enumerable.Empty(Of BulkGameOperationPlan)()).
+            Where(Function(plan) plan IsNot Nothing).
+            ToList()
+        If plans.Count = 0 Then
+            Return
+        End If
+
+        Dim confirmation As DialogResult = MessageBox.Show(Me,
+                                                           FormatBulkOperationName(operation) & " will process " & plans.Count.ToString() & " game(s)." & Environment.NewLine &
+                                                           "Operations run one at a time and write details to the log." & Environment.NewLine &
+                                                           "Proceed?",
+                                                           "Confirm Bulk Operation",
+                                                           MessageBoxButtons.YesNo,
+                                                           MessageBoxIcon.Question)
+        If confirmation <> DialogResult.Yes Then
+            AppendLog("Bulk operation canceled at confirmation.")
+            Return
+        End If
+
+        Dim results As New List(Of BulkOperationResult)()
+        Try
+            installOperationInProgress = True
+            UpdateUseDetectedState()
+            UpdateProgress(0)
+            AppendLog("Bulk operation started: " & FormatBulkOperationName(operation) & " (" & plans.Count.ToString() & " selected).")
+
+            For i As Integer = 0 To plans.Count - 1
+                Dim plan As BulkGameOperationPlan = plans(i)
+                Dim percent As Integer = CInt(Math.Floor((i / Math.Max(plans.Count, 1)) * 100.0))
+                UpdateProgress(percent)
+                AppendLog("Bulk " & (i + 1).ToString() & "/" & plans.Count.ToString() & ": " & plan.GameName)
+
+                Dim result As BulkOperationResult = Nothing
+                Try
+                    Select Case operation
+                        Case BulkOperationKind.QuickInstallOptiScaler
+                            result = Await RunBulkOptiScalerInstallAsync(plan, updateOnly:=False)
+                        Case BulkOperationKind.UpdateOptiScaler
+                            result = Await RunBulkOptiScalerInstallAsync(plan, updateOnly:=True)
+                        Case BulkOperationKind.InstallOrUpdateOptiPatcher
+                            result = Await RunBulkOptiPatcherInstallAsync(plan)
+                    End Select
+                Catch ex As Exception
+                    result = New BulkOperationResult With {
+                        .Plan = plan,
+                        .Success = False,
+                        .Skipped = False,
+                        .Message = ex.Message
+                    }
+                    ErrorLogger.Log(ex, "MainForm.RunBulkOperations")
+                End Try
+
+                If result Is Nothing Then
+                    result = New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "No action was taken."}
+                End If
+
+                results.Add(result)
+                If result.Success Then
+                    AppendLog("Bulk result: " & plan.GameName & " completed.")
+                ElseIf result.Skipped Then
+                    AppendLog("Bulk result: " & plan.GameName & " skipped - " & result.Message)
+                Else
+                    AppendLog("Bulk result: " & plan.GameName & " failed - " & result.Message)
+                    If stopOnFirstError Then
+                        AppendLog("Bulk operation stopped after first error.")
+                        Exit For
+                    End If
+                End If
+            Next
+
+            Await RefreshDetectedInstallStatesAsync(False)
+            UpdateProgress(100)
+
+            Dim successCount As Integer = results.Where(Function(result) result.Success).Count()
+            Dim skippedCount As Integer = results.Where(Function(result) result.Skipped).Count()
+            Dim failedCount As Integer = results.Count - successCount - skippedCount
+            AppendLog("Bulk operation finished: " & successCount.ToString() & " succeeded, " & skippedCount.ToString() & " skipped, " & failedCount.ToString() & " failed.")
+
+            MessageBox.Show(Me,
+                            "Bulk operation finished." & Environment.NewLine &
+                            "Succeeded: " & successCount.ToString() & Environment.NewLine &
+                            "Skipped: " & skippedCount.ToString() & Environment.NewLine &
+                            "Failed: " & failedCount.ToString(),
+                            "Bulk Operation Complete",
+                            MessageBoxButtons.OK,
+                            If(failedCount > 0, MessageBoxIcon.Warning, MessageBoxIcon.Information))
+        Finally
+            installOperationInProgress = False
+            UpdateProgress(0)
+            UpdateInstallStatus()
+            UpdateOptiPatcherStatus()
+            UpdateExperimentalStatus()
+            UpdateUseDetectedState()
+        End Try
+    End Function
+
+    Private Async Function RunBulkOptiScalerInstallAsync(plan As BulkGameOperationPlan, updateOnly As Boolean) As Task(Of BulkOperationResult)
+        If plan Is Nothing Then
+            Return New BulkOperationResult With {.Skipped = True, .Message = "Missing plan."}
+        End If
+
+        If String.IsNullOrWhiteSpace(plan.GameExePath) OrElse Not File.Exists(plan.GameExePath) Then
+            Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "Game executable could not be resolved."}
+        End If
+
+        Dim config As InstallerConfig = BuildQuickInstallConfig(plan.GameExePath)
+        ApplyBulkGameProfileToConfig(plan.DetectedGame, config)
+        TryAutoRetargetUnrealInstall(config, updateUi:=False)
+
+        Dim existingInfo As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(config.GameFolder)
+        If updateOnly Then
+            If existingInfo Is Nothing OrElse Not existingInfo.IsInstalled Then
+                Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiScaler is not installed."}
+            End If
+            If Not IsOptiScalerUpdateAvailable(existingInfo) Then
+                Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiScaler is already current."}
+            End If
+            AppendLog("Bulk update: updating OptiScaler for " & plan.GameName & ".")
+        Else
+            If existingInfo IsNot Nothing AndAlso existingInfo.IsInstalled Then
+                Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiScaler is already installed."}
+            End If
+            AppendLog("Bulk quick install: installing OptiScaler for " & plan.GameName & ".")
+        End If
+
+        LogBulkInstallWarnings(config, plan)
+        Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+        Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
+        If manifest IsNot Nothing Then
+            manifest.VerificationTimeUtc = DateTime.UtcNow
+        End If
+        LogVerificationReport(verification)
+
+        If verification IsNot Nothing AndAlso verification.Errors.Count > 0 Then
+            Return New BulkOperationResult With {.Plan = plan, .Success = False, .Message = "Verification reported " & verification.Errors.Count.ToString() & " error(s)."}
+        End If
+
+        Return New BulkOperationResult With {.Plan = plan, .Success = True, .Message = "OptiScaler installed."}
+    End Function
+
+    Private Async Function RunBulkOptiPatcherInstallAsync(plan As BulkGameOperationPlan) As Task(Of BulkOperationResult)
+        If plan Is Nothing Then
+            Return New BulkOperationResult With {.Skipped = True, .Message = "Missing plan."}
+        End If
+        If Not plan.IsOptiPatcherSupported Then
+            Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiPatcher is not supported for this game."}
+        End If
+
+        Dim optiScalerFolder As String = ResolveOptiScalerInstallFolderForPlan(plan)
+        If String.IsNullOrWhiteSpace(optiScalerFolder) OrElse Not Directory.Exists(optiScalerFolder) Then
+            Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiScaler install folder could not be resolved."}
+        End If
+
+        Dim patcherInfo As OptiPatcherInstallInfo = OptiPatcherInstallDetector.Detect(optiScalerFolder)
+        If patcherInfo IsNot Nothing AndAlso patcherInfo.IsInstalled AndAlso Not IsOptiPatcherUpdateAvailable(patcherInfo) Then
+            Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiPatcher is already current."}
+        End If
+
+        Dim config As OptiPatcherInstallConfig = BuildBulkOptiPatcherConfig(optiScalerFolder)
+        AppendLog("Bulk OptiPatcher: installing/updating for " & plan.GameName & ".")
+        Dim manifest As OptiPatcherManifest = Await OptiPatcherInstallerService.InstallAsync(config, AddressOf AppendLog)
+        If manifest Is Nothing Then
+            Return New BulkOperationResult With {.Plan = plan, .Skipped = True, .Message = "OptiPatcher service skipped the install."}
+        End If
+
+        Return New BulkOperationResult With {.Plan = plan, .Success = True, .Message = "OptiPatcher installed."}
+    End Function
+
+    Private Function BuildBulkOptiPatcherConfig(gameFolder As String) As OptiPatcherInstallConfig
+        Return New OptiPatcherInstallConfig With {
+            .GameFolder = NormalizePathSafe(gameFolder),
+            .Source = GetOptiPatcherSourceFromUi(),
+            .StableRelease = optiPatcherStableRelease,
+            .RollingRelease = optiPatcherRollingRelease,
+            .AlternateRelease = optiPatcherAlternateRelease,
+            .LocalAsiPath = If(txtOptiPatcherLocalFile Is Nothing, "", txtOptiPatcherLocalFile.Text.Trim()),
+            .ConflictMode = GetConflictModeFromIndex(cmbConflictMode.SelectedIndex),
+            .PluginPathOverride = ""
+        }
+    End Function
+
+    Private Function ResolveOptiScalerInstallFolderForPlan(plan As BulkGameOperationPlan) As String
+        If plan Is Nothing Then
+            Return ""
+        End If
+
+        If plan.OptiScalerInfo IsNot Nothing AndAlso
+           plan.OptiScalerInfo.IsInstalled AndAlso
+           Not String.IsNullOrWhiteSpace(plan.OptiScalerInfo.InstallFolder) Then
+            Return NormalizePathSafe(plan.OptiScalerInfo.InstallFolder)
+        End If
+
+        If Not String.IsNullOrWhiteSpace(plan.InstallPath) Then
+            Dim detected As OptiScalerInstallInfo = OptiScalerInstallDetector.Detect(plan.InstallPath)
+            If detected IsNot Nothing AndAlso detected.IsInstalled AndAlso Not String.IsNullOrWhiteSpace(detected.InstallFolder) Then
+                Return NormalizePathSafe(detected.InstallFolder)
+            End If
+        End If
+
+        Return NormalizePathSafe(plan.InstallPath)
+    End Function
+
+    Private Sub ApplyBulkGameProfileToConfig(game As DetectedGame, config As InstallerConfig)
+        If game Is Nothing OrElse config Is Nothing Then
+            Return
+        End If
+
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        If settings IsNot Nothing AndAlso settings.EnableGameTemplates.HasValue AndAlso Not settings.EnableGameTemplates.Value Then
+            Return
+        End If
+
+        Dim profile As GameInstallProfile = GameProfileService.FindProfile(game)
+        If profile Is Nothing Then
+            Return
+        End If
+
+        Dim appliedParts As New List(Of String)()
+        If Not String.IsNullOrWhiteSpace(profile.HookName) Then
+            Dim hookName As String = ResolveProfileHookName(profile.HookName)
+            If Not String.IsNullOrWhiteSpace(hookName) Then
+                config.HookName = hookName
+                appliedParts.Add("hook=" & hookName)
+            End If
+        End If
+
+        If Not String.IsNullOrWhiteSpace(profile.GpuVendor) Then
+            Select Case GetDefaultGpuVendorIndex(profile.GpuVendor)
+                Case 1
+                    config.GpuVendor = GpuVendor.Nvidia
+                    appliedParts.Add("gpu=NVIDIA")
+                Case 2
+                    config.GpuVendor = GpuVendor.AmdIntel
+                    appliedParts.Add("gpu=AMD/Intel")
+            End Select
+        End If
+
+        If profile.DlssInputs.HasValue Then
+            config.EnableDlssInputs = profile.DlssInputs.Value
+            appliedParts.Add("dlssInputs=" & If(profile.DlssInputs.Value, "on", "off"))
+        End If
+
+        If Not String.IsNullOrWhiteSpace(profile.FrameGeneration) Then
+            Dim fgSelection As FgTypeSelection = ResolveProfileFrameGeneration(profile.FrameGeneration)
+            If fgSelection <> FgTypeSelection.Nukem Then
+                config.FgType = fgSelection
+                appliedParts.Add("fg=" & profile.FrameGeneration)
+            Else
+                AppendLog("Bulk profile requested Nukem FG for " & game.DisplayName & "; quick install keeps Auto because a Nukem DLL path is required.")
+            End If
+        End If
+
+        If Not String.IsNullOrWhiteSpace(profile.ConflictMode) Then
+            config.ConflictMode = GetConflictModeFromIndex(GetDefaultConflictModeIndex(profile.ConflictMode))
+            appliedParts.Add("conflict=" & profile.ConflictMode)
+        End If
+
+        If appliedParts.Count > 0 Then
+            AppendLog("Bulk applied game profile: " & profile.Name & " (" & String.Join(", ", appliedParts) & ")")
+        End If
+    End Sub
+
+    Private Function ResolveProfileHookName(hookName As String) As String
+        If String.IsNullOrWhiteSpace(hookName) Then
+            Return ""
+        End If
+
+        Dim candidate As String = hookName.Trim()
+        Dim supportedHooks As String() = {
+            "dxgi.dll",
+            "winmm.dll",
+            "version.dll",
+            "dbghelp.dll",
+            "d3d12.dll",
+            "wininet.dll",
+            "winhttp.dll",
+            "OptiScaler.asi"
+        }
+
+        For Each supportedHook As String In supportedHooks
+            If candidate.Equals(supportedHook, StringComparison.OrdinalIgnoreCase) Then
+                Return supportedHook
+            End If
+        Next
+
+        Return ""
+    End Function
+
+    Private Function ResolveProfileFrameGeneration(value As String) As FgTypeSelection
+        Select Case GetDefaultFrameGenerationIndex(value)
+            Case 1
+                Return FgTypeSelection.None
+            Case 2
+                Return FgTypeSelection.OptiFg
+            Case 3
+                Return FgTypeSelection.Nukem
+            Case Else
+                Return FgTypeSelection.Auto
+        End Select
+    End Function
+
+    Private Sub LogBulkInstallWarnings(config As InstallerConfig, plan As BulkGameOperationPlan)
+        If plan IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(plan.AntiCheat) Then
+            AppendLog("Bulk warning: " & plan.GameName & " is anti-cheat flagged (" & plan.AntiCheat & ").")
+        End If
+
+        If config Is Nothing Then
+            Return
+        End If
+
+        If ShouldSkipExecutable(Path.GetFileNameWithoutExtension(config.GameExePath)) Then
+            AppendLog("Bulk warning: selected executable may be a launcher/helper: " & Path.GetFileName(config.GameExePath))
+        End If
+
+        If Not IsFolderWritable(config.GameFolder) Then
+            AppendLog("Bulk warning: game folder may not be writable: " & config.GameFolder)
+        End If
+
+        If InstallerService.IsLikelyBundledComponentRelease(config) Then
+            AppendLog("Bulk warning: selected OptiScaler release appears to be a component package, not a standard install archive.")
+        End If
+    End Sub
+
+    Private Function FormatBulkOperationName(operation As BulkOperationKind) As String
+        Select Case operation
+            Case BulkOperationKind.QuickInstallOptiScaler
+                Return "Bulk quick install OptiScaler"
+            Case BulkOperationKind.UpdateOptiScaler
+                Return "Bulk update OptiScaler"
+            Case BulkOperationKind.InstallOrUpdateOptiPatcher
+                Return "Bulk install/update OptiPatcher"
+            Case Else
+                Return "Bulk operation"
+        End Select
+    End Function
 
     Private Sub mnuCompatOpenFolder_Click(sender As Object, e As EventArgs) Handles mnuCompatOpenFolder.Click
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
@@ -2666,6 +3084,7 @@ Public Class MainForm
         btnCompatInstallPatcher.Enabled = isDetected AndAlso isPatcherSupported AndAlso Not operationBusy
         btnCompatRemovePatcher.Enabled = isDetected AndAlso hasOptiPatcherInstalled AndAlso Not operationBusy
         btnCompatCopyInfo.Enabled = row IsNot Nothing
+        btnBulkActions.Enabled = detectedLookup IsNot Nothing AndAlso detectedLookup.Count > 0 AndAlso Not operationBusy
 
         btnCompatInstallUpdate.Text = If(hasOptiScaler, "Quick update", "Quick install")
         btnCompatInstallPatcher.Text = If(hasOptiPatcherInstalled, "Update OptiPatcher", "Install OptiPatcher")
@@ -3307,7 +3726,7 @@ Public Class MainForm
         End Try
     End Function
 
-    Private Sub TryAutoRetargetUnrealInstall(config As InstallerConfig)
+    Private Sub TryAutoRetargetUnrealInstall(config As InstallerConfig, Optional updateUi As Boolean = True)
         If config Is Nothing Then
             Return
         End If
@@ -3354,10 +3773,10 @@ Public Class MainForm
         config.GameExePath = retargetedExe
         config.GameFolder = retargetedFolder
 
-        If txtGameExe IsNot Nothing Then
+        If updateUi AndAlso txtGameExe IsNot Nothing Then
             txtGameExe.Text = retargetedExe
         End If
-        If txtGameFolder IsNot Nothing Then
+        If updateUi AndAlso txtGameFolder IsNot Nothing Then
             txtGameFolder.Text = retargetedFolder
         End If
 
@@ -5563,6 +5982,7 @@ Public Class MainForm
         toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
         toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then drive-scan augmentation. You will be prompted to choose drives each run.")
         toolTip.SetToolTip(btnDeepScanDrives, "Manually add a game by selecting its executable. The installer matches it to the compatibility list and persists it for future sessions.")
+        toolTip.SetToolTip(btnBulkActions, "Open a bulk workflow for detected supported games. You can quick install missing OptiScaler copies, update installed OptiScaler copies, or install/update OptiPatcher across multiple selected games.")
         toolTip.SetToolTip(btnUseDetected, "Use selected game for advanced install setup. Switches to Install tab and fills Game EXE/Game folder without starting installation.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
@@ -5879,6 +6299,7 @@ Public Class MainForm
         Try
             btnScanDetected.Enabled = False
             btnDeepScanDrives.Enabled = False
+            btnBulkActions.Enabled = False
             btnUseDetected.Enabled = False
             toolDetectedLabel.Text = "Detected: scanning..."
             AppendLog(label & " started.")
@@ -6037,6 +6458,7 @@ Public Class MainForm
             If isDeepScan Then
                 UpdateProgress(0)
             End If
+            UpdateUseDetectedState()
         End Try
     End Function
 

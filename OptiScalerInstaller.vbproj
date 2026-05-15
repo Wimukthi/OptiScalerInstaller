@@ -37,6 +37,9 @@
     <Compile Update="frmIniEditor.Designer.vb">
       <DependentUpon>frmIniEditor.vb</DependentUpon>
     </Compile>
+    <Compile Update="frmBulkOperations.Designer.vb">
+      <DependentUpon>frmBulkOperations.vb</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
@@ -82,6 +85,9 @@
     </EmbeddedResource>
     <EmbeddedResource Update="frmIniEditor.resx">
       <DependentUpon>frmIniEditor.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Update="frmBulkOperations.resx">
+      <DependentUpon>frmBulkOperations.vb</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
 

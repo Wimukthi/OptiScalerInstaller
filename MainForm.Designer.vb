@@ -50,6 +50,7 @@ Partial Class MainForm
         compatHeaderRightPanel = New FlowLayoutPanel()
         btnScanDetected = New Button()
         btnDeepScanDrives = New Button()
+        btnBulkActions = New Button()
         btnUseDetected = New Button()
         btnRefreshCompatibility = New Button()
         btnOpenWiki = New Button()
@@ -644,13 +645,14 @@ Partial Class MainForm
         compatHeaderRightPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink
         compatHeaderRightPanel.Controls.Add(btnScanDetected)
         compatHeaderRightPanel.Controls.Add(btnDeepScanDrives)
+        compatHeaderRightPanel.Controls.Add(btnBulkActions)
         compatHeaderRightPanel.Controls.Add(btnRefreshCompatibility)
         compatHeaderRightPanel.Controls.Add(btnOpenWiki)
         compatHeaderRightPanel.Dock = DockStyle.Right
-        compatHeaderRightPanel.Location = New Point(671, 6)
+        compatHeaderRightPanel.Location = New Point(555, 6)
         compatHeaderRightPanel.Margin = New Padding(0)
         compatHeaderRightPanel.Name = "compatHeaderRightPanel"
-        compatHeaderRightPanel.Size = New Size(563, 32)
+        compatHeaderRightPanel.Size = New Size(679, 32)
         compatHeaderRightPanel.TabIndex = 1
         compatHeaderRightPanel.WrapContents = False
         ' 
@@ -675,26 +677,37 @@ Partial Class MainForm
         btnDeepScanDrives.TabIndex = 3
         btnDeepScanDrives.Text = "Add game manually"
         btnDeepScanDrives.UseVisualStyleBackColor = True
-        ' 
+        '
+        ' btnBulkActions
+        '
+        btnBulkActions.Anchor = AnchorStyles.None
+        btnBulkActions.Location = New Point(276, 0)
+        btnBulkActions.Margin = New Padding(6, 0, 0, 0)
+        btnBulkActions.Name = "btnBulkActions"
+        btnBulkActions.Size = New Size(110, 27)
+        btnBulkActions.TabIndex = 4
+        btnBulkActions.Text = "Bulk actions"
+        btnBulkActions.UseVisualStyleBackColor = True
+        '
         ' btnRefreshCompatibility
         '
         btnRefreshCompatibility.Anchor = AnchorStyles.None
-        btnRefreshCompatibility.Location = New Point(276, 0)
+        btnRefreshCompatibility.Location = New Point(392, 0)
         btnRefreshCompatibility.Margin = New Padding(6, 0, 0, 0)
         btnRefreshCompatibility.Name = "btnRefreshCompatibility"
         btnRefreshCompatibility.Size = New Size(130, 27)
-        btnRefreshCompatibility.TabIndex = 4
+        btnRefreshCompatibility.TabIndex = 5
         btnRefreshCompatibility.Text = "Refresh lists"
         btnRefreshCompatibility.UseVisualStyleBackColor = True
         ' 
         ' btnOpenWiki
         '
         btnOpenWiki.Anchor = AnchorStyles.None
-        btnOpenWiki.Location = New Point(412, 0)
+        btnOpenWiki.Location = New Point(528, 0)
         btnOpenWiki.Margin = New Padding(6, 0, 0, 0)
         btnOpenWiki.Name = "btnOpenWiki"
         btnOpenWiki.Size = New Size(140, 27)
-        btnOpenWiki.TabIndex = 5
+        btnOpenWiki.TabIndex = 6
         btnOpenWiki.Text = "Open wiki page"
         btnOpenWiki.UseVisualStyleBackColor = True
         ' 
@@ -2871,6 +2884,7 @@ Partial Class MainForm
     Friend WithEvents lblSearch As System.Windows.Forms.Label
     Friend WithEvents btnScanDetected As System.Windows.Forms.Button
     Friend WithEvents btnDeepScanDrives As System.Windows.Forms.Button
+    Friend WithEvents btnBulkActions As System.Windows.Forms.Button
     Friend WithEvents btnUseDetected As System.Windows.Forms.Button
     Friend WithEvents btnCompatOpenFolder As System.Windows.Forms.Button
     Friend WithEvents btnCompatEditIni As System.Windows.Forms.Button
