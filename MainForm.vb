@@ -2082,20 +2082,25 @@ Public Class MainForm
         End If
 
         Dim slug As String = If(entry.Slug, "").Trim()
-        Dim url As String = BuildWikiUrl(If(String.IsNullOrWhiteSpace(slug), "Compatibility-List", slug))
+        If Not HasCompatibilityWikiPage(entry) Then
+            AppendLog("Open wiki skipped: no game-specific wiki page for " & If(entry.Name, "(unknown game)") & ".")
+            Return
+        End If
+
+        Dim url As String = BuildWikiUrl(slug)
         If String.IsNullOrWhiteSpace(url) Then
             MessageBox.Show(Me, "Wiki base URL is not set. Update it in Settings.", "Settings", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
-        If String.IsNullOrWhiteSpace(slug) Then
-            AppendLog("Opening compatibility list: " & url)
-        Else
-            AppendLog("Opening wiki page: " & url)
-        End If
+        AppendLog("Opening wiki page: " & url)
 
         Process.Start(New ProcessStartInfo(url) With {.UseShellExecute = True})
     End Sub
+
+    Private Function HasCompatibilityWikiPage(entry As CompatibilityEntry) As Boolean
+        Return entry IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(entry.Slug)
+    End Function
 
     Private Async Sub btnRefreshCompatibility_Click(sender As Object, e As EventArgs) Handles btnRefreshCompatibility.Click
         Await RefreshCompatibilityAsync(True, False)
@@ -2337,7 +2342,7 @@ Public Class MainForm
         End If
 
         Dim isDetected As Boolean = row.Detected IsNot Nothing
-        Dim hasEntry As Boolean = row.Entry IsNot Nothing
+        Dim hasWikiPage As Boolean = HasCompatibilityWikiPage(row.Entry)
         Dim hasFolder As Boolean = isDetected AndAlso Not String.IsNullOrWhiteSpace(row.Detected.InstallDir) AndAlso Directory.Exists(row.Detected.InstallDir)
         Dim hasOptiScaler As Boolean = row.InstallInfo IsNot Nothing AndAlso row.InstallInfo.IsInstalled
         Dim hasOptiPatcherInstalled As Boolean = row.OptiPatcherInfo IsNot Nothing AndAlso row.OptiPatcherInfo.IsInstalled
@@ -2351,7 +2356,7 @@ Public Class MainForm
         mnuCompatUninstall.Enabled = isDetected AndAlso hasOptiScaler AndAlso Not operationBusy
         mnuCompatInstallPatcher.Enabled = isDetected AndAlso isPatcherSupported AndAlso Not operationBusy
         mnuCompatRemovePatcher.Enabled = isDetected AndAlso hasOptiPatcherInstalled AndAlso Not operationBusy
-        mnuCompatOpenWiki.Enabled = hasEntry
+        mnuCompatOpenWiki.Enabled = hasWikiPage
         mnuCompatCopyInfo.Enabled = True
 
         mnuCompatInstallUpdate.Text = If(hasOptiScaler, "Quick update OptiScaler", "Quick install OptiScaler")
@@ -3068,7 +3073,7 @@ Public Class MainForm
     Private Sub UpdateUseDetectedState()
         Dim row As CompatibilityRow = GetSelectedCompatibilityRow()
         Dim isDetected As Boolean = row IsNot Nothing AndAlso row.Detected IsNot Nothing
-        Dim hasEntry As Boolean = row IsNot Nothing AndAlso row.Entry IsNot Nothing
+        Dim hasWikiPage As Boolean = row IsNot Nothing AndAlso HasCompatibilityWikiPage(row.Entry)
         Dim hasFolder As Boolean = isDetected AndAlso Not String.IsNullOrWhiteSpace(row.Detected.InstallDir) AndAlso Directory.Exists(row.Detected.InstallDir)
         Dim hasOptiScaler As Boolean = row IsNot Nothing AndAlso row.InstallInfo IsNot Nothing AndAlso row.InstallInfo.IsInstalled
         Dim hasOptiPatcherInstalled As Boolean = row IsNot Nothing AndAlso row.OptiPatcherInfo IsNot Nothing AndAlso row.OptiPatcherInfo.IsInstalled
@@ -3076,7 +3081,7 @@ Public Class MainForm
         Dim operationBusy As Boolean = installOperationInProgress OrElse uninstallOperationInProgress
 
         btnUseDetected.Enabled = isDetected AndAlso Not operationBusy
-        btnOpenWiki.Enabled = hasEntry
+        btnOpenWiki.Enabled = hasWikiPage
         btnCompatOpenFolder.Enabled = hasFolder
         btnCompatEditIni.Enabled = isDetected AndAlso hasOptiScaler
         btnCompatInstallUpdate.Enabled = isDetected AndAlso Not operationBusy
@@ -5986,7 +5991,7 @@ Public Class MainForm
         toolTip.SetToolTip(btnUseDetected, "Use selected game for advanced install setup. Switches to Install tab and fills Game EXE/Game folder without starting installation.")
         toolTip.SetToolTip(chkHideNonDetected, "When enabled, only games found on this PC are shown. Disable to view the full supported list again.")
         toolTip.SetToolTip(btnRefreshCompatibility, "Download the latest compatibility list from the configured URL and refresh this table.")
-        toolTip.SetToolTip(btnOpenWiki, "Open the wiki page for the selected compatibility entry, or the main compatibility list when no entry page is linked.")
+        toolTip.SetToolTip(btnOpenWiki, "Open the selected game's wiki page. Disabled when the compatibility list does not provide a game-specific wiki link.")
         toolTip.SetToolTip(btnCompatOpenFolder, "Open the install folder of the selected detected game in Windows Explorer.")
         toolTip.SetToolTip(btnCompatEditIni, "Use the selected detected game as target and open its OptiScaler.ini in the editor.")
         toolTip.SetToolTip(btnCompatInstallUpdate, "Quick install OptiScaler to the selected detected game using saved default install settings.")

@@ -74,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\TestCompatibilityParser.ps1 -
 - Enable "Hide non-detected" to show only rows that are currently detected.
 - OptiScaler/OptiPatcher columns also show update state for detected installed games (example: `Yes (0.9.0 -> v0.9.1)`).
 - Double-click a detected entry or use "Use detected" to prefill the Install tab.
-- Right-click a detected row for shortcuts (use selected, open folder, edit INI, quick install/uninstall, OptiPatcher actions, wiki, copy info).
+- Right-click a detected row for shortcuts (use selected, open folder, edit INI, quick install/uninstall, OptiPatcher actions, wiki when linked, copy info).
 
 ### Install tab
 
@@ -161,6 +161,8 @@ INI Editor:
 
 ## Version History
 
+- v1.1.6.5 - Disable game-specific Wiki actions for compatibility rows that do not provide a wiki slug, preventing plain compatibility-list rows from opening the main list as if they had their own page.
+- v1.1.6.4 - Add bulk game operations for detected supported games, including bulk quick install/update for OptiScaler and bulk install/update for supported OptiPatcher targets.
 - v1.1.6.0 - Add a keep-existing-`OptiScaler.ini` option for updates/reinstalls, parse the full official compatibility list including plain table rows, add JSON compatibility feed support with parser diagnostics/cache validation, and gate release packaging with compatibility parser fixtures plus a live official-list canary.
 - v1.1.5.9 - Fix Markdown wiki-link parsing for compatibility entries whose game names or page slugs contain parentheses, preventing truncated wiki URLs such as `Dead-Space-(2023`.
 - v1.1.5.8 - Improve INI editor responsiveness and keyboard shortcuts, and render updater release notes as themed rich text with Markdown headings, lists, code formatting, and clickable links.
