@@ -129,6 +129,7 @@ Friend Class AppSettingsModel
     Public Property ExperimentalFsr4PackageFolder As String
     Public Property ExperimentalFsr4EnableUpdate As Boolean?
     Public Property ExperimentalFsr4EnableAgility As Boolean?
+    Public Property ExperimentalFsr4ForceInt8 As Boolean?
     Public Property DefaultPreset As String
     Public Property DefaultHookName As String
     Public Property DefaultGpuVendor As String
@@ -253,6 +254,10 @@ Friend Class AppSettingsModel
         End If
         If Not ExperimentalFsr4EnableAgility.HasValue AndAlso defaults.ExperimentalFsr4EnableAgility.HasValue Then
             ExperimentalFsr4EnableAgility = defaults.ExperimentalFsr4EnableAgility
+            changed = True
+        End If
+        If Not ExperimentalFsr4ForceInt8.HasValue AndAlso defaults.ExperimentalFsr4ForceInt8.HasValue Then
+            ExperimentalFsr4ForceInt8 = defaults.ExperimentalFsr4ForceInt8
             changed = True
         End If
         If String.IsNullOrWhiteSpace(DefaultPreset) AndAlso Not String.IsNullOrWhiteSpace(defaults.DefaultPreset) Then

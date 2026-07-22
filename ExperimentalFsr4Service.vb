@@ -13,6 +13,9 @@ Public Class ExperimentalFsr4ApplyOptions
     Public Property ConflictMode As ConflictMode
     Public Property EnableFsr4Update As Boolean
     Public Property EnableAgilityUpgrade As Boolean
+    ' Fsr4ForceEnableInt8 forces the INT8 model on GPUs OptiScaler does not auto-enable
+    ' (RDNA2, unofficial APUs). Introduced in OptiScaler 0.9.4 / FFX 2.3.
+    Public Property EnableForceInt8 As Boolean
 End Class
 
 Public Class ExperimentalFsr4Status
@@ -32,6 +35,7 @@ Public Class ExperimentalFsr4Manifest
     Public Property PackageVersion As String
     Public Property EnableFsr4Update As Boolean
     Public Property EnableAgilityUpgrade As Boolean
+    Public Property EnableForceInt8 As Boolean
     Public Property InstalledFiles As List(Of String)
     Public Property BackupFiles As Dictionary(Of String, String)
     Public Property IniKeys As Dictionary(Of String, ExperimentalIniKeyState)
@@ -62,7 +66,8 @@ Public Module ExperimentalFsr4Service
 
     Private ReadOnly ManagedIniKeys As String() = {
         "Fsr4Update",
-        "FsrAgilitySDKUpgrade"
+        "FsrAgilitySDKUpgrade",
+        "Fsr4ForceEnableInt8"
     }
 
     Private ReadOnly BlockedCopyExtensions As HashSet(Of String) = New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {
@@ -105,6 +110,13 @@ Public Module ExperimentalFsr4Service
         End If
 
         Return status
+    End Function
+
+    ' True when the target OptiScaler.ini already has FSR4 INT8 explicitly enabled
+    ' (Fsr4Update=true or Fsr4ForceEnableInt8=true), which makes a manual package redundant.
+    ' Note: the OptiScaler 0.9.4 default is "auto", which is not treated as explicitly enabled.
+    Public Function IsFsr4AlreadyEnabled(gameFolder As String) As Boolean
+        Return IsIniKeyEnabled(gameFolder, "Fsr4Update") OrElse IsIniKeyEnabled(gameFolder, "Fsr4ForceEnableInt8")
     End Function
 
     Public Function Apply(options As ExperimentalFsr4ApplyOptions, log As Action(Of String)) As ExperimentalFsr4Manifest
@@ -157,6 +169,12 @@ Public Module ExperimentalFsr4Service
                 UpdateManagedIniKey(iniPath, "FsrAgilitySDKUpgrade", "true", manifest)
                 manifest.EnableAgilityUpgrade = True
                 log?.Invoke("Set FsrAgilitySDKUpgrade=true in OptiScaler.ini.")
+            End If
+
+            If options.EnableForceInt8 Then
+                UpdateManagedIniKey(iniPath, "Fsr4ForceEnableInt8", "true", manifest)
+                manifest.EnableForceInt8 = True
+                log?.Invoke("Set Fsr4ForceEnableInt8=true in OptiScaler.ini.")
             End If
         Else
             log?.Invoke("OptiScaler.ini not found. INI options were skipped.")

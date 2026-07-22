@@ -1061,6 +1061,17 @@ Public Class InstallerService
         log?.Invoke("Updated OptiScaler.ini settings.")
     End Sub
 
+    ' True when a bundled OptiScaler release has already dropped its Fakenvapi payload into the game
+    ' folder. Newer releases (0.9.x / FFX 2.3) ship it as fakenvapi.dll; older ones used nvapi64.dll.
+    Private Shared Function HasBundledFakenvapi(gameFolder As String) As Boolean
+        If String.IsNullOrWhiteSpace(gameFolder) Then
+            Return False
+        End If
+
+        Return File.Exists(Path.Combine(gameFolder, "nvapi64.dll")) OrElse
+               File.Exists(Path.Combine(gameFolder, "fakenvapi.dll"))
+    End Function
+
     Private Shared Sub CopyAddOns(config As InstallerConfig, manifest As InstallManifest, log As Action(Of String))
         ' Copy optional addon files if they are configured and present.
         Dim bundledRelease As Boolean = IsLikelyBundledComponentRelease(config)
@@ -1078,13 +1089,13 @@ Public Class InstallerService
                 CopyFileWithConflict(iniPath, Path.Combine(config.GameFolder, "fakenvapi.ini"), config.ConflictMode, manifest, log)
                 log?.Invoke("Copied Fakenvapi files.")
             Else
-                If bundledRelease AndAlso File.Exists(Path.Combine(config.GameFolder, "nvapi64.dll")) Then
-                    log?.Invoke("Fakenvapi files not found in selected folder. Using bundled nvapi64.dll from OptiScaler package.")
+                If bundledRelease AndAlso HasBundledFakenvapi(config.GameFolder) Then
+                    log?.Invoke("Fakenvapi files not found in selected folder. Using bundled Fakenvapi from OptiScaler package.")
                 Else
                     log?.Invoke("Fakenvapi files not found in selected folder.")
                 End If
             End If
-        ElseIf bundledRelease AndAlso config.GpuVendor = GpuVendor.AmdIntel AndAlso File.Exists(Path.Combine(config.GameFolder, "nvapi64.dll")) Then
+        ElseIf bundledRelease AndAlso config.GpuVendor = GpuVendor.AmdIntel AndAlso HasBundledFakenvapi(config.GameFolder) Then
             log?.Invoke("Using bundled Fakenvapi/nvapi files for AMD/Intel mode.")
         End If
 

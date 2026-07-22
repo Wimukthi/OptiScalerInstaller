@@ -299,6 +299,7 @@ Public Class MainForm
         cmbDefaultConflictMode.SelectedIndex = 0
         chkFsr4EnableUpdate.Checked = True
         chkFsr4EnableAgility.Checked = False
+        chkFsr4ForceInt8.Checked = False
         chkAutoRefreshCompatibilityOnStartup.Checked = True
         chkAutoRefreshGameProfilesOnStartup.Checked = False
         chkAutoCheckInstallerUpdates.Checked = True
@@ -650,7 +651,8 @@ Public Class MainForm
             Return
         End If
 
-        Dim hasAmdRdna As Boolean = IsAmdRdnaDetected()
+        Dim generation As AmdRdnaGeneration = DetectAmdRdnaGeneration()
+        Dim hasAmdRdna As Boolean = generation <> AmdRdnaGeneration.None
         Dim showOnUnsupported As Boolean = chkShowExperimentalTabOnUnsupportedGpu IsNot Nothing AndAlso chkShowExperimentalTabOnUnsupportedGpu.Checked
         Dim shouldShowTab As Boolean = hasAmdRdna OrElse showOnUnsupported
 
@@ -676,17 +678,13 @@ Public Class MainForm
             End If
         End If
 
-        If Not hasAmdRdna AndAlso lblFsr4Status IsNot Nothing Then
-            If showOnUnsupported Then
-                lblFsr4Status.Text = "Experimental package: unsupported GPU (tab manually enabled)."
-            Else
-                lblFsr4Status.Text = "Experimental package: unavailable (AMD RDNA GPU not detected)."
-            End If
+        If lblFsr4Status IsNot Nothing Then
+            lblFsr4Status.Text = BuildFsr4StatusText(generation, showOnUnsupported)
         End If
 
         If logAction Then
             If hasAmdRdna Then
-                AppendLog("FSR4 INT8 tab enabled (AMD RDNA GPU detected).")
+                AppendLog("FSR4 INT8 tab enabled (" & DescribeRdnaGeneration(generation) & " detected).")
             ElseIf showOnUnsupported Then
                 AppendLog("FSR4 INT8 tab shown by settings override (AMD RDNA GPU not detected).")
             Else
@@ -695,8 +693,58 @@ Public Class MainForm
         End If
     End Sub
 
+    ' Human-readable label for a detected RDNA generation.
+    Private Shared Function DescribeRdnaGeneration(generation As AmdRdnaGeneration) As String
+        Select Case generation
+            Case AmdRdnaGeneration.Rdna1
+                Return "AMD RDNA1 GPU"
+            Case AmdRdnaGeneration.Rdna2
+                Return "AMD RDNA2 GPU"
+            Case AmdRdnaGeneration.Rdna3
+                Return "AMD RDNA3 GPU"
+            Case AmdRdnaGeneration.Rdna4
+                Return "AMD RDNA4 GPU"
+            Case AmdRdnaGeneration.Unknown
+                Return "AMD RDNA GPU"
+            Case Else
+                Return "No AMD RDNA GPU"
+        End Select
+    End Function
+
+    ' Generation-aware guidance for the experimental FSR4 INT8 tab. Since OptiScaler 0.9.4 bundles
+    ' FSR 4.1.1 INT8 and auto-enables it on RDNA3 desktop / uses native FSR4 on RDNA4, the manual
+    ' package is now mainly for RDNA2 and unofficial APU cases.
+    Private Shared Function BuildFsr4StatusText(generation As AmdRdnaGeneration, showOnUnsupported As Boolean) As String
+        Select Case generation
+            Case AmdRdnaGeneration.Rdna4
+                Return "RDNA4 detected: OptiScaler 0.9.4 uses native FSR4 (Fsr4Update=auto). Manual INT8 package is not needed."
+            Case AmdRdnaGeneration.Rdna3
+                Return "RDNA3 detected: OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 (Fsr4Update=auto) on desktop cards. Manual package is usually unnecessary - use it only for unsupported APUs."
+            Case AmdRdnaGeneration.Rdna2
+                Return "RDNA2 detected: FSR4 INT8 (for example 4.0.2c) is not bundled by OptiScaler. Use this tab to apply a manual INT8 package and enable Fsr4ForceEnableInt8."
+            Case AmdRdnaGeneration.Rdna1
+                Return "RDNA1 detected: FSR4 INT8 is not supported on RDNA1 hardware."
+            Case AmdRdnaGeneration.Unknown
+                Return "AMD RDNA GPU detected: use this manual INT8 workflow for unsupported/legacy cases (RDNA2, APUs)."
+            Case Else
+                If showOnUnsupported Then
+                    Return "Experimental package: unsupported GPU (tab manually enabled)."
+                Else
+                    Return "Experimental package: unavailable (AMD RDNA GPU not detected)."
+                End If
+        End Select
+    End Function
+
     Private Function IsAmdRdnaDetected() As Boolean
+        Return DetectAmdRdnaGeneration() <> AmdRdnaGeneration.None
+    End Function
+
+    ' Determines the most capable AMD RDNA generation among detected adapters.
+    Private Function DetectAmdRdnaGeneration() As AmdRdnaGeneration
         EnsureGpuDetectionInitialized()
+
+        Dim best As AmdRdnaGeneration = AmdRdnaGeneration.None
+        Dim sawUnknown As Boolean = False
 
         For Each adapter As GpuAdapterInfo In gpuDetectionAdapters
             If Not IsAmdAdapter(adapter) Then
@@ -704,7 +752,90 @@ Public Class MainForm
             End If
 
             Dim candidate As String = (If(adapter.Name, "") & " " & If(adapter.AdapterCompatibility, "")).Trim()
-            If IsLikelyAmdRdnaAdapter(candidate) Then
+            Dim generation As AmdRdnaGeneration = ClassifyAmdRdnaAdapter(candidate)
+            Select Case generation
+                Case AmdRdnaGeneration.Rdna1, AmdRdnaGeneration.Rdna2, AmdRdnaGeneration.Rdna3, AmdRdnaGeneration.Rdna4
+                    ' Prefer the highest concrete generation when multiple AMD adapters exist.
+                    If generation > best Then
+                        best = generation
+                    End If
+                Case AmdRdnaGeneration.Unknown
+                    sawUnknown = True
+            End Select
+        Next
+
+        If best <> AmdRdnaGeneration.None Then
+            Return best
+        End If
+
+        If sawUnknown Then
+            Return AmdRdnaGeneration.Unknown
+        End If
+
+        Return AmdRdnaGeneration.None
+    End Function
+
+    Private Function IsLikelyAmdRdnaAdapter(adapterName As String) As Boolean
+        Return ClassifyAmdRdnaAdapter(adapterName) <> AmdRdnaGeneration.None
+    End Function
+
+    ' Classifies an AMD adapter name into an RDNA generation using model families, then RX ranges,
+    ' then a generic RDNA fallback. Deliberately conservative: unresolved AMD RDNA parts return
+    ' Unknown (still eligible for the manual INT8 workflow) rather than a guessed generation.
+    Private Function ClassifyAmdRdnaAdapter(adapterName As String) As AmdRdnaGeneration
+        If String.IsNullOrWhiteSpace(adapterName) Then
+            Return AmdRdnaGeneration.None
+        End If
+
+        Dim upper As String = adapterName.ToUpperInvariant()
+        If Not upper.Contains("AMD") AndAlso Not upper.Contains("RADEON") Then
+            Return AmdRdnaGeneration.None
+        End If
+
+        Dim rdna4Tokens As String() = {"9070", "9080"}
+        Dim rdna3Tokens As String() = {"7600", "7700", "7800", "7900", "740M", "760M", "780M", "880M", "890M", "RADEON PRO W7"}
+        Dim rdna2Tokens As String() = {"6400", "6500", "6600", "6650", "6700", "6800", "6900", "6950"}
+        Dim rdna1Tokens As String() = {"5300", "5500", "5600", "5700"}
+        Dim rdnaGenericTokens As String() = {"RADEON PRO W8", "RADEON PRO W9"}
+
+        If ContainsAnyToken(upper, rdna4Tokens) Then
+            Return AmdRdnaGeneration.Rdna4
+        End If
+        If ContainsAnyToken(upper, rdna3Tokens) Then
+            Return AmdRdnaGeneration.Rdna3
+        End If
+        If ContainsAnyToken(upper, rdna2Tokens) Then
+            Return AmdRdnaGeneration.Rdna2
+        End If
+        If ContainsAnyToken(upper, rdna1Tokens) Then
+            Return AmdRdnaGeneration.Rdna1
+        End If
+
+        Dim rxModel As Integer = FindRxModelNumber(upper)
+        If rxModel >= 9000 Then
+            Return AmdRdnaGeneration.Rdna4
+        ElseIf rxModel >= 7000 Then
+            Return AmdRdnaGeneration.Rdna3
+        ElseIf rxModel >= 6000 Then
+            Return AmdRdnaGeneration.Rdna2
+        ElseIf rxModel >= 5000 Then
+            Return AmdRdnaGeneration.Rdna1
+        End If
+
+        If ContainsAnyToken(upper, rdnaGenericTokens) OrElse upper.Contains("RDNA") Then
+            Return AmdRdnaGeneration.Unknown
+        End If
+
+        Return AmdRdnaGeneration.None
+    End Function
+
+    Private Shared Function ContainsAnyToken(upper As String, tokens As String()) As Boolean
+        If String.IsNullOrEmpty(upper) OrElse tokens Is Nothing Then
+            Return False
+        End If
+
+        For Each token As String In tokens
+            If upper.Contains(token, StringComparison.OrdinalIgnoreCase) Then
                 Return True
             End If
         Next
@@ -712,34 +843,10 @@ Public Class MainForm
         Return False
     End Function
 
-    Private Function IsLikelyAmdRdnaAdapter(adapterName As String) As Boolean
-        If String.IsNullOrWhiteSpace(adapterName) Then
-            Return False
+    Private Function FindRxModelNumber(upper As String) As Integer
+        If String.IsNullOrEmpty(upper) Then
+            Return -1
         End If
-
-        Dim upper As String = adapterName.ToUpperInvariant()
-        If Not upper.Contains("AMD") AndAlso Not upper.Contains("RADEON") Then
-            Return False
-        End If
-
-        If upper.Contains("RDNA") Then
-            Return True
-        End If
-
-        Dim rdnaTokens As String() = {
-            "5300", "5500", "5600", "5700",
-            "6400", "6500", "6600", "6650", "6700", "6800", "6900", "6950",
-            "740M", "760M", "780M",
-            "7600", "7700", "7800", "7900", "9070", "9080",
-            "880M", "890M",
-            "RADEON PRO W7", "RADEON PRO W8", "RADEON PRO W9"
-        }
-
-        For Each token As String In rdnaTokens
-            If upper.Contains(token, StringComparison.OrdinalIgnoreCase) Then
-                Return True
-            End If
-        Next
 
         Dim searchIndex As Integer = 0
         While searchIndex < upper.Length
@@ -751,14 +858,14 @@ Public Class MainForm
             If rxIndex = 0 OrElse Not Char.IsLetterOrDigit(upper(rxIndex - 1)) Then
                 Dim modelNumber As Integer = ParseRxModelNumber(upper, rxIndex + 2)
                 If modelNumber >= 5000 Then
-                    Return True
+                    Return modelNumber
                 End If
             End If
 
             searchIndex = rxIndex + 2
         End While
 
-        Return False
+        Return -1
     End Function
 
     Private Function ParseRxModelNumber(text As String, startIndex As Integer) As Integer
@@ -1108,6 +1215,30 @@ Public Class MainForm
             Return
         End If
 
+        ' OptiScaler 0.9.4 auto-enables FSR4 on RDNA3 desktop / uses native FSR4 on RDNA4, and the
+        ' target INI may already have it enabled. Warn before applying a redundant manual package.
+        Dim generation As AmdRdnaGeneration = DetectAmdRdnaGeneration()
+        Dim redundancyReason As String = ""
+        If generation = AmdRdnaGeneration.Rdna4 Then
+            redundancyReason = "An RDNA4 GPU was detected. OptiScaler 0.9.4 uses native FSR4, so a manual INT8 package is normally unnecessary."
+        ElseIf generation = AmdRdnaGeneration.Rdna3 Then
+            redundancyReason = "An RDNA3 GPU was detected. OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 on RDNA3 desktop cards, so a manual INT8 package is normally unnecessary."
+        ElseIf ExperimentalFsr4Service.IsFsr4AlreadyEnabled(txtGameFolder.Text) Then
+            redundancyReason = "The target OptiScaler.ini already has FSR4 INT8 enabled (Fsr4Update or Fsr4ForceEnableInt8)."
+        End If
+
+        If Not String.IsNullOrEmpty(redundancyReason) Then
+            Dim confirm As DialogResult = MessageBox.Show(Me,
+                redundancyReason & Environment.NewLine & Environment.NewLine & "Apply the manual FSR4 INT8 package anyway?",
+                "Experimental FSR4",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question)
+            If confirm <> DialogResult.Yes Then
+                AppendLog("Experimental FSR4 apply cancelled (redundant for detected GPU/INI state).")
+                Return
+            End If
+        End If
+
         Try
             SetExperimentalActionButtonsEnabled(False)
             AppendLog("Applying experimental FSR4 package...")
@@ -1117,7 +1248,8 @@ Public Class MainForm
                 .PackageFolder = txtFsr4PackageFolder.Text.Trim(),
                 .ConflictMode = GetConflictModeFromIndex(cmbConflictMode.SelectedIndex),
                 .EnableFsr4Update = chkFsr4EnableUpdate.Checked,
-                .EnableAgilityUpgrade = chkFsr4EnableAgility.Checked
+                .EnableAgilityUpgrade = chkFsr4EnableAgility.Checked,
+                .EnableForceInt8 = chkFsr4ForceInt8.Checked
             }
 
             Dim manifest As ExperimentalFsr4Manifest = Await Task.Run(Function() ExperimentalFsr4Service.Apply(options, AddressOf AppendLog))
@@ -2247,15 +2379,12 @@ Public Class MainForm
                                                                                                                            normalizedExe,
                                                                                                                            "Manual"))
             If detected Is Nothing Then
-                AppendLog("Manual add failed: selected executable did not match a supported game.")
-                MessageBox.Show(Me,
-                                "The selected executable did not match any game in the compatibility list." & Environment.NewLine &
-                                "Try selecting the main game EXE from the actual binaries folder.",
-                                "Add Game Manually",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information)
-                SetStatus("Manual add: no supported match.")
-                Return
+                ' Name inference was ambiguous or found nothing; let the user disambiguate.
+                detected = Await ResolveManualGameViaPickerAsync(normalizedExe)
+                If detected Is Nothing Then
+                    SetStatus("Manual add: no game selected.")
+                    Return
+                End If
             End If
 
             EnsurePersistedDeepScanGamesLoaded()
@@ -2290,6 +2419,60 @@ Public Class MainForm
             btnDeepScanDrives.Enabled = True
             UpdateUseDetectedState()
         End Try
+    End Function
+
+    ' Fallback for manual add when name inference is ambiguous or matches nothing: let the user
+    ' pick the intended compatibility entry (from suggested candidates, or the full list for #5).
+    Private Async Function ResolveManualGameViaPickerAsync(normalizedExe As String) As Task(Of DetectedGame)
+        Dim match As DetectionService.ManualGameMatch = Await Task.Run(Function() DetectionService.FindSupportedGameCandidatesFromExecutable(allCompatibilityEntries, normalizedExe))
+        If match Is Nothing Then
+            Return Nothing
+        End If
+
+        Dim installDir As String = match.InstallDir
+        If String.IsNullOrWhiteSpace(installDir) Then
+            installDir = NormalizePathSafe(Path.GetDirectoryName(normalizedExe))
+        End If
+
+        If String.IsNullOrWhiteSpace(installDir) OrElse Not Directory.Exists(installDir) Then
+            AppendLog("Manual add failed: could not resolve an install folder for the selected executable.")
+            MessageBox.Show(Me,
+                            "Could not resolve the game install folder from the selected executable.",
+                            "Add Game Manually",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning)
+            Return Nothing
+        End If
+
+        Dim folderName As String = Path.GetFileName(installDir)
+        Dim hasCandidates As Boolean = match.Candidates IsNot Nothing AndAlso match.Candidates.Count > 0
+        Dim context As String
+        If hasCandidates Then
+            context = "'" & folderName & "' could match more than one game. Select the correct entry, or check 'Show all games' to pick a different one."
+        Else
+            context = "No automatic match for '" & folderName & "'. Pick the matching game from the compatibility list below."
+        End If
+
+        Dim chosen As CompatibilityEntry = Nothing
+        Using picker As New frmGamePicker(match.Candidates, allCompatibilityEntries, context)
+            If picker.ShowDialog(Me) <> DialogResult.OK Then
+                AppendLog("Manual add cancelled at game selection.")
+                Return Nothing
+            End If
+
+            chosen = picker.SelectedEntry
+        End Using
+
+        If chosen Is Nothing Then
+            Return Nothing
+        End If
+
+        Dim detected As DetectedGame = Await Task.Run(Function() DetectionService.BuildManualDetectedGame(chosen, installDir, "Manual"))
+        If detected IsNot Nothing Then
+            AppendLog("Manual add: user selected '" & chosen.Name & "' for folder " & installDir & ".")
+        End If
+
+        Return detected
     End Function
 
     Private Async Sub btnUseDetected_Click(sender As Object, e As EventArgs) Handles btnUseDetected.Click
@@ -5559,6 +5742,7 @@ Public Class MainForm
         settings.ExperimentalFsr4PackageFolder = txtFsr4PackageFolder.Text.Trim()
         settings.ExperimentalFsr4EnableUpdate = chkFsr4EnableUpdate.Checked
         settings.ExperimentalFsr4EnableAgility = chkFsr4EnableAgility.Checked
+        settings.ExperimentalFsr4ForceInt8 = chkFsr4ForceInt8.Checked
         settings.OptiPatcherPreferredSource = GetOptiPatcherSourceToken(cmbOptiPatcherSource.SelectedIndex)
         settings.OptiPatcherLocalPath = txtOptiPatcherLocalFile.Text.Trim()
         settings.DefaultPreset = GetDefaultPresetValue()
@@ -6065,6 +6249,7 @@ Public Class MainForm
         toolTip.SetToolTip(lblFsr4DetectedGames, "Shows detected-game count for the experimental tab picker.")
         toolTip.SetToolTip(chkFsr4EnableUpdate, "When checked, installer sets Fsr4Update=true in OptiScaler.ini during apply.")
         toolTip.SetToolTip(chkFsr4EnableAgility, "When checked, installer sets FsrAgilitySDKUpgrade=true to help selected Windows 10 titles.")
+        toolTip.SetToolTip(chkFsr4ForceInt8, "When checked, installer sets Fsr4ForceEnableInt8=true (OptiScaler 0.9.4+) to force the INT8 model on GPUs OptiScaler does not auto-enable, such as RDNA2 and unofficial APUs.")
         toolTip.SetToolTip(btnFsr4Apply, "Copy experimental package files into target game folder, write selected INI keys, and create installer manifest metadata.")
         toolTip.SetToolTip(btnFsr4Remove, "Remove installer-managed experimental files and restore backed-up files/INI keys where available.")
         toolTip.SetToolTip(btnFsr4RefreshStatus, "Re-check whether experimental package appears installed and whether it is installer-managed.")
@@ -6523,6 +6708,7 @@ Public Class MainForm
             txtFsr4PackageFolder.Text = If(settings.ExperimentalFsr4PackageFolder, "")
             chkFsr4EnableUpdate.Checked = If(settings.ExperimentalFsr4EnableUpdate.HasValue, settings.ExperimentalFsr4EnableUpdate.Value, True)
             chkFsr4EnableAgility.Checked = If(settings.ExperimentalFsr4EnableAgility.HasValue, settings.ExperimentalFsr4EnableAgility.Value, False)
+            chkFsr4ForceInt8.Checked = If(settings.ExperimentalFsr4ForceInt8.HasValue, settings.ExperimentalFsr4ForceInt8.Value, False)
             cmbOptiPatcherSource.SelectedIndex = GetOptiPatcherSourceIndex(settings.OptiPatcherPreferredSource)
             txtOptiPatcherLocalFile.Text = If(settings.OptiPatcherLocalPath, "")
             _settingDefaultsPreset = True

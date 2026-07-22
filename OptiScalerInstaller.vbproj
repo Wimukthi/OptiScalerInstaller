@@ -40,11 +40,25 @@
     <Compile Update="frmBulkOperations.Designer.vb">
       <DependentUpon>frmBulkOperations.vb</DependentUpon>
     </Compile>
+    <Compile Update="frmGamePicker.Designer.vb">
+      <DependentUpon>frmGamePicker.vb</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SharpCompress" Version="0.38.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      GHSA-6c8g-7p36-r338 (CVE-2026-44788) is a zip-slip in SharpCompress IArchive.WriteToDirectory().
+      This app never calls WriteToDirectory: ExtractArchive in InstallerService.vb iterates entries and
+      enforces TryGetSafeExtractionPath / IsPathInsideRoot (rejecting traversal/rooted entries), so it is
+      not exposed to this advisory. No fixed SharpCompress version exists as of this release, so the audit
+      warning is suppressed with the exposure assessment recorded here.
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6c8g-7p36-r338" />
   </ItemGroup>
 
   <ItemGroup>
@@ -88,6 +102,9 @@
     </EmbeddedResource>
     <EmbeddedResource Update="frmBulkOperations.resx">
       <DependentUpon>frmBulkOperations.vb</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Update="frmGamePicker.resx">
+      <DependentUpon>frmGamePicker.vb</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
 

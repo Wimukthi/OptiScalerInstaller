@@ -83,6 +83,104 @@ Public Class DetectionService
         Return Nothing
     End Function
 
+    ' Result of resolving a manually selected executable to candidate compatibility entries.
+    Public Class ManualGameMatch
+        Public Property InstallDir As String
+        Public Property Candidates As List(Of CompatibilityEntry)
+
+        Public Sub New()
+            InstallDir = ""
+            Candidates = New List(Of CompatibilityEntry)()
+        End Sub
+    End Class
+
+    ' Resolves the install directory and every candidate compatibility entry for a manually
+    ' selected executable. Unlike DetectSupportedGameFromExecutable (which returns a single
+    ' deterministic match or Nothing), this surfaces ambiguous relaxed-token prefix collisions
+    ' (for example the folder "God of War" matching both "God of War (2018)" and
+    ' "God of War Ragnarok") so the manual-add flow can offer a disambiguation picker instead of
+    ' silently failing.
+    Public Shared Function FindSupportedGameCandidatesFromExecutable(entries As IEnumerable(Of CompatibilityEntry),
+                                                                     executablePath As String) As ManualGameMatch
+        Dim result As New ManualGameMatch()
+        If entries Is Nothing OrElse String.IsNullOrWhiteSpace(executablePath) Then
+            Return result
+        End If
+
+        Dim normalizedExe As String = NormalizeInstallPath(executablePath)
+        If String.IsNullOrWhiteSpace(normalizedExe) OrElse Not File.Exists(normalizedExe) Then
+            Return result
+        End If
+
+        Dim executableDirectory As String = NormalizeInstallPath(Path.GetDirectoryName(normalizedExe))
+        If String.IsNullOrWhiteSpace(executableDirectory) OrElse Not Directory.Exists(executableDirectory) Then
+            Return result
+        End If
+
+        Dim installDirectory As String = ResolveManualInstallDir(executableDirectory)
+        If String.IsNullOrWhiteSpace(installDirectory) Then
+            installDirectory = executableDirectory
+        End If
+        result.InstallDir = installDirectory
+
+        Dim matcher As New CompatibilityMatcher(entries)
+        Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each candidateName As String In BuildManualMatchCandidates(normalizedExe, installDirectory)
+            For Each matchedEntry As CompatibilityEntry In matcher.MatchCandidates(candidateName)
+                If matchedEntry IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(matchedEntry.Name) AndAlso seen.Add(matchedEntry.Name) Then
+                    result.Candidates.Add(matchedEntry)
+                End If
+            Next
+        Next
+
+        Return result
+    End Function
+
+    ' Testable matcher entrypoint: returns the candidate compatibility entries a raw game name
+    ' could refer to (single deterministic match, or all colliding prefix matches).
+    Public Shared Function MatchSupportedGameCandidates(entries As IEnumerable(Of CompatibilityEntry),
+                                                        candidateName As String) As List(Of CompatibilityEntry)
+        If entries Is Nothing OrElse String.IsNullOrWhiteSpace(candidateName) Then
+            Return New List(Of CompatibilityEntry)()
+        End If
+
+        Dim matcher As New CompatibilityMatcher(entries)
+        Return matcher.MatchCandidates(candidateName)
+    End Function
+
+    ' Builds a manual DetectedGame for a user-confirmed compatibility entry and install directory,
+    ' including anti-cheat signature detection (mirrors DetectSupportedGameFromExecutable output).
+    Public Shared Function BuildManualDetectedGame(entry As CompatibilityEntry,
+                                                   installDirectory As String,
+                                                   Optional platform As String = "Manual") As DetectedGame
+        If entry Is Nothing Then
+            Return Nothing
+        End If
+
+        Dim normalizedDir As String = NormalizeInstallPath(installDirectory)
+        If String.IsNullOrWhiteSpace(normalizedDir) Then
+            normalizedDir = installDirectory
+        End If
+
+        Dim sourceName As String = entry.Name
+        If Not String.IsNullOrWhiteSpace(normalizedDir) Then
+            Dim folderName As String = Path.GetFileName(normalizedDir)
+            If Not String.IsNullOrWhiteSpace(folderName) Then
+                sourceName = folderName
+            End If
+        End If
+
+        Dim antiCheat As AntiCheatScanResult = AntiCheatService.Detect(normalizedDir)
+        Return New DetectedGame With {
+            .DisplayName = entry.Name,
+            .Platform = platform,
+            .InstallDir = normalizedDir,
+            .MatchedEntry = entry,
+            .SourceName = sourceName,
+            .AntiCheat = If(antiCheat?.Detected, antiCheat.Provider, "")
+        }
+    End Function
+
     Private Shared Function ResolveManualInstallDir(executableDirectory As String) As String
         Dim normalizedDirectory As String = NormalizeInstallPath(executableDirectory)
         If String.IsNullOrWhiteSpace(normalizedDirectory) OrElse Not Directory.Exists(normalizedDirectory) Then
@@ -1270,6 +1368,42 @@ Public Class DetectionService
             End If
 
             Return Nothing
+        End Function
+
+        ' Like Match, but returns every plausible entry instead of discarding ambiguous prefix
+        ' collisions. A deterministic single match returns one entry; otherwise all relaxed-token
+        ' prefix matches are returned so the caller can let the user disambiguate.
+        Public Function MatchCandidates(name As String) As List(Of CompatibilityEntry)
+            Dim results As New List(Of CompatibilityEntry)()
+            If String.IsNullOrWhiteSpace(name) Then
+                Return results
+            End If
+
+            Dim deterministic As CompatibilityEntry = Match(name)
+            If deterministic IsNot Nothing Then
+                results.Add(deterministic)
+                Return results
+            End If
+
+            Dim inputTokens As List(Of String) = NameNormalization.TokenizeRelaxed(name)
+            If inputTokens Is Nothing OrElse inputTokens.Count < 2 Then
+                Return results
+            End If
+
+            Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            For Each candidate As RelaxedTokenEntry In relaxedTokenEntries
+                If candidate Is Nothing OrElse candidate.Entry Is Nothing OrElse candidate.Tokens Is Nothing Then
+                    Continue For
+                End If
+
+                If IsPrefix(inputTokens, candidate.Tokens) OrElse IsPrefix(candidate.Tokens, inputTokens) Then
+                    If Not String.IsNullOrWhiteSpace(candidate.Entry.Name) AndAlso seen.Add(candidate.Entry.Name) Then
+                        results.Add(candidate.Entry)
+                    End If
+                End If
+            Next
+
+            Return results
         End Function
 
         Private Function MatchByRelaxedTokenPrefix(inputTokens As List(Of String)) As CompatibilityEntry

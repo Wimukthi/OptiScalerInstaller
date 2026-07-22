@@ -19,6 +19,17 @@ Public Enum GpuVendor
     Unknown
 End Enum
 
+Public Enum AmdRdnaGeneration
+    ' AMD RDNA generation, used to tailor the FSR4 INT8 experimental workflow.
+    ' None = not an AMD RDNA adapter; Unknown = AMD RDNA but generation not resolved.
+    None
+    Rdna1
+    Rdna2
+    Rdna3
+    Rdna4
+    Unknown
+End Enum
+
 Public Enum FgTypeSelection
     ' Frame generation selection used in OptiScaler.ini.
     Auto

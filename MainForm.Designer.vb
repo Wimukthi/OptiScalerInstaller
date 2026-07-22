@@ -155,6 +155,7 @@ Partial Class MainForm
         grpFsr4Options = New ThemedGroupBox()
         chkFsr4EnableUpdate = New CheckBox()
         chkFsr4EnableAgility = New CheckBox()
+        chkFsr4ForceInt8 = New CheckBox()
         lblFsr4OptionsHint = New Label()
         grpFsr4Actions = New ThemedGroupBox()
         lblFsr4TargetGame = New Label()
@@ -1744,7 +1745,7 @@ Partial Class MainForm
         tabExperimental.Padding = New Padding(8)
         tabExperimental.Size = New Size(1246, 679)
         tabExperimental.TabIndex = 3
-        tabExperimental.Text = "FSR4 INT8 (Experimental)"
+        tabExperimental.Text = "FSR4 INT8 (Manual)"
         tabExperimental.UseVisualStyleBackColor = True
         ' 
         ' experimentalLayout
@@ -1777,7 +1778,7 @@ Partial Class MainForm
         grpFsr4Package.Size = New Size(1230, 116)
         grpFsr4Package.TabIndex = 0
         grpFsr4Package.TabStop = False
-        grpFsr4Package.Text = "FSR4 INT8 Package (experimental)"
+        grpFsr4Package.Text = "Manual FSR4 INT8 Package (RDNA2 / APUs)"
         ' 
         ' lblFsr4PackageFolder
         ' 
@@ -1823,6 +1824,7 @@ Partial Class MainForm
         ' 
         grpFsr4Options.Controls.Add(chkFsr4EnableUpdate)
         grpFsr4Options.Controls.Add(chkFsr4EnableAgility)
+        grpFsr4Options.Controls.Add(chkFsr4ForceInt8)
         grpFsr4Options.Controls.Add(lblFsr4OptionsHint)
         grpFsr4Options.Dock = DockStyle.Fill
         grpFsr4Options.Location = New Point(0, 124)
@@ -1852,7 +1854,17 @@ Partial Class MainForm
         chkFsr4EnableAgility.TabIndex = 1
         chkFsr4EnableAgility.Text = "Set FsrAgilitySDKUpgrade=true (helps some Win10 titles)"
         chkFsr4EnableAgility.UseVisualStyleBackColor = True
-        ' 
+        '
+        ' chkFsr4ForceInt8
+        '
+        chkFsr4ForceInt8.AutoSize = True
+        chkFsr4ForceInt8.Location = New Point(12, 74)
+        chkFsr4ForceInt8.Name = "chkFsr4ForceInt8"
+        chkFsr4ForceInt8.Size = New Size(330, 19)
+        chkFsr4ForceInt8.TabIndex = 2
+        chkFsr4ForceInt8.Text = "Set Fsr4ForceEnableInt8=true (force INT8 on RDNA2/APUs)"
+        chkFsr4ForceInt8.UseVisualStyleBackColor = True
+        '
         ' lblFsr4OptionsHint
         ' 
         lblFsr4OptionsHint.AutoSize = True
@@ -2843,6 +2855,7 @@ Partial Class MainForm
     Friend WithEvents grpFsr4Options As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents chkFsr4EnableUpdate As System.Windows.Forms.CheckBox
     Friend WithEvents chkFsr4EnableAgility As System.Windows.Forms.CheckBox
+    Friend WithEvents chkFsr4ForceInt8 As System.Windows.Forms.CheckBox
     Friend WithEvents lblFsr4OptionsHint As System.Windows.Forms.Label
     Friend WithEvents grpFsr4Actions As OptiScalerInstaller.ThemedGroupBox
     Friend WithEvents lblFsr4TargetGame As System.Windows.Forms.Label

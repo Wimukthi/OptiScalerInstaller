@@ -21,7 +21,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Compatibility refresh diff tracking (+added/-removed/~changed) with row highlighting.
 - Compatibility parser validation with JSON-feed support, Markdown fallback, and live-list release canary.
 - Per-game workaround template auto-apply on detected game selection.
-- Version-aware add-on behavior for newer OptiScaler builds (0.9+ bundled component handling).
+- Version-aware add-on behavior for newer OptiScaler builds (0.9+ bundled component handling, verified against 0.9.4 / FFX 2.3 SDK / FSR 4.1.1).
 - Post-install verification report with INI and file checks.
 - Archive provenance metadata (source URL, size, SHA-256 fingerprint) in install manifest/log.
 - Built-in installer update checker with optional startup auto-check and non-intrusive in-app notice.
@@ -29,7 +29,7 @@ WinForms installer and manager for OptiScaler that supports automatic game detec
 - Configurable URLs for lists and releases.
 - Anti-cheat signature hints in detection results with install-time warning prompts.
 - Startup compatibility auto-refresh toggle.
-- FSR4 INT8 (Experimental) workflow with detected-game picker and optional visibility override on unsupported GPUs.
+- Manual FSR4 INT8 workflow aimed at RDNA2 and unofficial APUs (since OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 on RDNA3 desktop and RDNA4 uses native FSR4): GPU-generation-aware guidance, `Fsr4ForceEnableInt8` support, detected-game picker, redundancy warnings, and an optional visibility override on unsupported GPUs.
 - Robust GPU detection using adapter vendor IDs (with fallbacks), and detected GPU model shown on the title bar.
 
 ## Requirements
@@ -90,11 +90,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\TestCompatibilityParser.ps1 -
 - Configure advanced OptiPatcher source options (rolling/stable/alternate/local .asi) and manual install/remove.
 - Enable only what your game needs.
 
-### FSR4 INT8 (Experimental) tab
+### FSR4 INT8 (Manual) tab
 
-- Apply/remove the INT8 package to a selected game folder.
+- As of OptiScaler 0.9.4, FSR 4.1.1 INT8 is bundled and auto-enabled on RDNA3 desktop GPUs (`Fsr4Update=auto`), and RDNA4 uses native FSR4. This tab is therefore aimed at cases OptiScaler does not cover automatically: RDNA2 (where the recommended FSR 4.0.2c INT8 model is not bundled) and unofficial RDNA3/3.5 APUs.
+- The tab shows GPU-generation-aware guidance and warns before applying a redundant package on RDNA3 desktop / RDNA4, or when the target `OptiScaler.ini` already enables FSR4.
+- Apply/remove a manual INT8 package to a selected game folder.
 - Pick targets from detected supported games or browse manually to a game EXE.
-- Optional INI toggles (`Fsr4Update`, `FsrAgilitySDKUpgrade`) are applied/restored by installer-managed state.
+- Optional INI toggles (`Fsr4Update`, `FsrAgilitySDKUpgrade`, `Fsr4ForceEnableInt8`) are applied/restored by installer-managed state.
 
 ### Settings tab
 
@@ -161,6 +163,7 @@ INI Editor:
 
 ## Version History
 
+- v1.1.7.0 - Fix manual "Add game manually" so ambiguous or unmatched titles (for example God of War, whose folder name is a prefix of both listed God of War entries) open a searchable game picker instead of silently failing; verify install/add-on handling against OptiScaler 0.9.4 / FFX 2.3 SDK / FSR 4.1.1 and make the bundled-Fakenvapi log recognize `fakenvapi.dll`; repurpose the FSR4 INT8 tab for RDNA2 and unofficial APUs with GPU-generation-aware guidance, an `Fsr4ForceEnableInt8` toggle, and a redundancy warning (OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 on RDNA3 desktop and RDNA4 uses native FSR4); and record the SharpCompress GHSA-6c8g-7p36-r338 exposure assessment as a NuGet audit suppression (the app extracts archives with its own path-traversal-guarded loop and never calls the vulnerable WriteToDirectory).
 - v1.1.6.5 - Disable game-specific Wiki actions for compatibility rows that do not provide a wiki slug, preventing plain compatibility-list rows from opening the main list as if they had their own page.
 - v1.1.6.4 - Add bulk game operations for detected supported games, including bulk quick install/update for OptiScaler and bulk install/update for supported OptiPatcher targets.
 - v1.1.6.0 - Add a keep-existing-`OptiScaler.ini` option for updates/reinstalls, parse the full official compatibility list including plain table rows, add JSON compatibility feed support with parser diagnostics/cache validation, and gate release packaging with compatibility parser fixtures plus a live official-list canary.

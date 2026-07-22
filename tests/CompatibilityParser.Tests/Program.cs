@@ -9,7 +9,8 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Markdown table parses linked and plain rows", TestMarkdownTableAsync),
     ("Standalone bundled links parse parenthesized slugs", TestStandaloneLinksAsync),
     ("JSON catalog parses entries and aliases", TestJsonCatalogAsync),
-    ("Bundled compatibility list parses", TestBundledListAsync)
+    ("Bundled compatibility list parses", TestBundledListAsync),
+    ("Manual-add surfaces ambiguous game candidates", TestManualMatchCandidatesAsync)
 };
 
 if (runLive)
@@ -137,6 +138,38 @@ static Task TestBundledListAsync()
     AssertMissing(result, "Template");
     AssertEntry(result, "Dead Space (2023)", "Dead-Space-Remake");
     AssertEntry(result, "Escape from Tarkov (SPT)", "Escape-from-Tarkov-(SPT)");
+
+    return Task.CompletedTask;
+}
+
+static Task TestManualMatchCandidatesAsync()
+{
+    var entries = new List<CompatibilityEntry>
+    {
+        new CompatibilityEntry { Name = "God of War (2018)" },
+        new CompatibilityEntry { Name = "God of War Ragnarok" },
+        new CompatibilityEntry { Name = "Cyberpunk 2077" }
+    };
+
+    // The ambiguous folder name "God of War" is a token prefix of both GoW entries.
+    // Regression guard for issue #7: it must surface both instead of silently failing.
+    var gow = DetectionService.MatchSupportedGameCandidates(entries, "God of War");
+    AssertEqual(2, gow.Count, "God of War candidate count");
+    if (!gow.Any(e => string.Equals(e.Name, "God of War (2018)", StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("Expected 'God of War (2018)' among candidates.");
+    }
+    if (!gow.Any(e => string.Equals(e.Name, "God of War Ragnarok", StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("Expected 'God of War Ragnarok' among candidates.");
+    }
+
+    // Deterministic names still resolve to a single candidate.
+    AssertEqual(1, DetectionService.MatchSupportedGameCandidates(entries, "God of War Ragnarok").Count, "Ragnarok candidate count");
+    AssertEqual(1, DetectionService.MatchSupportedGameCandidates(entries, "Cyberpunk 2077").Count, "Cyberpunk candidate count");
+
+    // Unrelated names return nothing (caller then offers the full list).
+    AssertEqual(0, DetectionService.MatchSupportedGameCandidates(entries, "Totally Unlisted Game").Count, "no-match candidate count");
 
     return Task.CompletedTask;
 }
