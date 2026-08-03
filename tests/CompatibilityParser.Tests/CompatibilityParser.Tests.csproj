@@ -11,4 +11,9 @@
     <ProjectReference Include="..\..\OptiScalerInstaller.vbproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Inherited transitively from OptiScalerInstaller; see the exposure assessment in OptiScalerInstaller.vbproj. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6c8g-7p36-r338" />
+  </ItemGroup>
+
 </Project>

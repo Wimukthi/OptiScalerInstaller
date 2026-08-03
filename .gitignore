@@ -1,31 +1,29 @@
-# Build outputs
+# Build output
 bin/
 obj/
 artifacts/
 Release/
-# Keep screenshot assets tracked for README rendering on GitHub.
-Screenshots/
-!Screenshots/
-!Screenshots/*.png
 
-# Visual Studio
+# Visual Studio / IDE state
 .vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 
-# Logs and temp
+# Local .NET SDK / NuGet redirection
+.dotnet/
+.nuget/
+
+# Runtime output written next to the executable
+Errors/
 *.log
 *.tmp
 *.bak
-.dotnet/
-.nuget/
-Diagnostics/
+
+# Local app settings
+OptiScalerInstaller.settings.json
 
 # OS
 Thumbs.db
 desktop.ini
-
-# Local settings
-OptiScalerInstaller.settings.json
