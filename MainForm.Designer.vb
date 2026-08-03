@@ -189,6 +189,7 @@ Partial Class MainForm
         txtInstallerReleaseUrl = New ThemedTextBox()
         lblGameProfilesCatalogUrl = New Label()
         txtGameProfilesCatalogUrl = New ThemedTextBox()
+        flpSettingsToggles = New FlowLayoutPanel()
         chkAutoRefreshCompatibilityOnStartup = New CheckBox()
         chkAutoRefreshGameProfilesOnStartup = New CheckBox()
         chkAutoCheckInstallerUpdates = New CheckBox()
@@ -274,6 +275,7 @@ Partial Class MainForm
         grpFsr4Actions.SuspendLayout()
         tabSettings.SuspendLayout()
         grpSettings.SuspendLayout()
+        flpSettingsToggles.SuspendLayout()
         grpDefaultInstall.SuspendLayout()
         grpLog.SuspendLayout()
         statusStrip.SuspendLayout()
@@ -1760,7 +1762,7 @@ Partial Class MainForm
         experimentalLayout.Name = "experimentalLayout"
         experimentalLayout.RowCount = 3
         experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 124F))
-        experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 104F))
+        experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 132F))
         experimentalLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100F))
         experimentalLayout.Size = New Size(1230, 663)
         experimentalLayout.TabIndex = 0
@@ -1830,7 +1832,7 @@ Partial Class MainForm
         grpFsr4Options.Location = New Point(0, 124)
         grpFsr4Options.Margin = New Padding(0, 0, 0, 8)
         grpFsr4Options.Name = "grpFsr4Options"
-        grpFsr4Options.Size = New Size(1230, 96)
+        grpFsr4Options.Size = New Size(1230, 124)
         grpFsr4Options.TabIndex = 1
         grpFsr4Options.TabStop = False
         grpFsr4Options.Text = "INI Options"
@@ -1840,7 +1842,7 @@ Partial Class MainForm
         chkFsr4EnableUpdate.AutoSize = True
         chkFsr4EnableUpdate.Location = New Point(12, 24)
         chkFsr4EnableUpdate.Name = "chkFsr4EnableUpdate"
-        chkFsr4EnableUpdate.Size = New Size(235, 19)
+        chkFsr4EnableUpdate.Size = New Size(219, 19)
         chkFsr4EnableUpdate.TabIndex = 0
         chkFsr4EnableUpdate.Text = "Set Fsr4Update=true in OptiScaler.ini"
         chkFsr4EnableUpdate.UseVisualStyleBackColor = True
@@ -1850,7 +1852,7 @@ Partial Class MainForm
         chkFsr4EnableAgility.AutoSize = True
         chkFsr4EnableAgility.Location = New Point(12, 49)
         chkFsr4EnableAgility.Name = "chkFsr4EnableAgility"
-        chkFsr4EnableAgility.Size = New Size(300, 19)
+        chkFsr4EnableAgility.Size = New Size(324, 19)
         chkFsr4EnableAgility.TabIndex = 1
         chkFsr4EnableAgility.Text = "Set FsrAgilitySDKUpgrade=true (helps some Win10 titles)"
         chkFsr4EnableAgility.UseVisualStyleBackColor = True
@@ -1860,18 +1862,20 @@ Partial Class MainForm
         chkFsr4ForceInt8.AutoSize = True
         chkFsr4ForceInt8.Location = New Point(12, 74)
         chkFsr4ForceInt8.Name = "chkFsr4ForceInt8"
-        chkFsr4ForceInt8.Size = New Size(330, 19)
+        chkFsr4ForceInt8.Size = New Size(336, 19)
         chkFsr4ForceInt8.TabIndex = 2
         chkFsr4ForceInt8.Text = "Set Fsr4ForceEnableInt8=true (force INT8 on RDNA2/APUs)"
         chkFsr4ForceInt8.UseVisualStyleBackColor = True
         '
         ' lblFsr4OptionsHint
         ' 
+        ' Own line below the checkboxes: the option captions are wide enough to reach
+        ' well past the middle of the group, so a side-by-side hint gets clipped.
         lblFsr4OptionsHint.AutoSize = True
-        lblFsr4OptionsHint.Location = New Point(330, 50)
+        lblFsr4OptionsHint.Location = New Point(12, 99)
         lblFsr4OptionsHint.Name = "lblFsr4OptionsHint"
-        lblFsr4OptionsHint.Size = New Size(381, 15)
-        lblFsr4OptionsHint.TabIndex = 2
+        lblFsr4OptionsHint.Size = New Size(398, 15)
+        lblFsr4OptionsHint.TabIndex = 3
         lblFsr4OptionsHint.Text = "Keys are restored on remove when this feature was applied by the installer."
         ' 
         ' grpFsr4Actions
@@ -1890,10 +1894,10 @@ Partial Class MainForm
         grpFsr4Actions.Controls.Add(btnFsr4BrowseGameExe)
         grpFsr4Actions.Controls.Add(lvFsr4DetectedGames)
         grpFsr4Actions.Dock = DockStyle.Fill
-        grpFsr4Actions.Location = New Point(0, 228)
+        grpFsr4Actions.Location = New Point(0, 256)
         grpFsr4Actions.Margin = New Padding(0)
         grpFsr4Actions.Name = "grpFsr4Actions"
-        grpFsr4Actions.Size = New Size(1230, 435)
+        grpFsr4Actions.Size = New Size(1230, 407)
         grpFsr4Actions.TabIndex = 2
         grpFsr4Actions.TabStop = False
         grpFsr4Actions.Text = "Apply / Remove"
@@ -2074,10 +2078,7 @@ Partial Class MainForm
         grpSettings.Controls.Add(txtInstallerReleaseUrl)
         grpSettings.Controls.Add(lblGameProfilesCatalogUrl)
         grpSettings.Controls.Add(txtGameProfilesCatalogUrl)
-        grpSettings.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
-        grpSettings.Controls.Add(chkAutoRefreshGameProfilesOnStartup)
-        grpSettings.Controls.Add(chkAutoCheckInstallerUpdates)
-        grpSettings.Controls.Add(chkShowExperimentalTabOnUnsupportedGpu)
+        grpSettings.Controls.Add(flpSettingsToggles)
         grpSettings.Controls.Add(lblDefaultIniPath)
         grpSettings.Controls.Add(txtDefaultIniPath)
         grpSettings.Controls.Add(btnBrowseDefaultIni)
@@ -2101,7 +2102,7 @@ Partial Class MainForm
         grpSettings.Size = New Size(1230, 663)
         grpSettings.TabIndex = 0
         grpSettings.TabStop = False
-        grpSettings.Text = "Update & Links"
+        grpSettings.Text = "Update && Links"
         ' 
         ' lblCompatibilityListUrl
         ' 
@@ -2228,44 +2229,60 @@ Partial Class MainForm
         txtGameProfilesCatalogUrl.Padding = New Padding(6, 3, 6, 3)
         txtGameProfilesCatalogUrl.Size = New Size(1018, 24)
         txtGameProfilesCatalogUrl.TabIndex = 15
-        ' 
+        '
+        ' flpSettingsToggles
+        '
+        ' Startup toggles share one row; the flow layout keeps them from overlapping
+        ' when their AutoSize width changes with the text, font or DPI.
+        flpSettingsToggles.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
+        flpSettingsToggles.Controls.Add(chkAutoRefreshCompatibilityOnStartup)
+        flpSettingsToggles.Controls.Add(chkAutoRefreshGameProfilesOnStartup)
+        flpSettingsToggles.Controls.Add(chkAutoCheckInstallerUpdates)
+        flpSettingsToggles.Controls.Add(chkShowExperimentalTabOnUnsupportedGpu)
+        flpSettingsToggles.Location = New Point(12, 220)
+        flpSettingsToggles.Margin = New Padding(0)
+        flpSettingsToggles.Name = "flpSettingsToggles"
+        flpSettingsToggles.Size = New Size(1078, 26)
+        flpSettingsToggles.TabIndex = 16
+        flpSettingsToggles.WrapContents = False
+        '
         ' chkAutoRefreshCompatibilityOnStartup
-        ' 
+        '
         chkAutoRefreshCompatibilityOnStartup.AutoSize = True
-        chkAutoRefreshCompatibilityOnStartup.Location = New Point(180, 223)
+        chkAutoRefreshCompatibilityOnStartup.Margin = New Padding(0, 3, 24, 3)
         chkAutoRefreshCompatibilityOnStartup.Name = "chkAutoRefreshCompatibilityOnStartup"
-        chkAutoRefreshCompatibilityOnStartup.Size = New Size(268, 19)
-        chkAutoRefreshCompatibilityOnStartup.TabIndex = 16
+        chkAutoRefreshCompatibilityOnStartup.Size = New Size(289, 19)
+        chkAutoRefreshCompatibilityOnStartup.TabIndex = 0
         chkAutoRefreshCompatibilityOnStartup.Text = "Auto-refresh compatibility list on application start"
         chkAutoRefreshCompatibilityOnStartup.UseVisualStyleBackColor = True
-        ' 
+        '
         ' chkAutoRefreshGameProfilesOnStartup
-        ' 
+        '
         chkAutoRefreshGameProfilesOnStartup.AutoSize = True
-        chkAutoRefreshGameProfilesOnStartup.Location = New Point(470, 223)
+        chkAutoRefreshGameProfilesOnStartup.Margin = New Padding(0, 3, 24, 3)
         chkAutoRefreshGameProfilesOnStartup.Name = "chkAutoRefreshGameProfilesOnStartup"
-        chkAutoRefreshGameProfilesOnStartup.Size = New Size(248, 19)
-        chkAutoRefreshGameProfilesOnStartup.TabIndex = 17
+        chkAutoRefreshGameProfilesOnStartup.Size = New Size(273, 19)
+        chkAutoRefreshGameProfilesOnStartup.TabIndex = 1
         chkAutoRefreshGameProfilesOnStartup.Text = "Auto-refresh game profiles on application start"
         chkAutoRefreshGameProfilesOnStartup.UseVisualStyleBackColor = True
-        ' 
+        '
         ' chkAutoCheckInstallerUpdates
-        ' 
+        '
         chkAutoCheckInstallerUpdates.AutoSize = True
-        chkAutoCheckInstallerUpdates.Location = New Point(730, 223)
+        chkAutoCheckInstallerUpdates.Margin = New Padding(0, 3, 24, 3)
         chkAutoCheckInstallerUpdates.Name = "chkAutoCheckInstallerUpdates"
-        chkAutoCheckInstallerUpdates.Size = New Size(227, 19)
-        chkAutoCheckInstallerUpdates.TabIndex = 18
+        chkAutoCheckInstallerUpdates.Size = New Size(234, 19)
+        chkAutoCheckInstallerUpdates.TabIndex = 2
         chkAutoCheckInstallerUpdates.Text = "Auto-check installer updates on startup"
         chkAutoCheckInstallerUpdates.UseVisualStyleBackColor = True
-        ' 
+        '
         ' chkShowExperimentalTabOnUnsupportedGpu
-        ' 
+        '
         chkShowExperimentalTabOnUnsupportedGpu.AutoSize = True
-        chkShowExperimentalTabOnUnsupportedGpu.Location = New Point(969, 223)
+        chkShowExperimentalTabOnUnsupportedGpu.Margin = New Padding(0, 3, 0, 3)
         chkShowExperimentalTabOnUnsupportedGpu.Name = "chkShowExperimentalTabOnUnsupportedGpu"
-        chkShowExperimentalTabOnUnsupportedGpu.Size = New Size(144, 19)
-        chkShowExperimentalTabOnUnsupportedGpu.TabIndex = 19
+        chkShowExperimentalTabOnUnsupportedGpu.Size = New Size(136, 19)
+        chkShowExperimentalTabOnUnsupportedGpu.TabIndex = 3
         chkShowExperimentalTabOnUnsupportedGpu.Text = "Force-show FSR4 tab"
         chkShowExperimentalTabOnUnsupportedGpu.UseVisualStyleBackColor = True
         ' 
@@ -2693,6 +2710,8 @@ Partial Class MainForm
         tabSettings.ResumeLayout(False)
         grpSettings.ResumeLayout(False)
         grpSettings.PerformLayout()
+        flpSettingsToggles.ResumeLayout(False)
+        flpSettingsToggles.PerformLayout()
         grpDefaultInstall.ResumeLayout(False)
         grpDefaultInstall.PerformLayout()
         grpLog.ResumeLayout(False)
@@ -2727,6 +2746,7 @@ Partial Class MainForm
     Friend WithEvents txtInstallerReleaseUrl As OptiScalerInstaller.ThemedTextBox
     Friend WithEvents lblGameProfilesCatalogUrl As System.Windows.Forms.Label
     Friend WithEvents txtGameProfilesCatalogUrl As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents flpSettingsToggles As System.Windows.Forms.FlowLayoutPanel
     Friend WithEvents chkAutoRefreshCompatibilityOnStartup As System.Windows.Forms.CheckBox
     Friend WithEvents chkAutoRefreshGameProfilesOnStartup As System.Windows.Forms.CheckBox
     Friend WithEvents chkAutoCheckInstallerUpdates As System.Windows.Forms.CheckBox

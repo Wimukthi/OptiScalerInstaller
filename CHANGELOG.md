@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 from the build counter rather than semantic versioning — see
 [docs/building.md](docs/building.md#versioning).
 
+## [1.1.7.1] - 2026-08-03
+
+### Fixed
+
+- Settings tab group header rendered as "Update _Links" with an underlined L — the `&` in the caption was
+  treated as a mnemonic prefix.
+- "Auto-check installer updates on startup" had no visible or clickable check box. The startup toggles sat at
+  hand-set coordinates that were narrower than their auto-sized captions, so the middle toggle covered the
+  next one's box. All four now share a flow layout row that spaces them from their measured widths.
+- Clipped hint text on the FSR4 INT8 (Manual) tab, where the `FsrAgilitySDKUpgrade` caption overlapped the
+  note about restored INI keys. The note moved to its own line below the checkboxes.
+
 ## [1.1.7.0] - 2026-07-22
 
 ### Added
@@ -416,6 +428,7 @@ from the build counter rather than semantic versioning — see
 First public release: detection list install status, default INI support, the installer updater, and install
 action prompts.
 
+[1.1.7.1]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.7.1
 [1.1.7.0]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.7.0
 [1.1.6.5]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.6.5
 [1.1.6.4]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.6.4

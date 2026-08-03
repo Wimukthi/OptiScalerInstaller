@@ -322,8 +322,9 @@ Public Class MainForm
         End If
 
         Dim targetY As Integer = 191
-        If chkAutoRefreshCompatibilityOnStartup IsNot Nothing Then
-            targetY = chkAutoRefreshCompatibilityOnStartup.Top
+        If flpSettingsToggles IsNot Nothing AndAlso chkAutoRefreshCompatibilityOnStartup IsNot Nothing Then
+            ' The toggles live in a flow panel, so their Top is panel-relative.
+            targetY = flpSettingsToggles.Top + chkAutoRefreshCompatibilityOnStartup.Top
         End If
 
         Dim targetX As Integer = grpSettings.ClientSize.Width - DarkThemeCheckBox.Width - 24
