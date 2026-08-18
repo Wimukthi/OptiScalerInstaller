@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 from the build counter rather than semantic versioning — see
 [docs/building.md](docs/building.md#versioning).
 
-## [Unreleased]
+## [1.1.8.0] - 2026-08-18
 
 ### Added
 
@@ -459,6 +459,7 @@ from the build counter rather than semantic versioning — see
 First public release: detection list install status, default INI support, the installer updater, and install
 action prompts.
 
+[1.1.8.0]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.8.0
 [1.1.7.1]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.7.1
 [1.1.7.0]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.7.0
 [1.1.6.5]: https://github.com/Wimukthi/OptiScalerInstaller/releases/tag/v1.1.6.5
