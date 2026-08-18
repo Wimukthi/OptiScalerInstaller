@@ -147,6 +147,10 @@ Friend Module ThemeManager
     ' Log severity colours. Kept beside the palette so both themes stay legible:
     ' the dark variants are lightened so they read on the dark field colour, and the
     ' light variants are darkened so they clear contrast on white.
+    Public Function MutedTextColor(mode As SystemColorMode) As Color
+        Return ThemePalette.FromMode(mode).MutedText
+    End Function
+
     Public Function LogWarningColor(mode As SystemColorMode) As Color
         Return If(mode = SystemColorMode.Dark, Color.FromArgb(227, 169, 63), Color.FromArgb(138, 90, 8))
     End Function

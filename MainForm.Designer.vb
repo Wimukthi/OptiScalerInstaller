@@ -24,6 +24,7 @@ Partial Class MainForm
         tabMain = New TabControl()
         tabCompatibility = New TabPage()
         lvCompatibility = New ThemedListView()
+        lblCompatibilityEmpty = New Label()
         colCompatName = New ColumnHeader()
         colCompatDetected = New ColumnHeader()
         colCompatInstalled = New ColumnHeader()
@@ -238,6 +239,24 @@ Partial Class MainForm
         toolDetectedLabel = New ToolStripStatusLabel()
         toolProgressBar = New ToolStripProgressBar()
         toolCancelButton = New ToolStripButton()
+        mainMenuStrip = New MenuStrip()
+        menuFile = New ToolStripMenuItem()
+        menuFileOpenSettings = New ToolStripMenuItem()
+        menuFileExit = New ToolStripMenuItem()
+        menuTools = New ToolStripMenuItem()
+        menuToolsScan = New ToolStripMenuItem()
+        menuToolsAddGame = New ToolStripMenuItem()
+        menuToolsRefresh = New ToolStripMenuItem()
+        menuToolsBulk = New ToolStripMenuItem()
+        menuToolsDiagnostics = New ToolStripMenuItem()
+        menuHelp = New ToolStripMenuItem()
+        menuHelpDocs = New ToolStripMenuItem()
+        menuHelpWiki = New ToolStripMenuItem()
+        menuHelpCheckUpdates = New ToolStripMenuItem()
+        menuHelpAbout = New ToolStripMenuItem()
+        menuFileSeparator = New ToolStripSeparator()
+        menuToolsSeparator = New ToolStripSeparator()
+        menuHelpSeparator = New ToolStripSeparator()
         toolTip = New ToolTip(components)
         compatContextMenu = New ContextMenuStrip(components)
         mnuCompatUseDetected = New ToolStripMenuItem()
@@ -286,6 +305,7 @@ Partial Class MainForm
         grpSettings.SuspendLayout()
         flpSettingsToggles.SuspendLayout()
         grpDefaultInstall.SuspendLayout()
+        mainMenuStrip.SuspendLayout()
         grpLog.SuspendLayout()
         logHeaderPanel.SuspendLayout()
         statusStrip.SuspendLayout()
@@ -324,9 +344,12 @@ Partial Class MainForm
         ' 
         ' tabCompatibility
         ' 
+        tabCompatibility.Controls.Add(lblCompatibilityEmpty)
         tabCompatibility.Controls.Add(lvCompatibility)
         tabCompatibility.Controls.Add(compatFooterPanel)
         tabCompatibility.Controls.Add(compatHeaderPanel)
+        tabCompatibility.AutoScroll = True
+        tabCompatibility.AutoScrollMinSize = New Size(1180, 620)
         tabCompatibility.Location = New Point(4, 24)
         tabCompatibility.Name = "tabCompatibility"
         tabCompatibility.Padding = New Padding(3)
@@ -454,6 +477,16 @@ Partial Class MainForm
         ' 
         colCompatPath.Text = "Install Path"
         colCompatPath.Width = 360
+        ' 
+        ' lblCompatibilityEmpty
+        ' 
+        lblCompatibilityEmpty.AccessibleName = "Game list status"
+        lblCompatibilityEmpty.BackColor = Color.Transparent
+        lblCompatibilityEmpty.Name = "lblCompatibilityEmpty"
+        lblCompatibilityEmpty.Size = New Size(600, 80)
+        lblCompatibilityEmpty.TabIndex = 4
+        lblCompatibilityEmpty.TextAlign = ContentAlignment.MiddleCenter
+        lblCompatibilityEmpty.Visible = False
         ' 
         ' compatFooterPanel
         '
@@ -727,6 +760,7 @@ Partial Class MainForm
         ' tabInstall
         ' 
         tabInstall.AutoScroll = True
+        tabInstall.AutoScrollMinSize = New Size(1180, 620)
         tabInstall.Controls.Add(installLayout)
         tabInstall.Location = New Point(4, 24)
         tabInstall.Name = "tabInstall"
@@ -1249,8 +1283,9 @@ Partial Class MainForm
         ' 
         ' tabAddons
         ' 
-        tabAddons.AutoScroll = True
         tabAddons.Controls.Add(addonsLayout)
+        tabAddons.AutoScroll = True
+        tabAddons.AutoScrollMinSize = New Size(1180, 620)
         tabAddons.Location = New Point(4, 24)
         tabAddons.Name = "tabAddons"
         tabAddons.Padding = New Padding(3)
@@ -1752,6 +1787,8 @@ Partial Class MainForm
         ' tabExperimental
         ' 
         tabExperimental.Controls.Add(experimentalLayout)
+        tabExperimental.AutoScroll = True
+        tabExperimental.AutoScrollMinSize = New Size(1180, 620)
         tabExperimental.Location = New Point(4, 24)
         tabExperimental.Name = "tabExperimental"
         tabExperimental.Padding = New Padding(8)
@@ -2066,6 +2103,8 @@ Partial Class MainForm
         ' tabSettings
         ' 
         tabSettings.Controls.Add(grpSettings)
+        tabSettings.AutoScroll = True
+        tabSettings.AutoScrollMinSize = New Size(1180, 620)
         tabSettings.Location = New Point(4, 24)
         tabSettings.Name = "tabSettings"
         tabSettings.Padding = New Padding(8)
@@ -2762,6 +2801,120 @@ Partial Class MainForm
         toolCancelButton.Text = "Cancel"
         toolCancelButton.ToolTipText = "Stop the running scan or download. Work already completed is kept."
         toolCancelButton.Visible = False
+        '
+        ' mainMenuStrip
+        '
+        mainMenuStrip.Items.AddRange(New ToolStripItem() {menuFile, menuTools, menuHelp})
+        mainMenuStrip.Location = New Point(0, 0)
+        mainMenuStrip.Name = "mainMenuStrip"
+        mainMenuStrip.Size = New Size(1270, 24)
+        mainMenuStrip.TabIndex = 2
+        '
+        ' menuFile
+        '
+        menuFile.DropDownItems.AddRange(New ToolStripItem() {menuFileOpenSettings, menuFileSeparator, menuFileExit})
+        menuFile.Name = "menuFile"
+        menuFile.Size = New Size(37, 20)
+        menuFile.Text = "&File"
+        '
+        ' menuFileOpenSettings
+        '
+        menuFileOpenSettings.Name = "menuFileOpenSettings"
+        menuFileOpenSettings.Size = New Size(180, 22)
+        menuFileOpenSettings.Text = "Open &settings file"
+        '
+        ' menuFileSeparator
+        '
+        menuFileSeparator.Name = "menuFileSeparator"
+        menuFileSeparator.Size = New Size(177, 6)
+        '
+        ' menuFileExit
+        '
+        menuFileExit.Name = "menuFileExit"
+        menuFileExit.ShortcutKeys = CType(Keys.Alt Or Keys.F4, Keys)
+        menuFileExit.ShowShortcutKeys = False
+        menuFileExit.Size = New Size(180, 22)
+        menuFileExit.Text = "E&xit"
+        '
+        ' menuTools
+        '
+        menuTools.DropDownItems.AddRange(New ToolStripItem() {menuToolsScan, menuToolsAddGame, menuToolsRefresh, menuToolsBulk, menuToolsSeparator, menuToolsDiagnostics})
+        menuTools.Name = "menuTools"
+        menuTools.Size = New Size(46, 20)
+        menuTools.Text = "&Tools"
+        '
+        ' menuToolsScan
+        '
+        menuToolsScan.Name = "menuToolsScan"
+        menuToolsScan.ShortcutKeys = CType(Keys.Control Or Keys.Shift Or Keys.S, Keys)
+        menuToolsScan.Size = New Size(250, 22)
+        menuToolsScan.Text = "&Scan installed games"
+        '
+        ' menuToolsAddGame
+        '
+        menuToolsAddGame.Name = "menuToolsAddGame"
+        menuToolsAddGame.Size = New Size(250, 22)
+        menuToolsAddGame.Text = "&Add game manually..."
+        '
+        ' menuToolsRefresh
+        '
+        menuToolsRefresh.Name = "menuToolsRefresh"
+        menuToolsRefresh.ShortcutKeys = Keys.F5
+        menuToolsRefresh.Size = New Size(250, 22)
+        menuToolsRefresh.Text = "&Refresh lists"
+        '
+        ' menuToolsBulk
+        '
+        menuToolsBulk.Name = "menuToolsBulk"
+        menuToolsBulk.Size = New Size(250, 22)
+        menuToolsBulk.Text = "&Bulk actions..."
+        '
+        ' menuToolsSeparator
+        '
+        menuToolsSeparator.Name = "menuToolsSeparator"
+        menuToolsSeparator.Size = New Size(247, 6)
+        '
+        ' menuToolsDiagnostics
+        '
+        menuToolsDiagnostics.Name = "menuToolsDiagnostics"
+        menuToolsDiagnostics.Size = New Size(250, 22)
+        menuToolsDiagnostics.Text = "&Export diagnostics..."
+        '
+        ' menuHelp
+        '
+        menuHelp.DropDownItems.AddRange(New ToolStripItem() {menuHelpDocs, menuHelpWiki, menuHelpSeparator, menuHelpCheckUpdates, menuHelpAbout})
+        menuHelp.Name = "menuHelp"
+        menuHelp.Size = New Size(44, 20)
+        menuHelp.Text = "&Help"
+        '
+        ' menuHelpDocs
+        '
+        menuHelpDocs.Name = "menuHelpDocs"
+        menuHelpDocs.Size = New Size(220, 22)
+        menuHelpDocs.Text = "&Documentation"
+        '
+        ' menuHelpWiki
+        '
+        menuHelpWiki.Name = "menuHelpWiki"
+        menuHelpWiki.Size = New Size(220, 22)
+        menuHelpWiki.Text = "OptiScaler &wiki"
+        '
+        ' menuHelpSeparator
+        '
+        menuHelpSeparator.Name = "menuHelpSeparator"
+        menuHelpSeparator.Size = New Size(217, 6)
+        '
+        ' menuHelpCheckUpdates
+        '
+        menuHelpCheckUpdates.Name = "menuHelpCheckUpdates"
+        menuHelpCheckUpdates.Size = New Size(220, 22)
+        menuHelpCheckUpdates.Text = "Check for &updates"
+        '
+        ' menuHelpAbout
+        '
+        menuHelpAbout.Name = "menuHelpAbout"
+        menuHelpAbout.Size = New Size(220, 22)
+        menuHelpAbout.Text = "&About"
         ' 
         ' MainForm
         ' 
@@ -2770,8 +2923,10 @@ Partial Class MainForm
         ClientSize = New Size(1270, 897)
         Controls.Add(mainLayout)
         Controls.Add(statusStrip)
+        Controls.Add(mainMenuStrip)
+        MainMenuStrip = mainMenuStrip
         Icon = CType(resources.GetObject("$this.Icon"), Icon)
-        MinimumSize = New Size(1286, 936)
+        MinimumSize = New Size(1100, 700)
         Name = "MainForm"
         StartPosition = FormStartPosition.CenterScreen
         Text = "OptiScaler Installer"
@@ -2832,6 +2987,8 @@ Partial Class MainForm
         flpSettingsToggles.PerformLayout()
         grpDefaultInstall.ResumeLayout(False)
         grpDefaultInstall.PerformLayout()
+        mainMenuStrip.ResumeLayout(False)
+        mainMenuStrip.PerformLayout()
         grpLog.ResumeLayout(False)
         logHeaderPanel.ResumeLayout(False)
         logHeaderPanel.PerformLayout()
@@ -3026,6 +3183,7 @@ Partial Class MainForm
     Friend WithEvents btnOpenWiki As System.Windows.Forms.Button
     Friend WithEvents btnRefreshCompatibility As System.Windows.Forms.Button
     Friend WithEvents lvCompatibility As OptiScalerInstaller.ThemedListView
+    Friend WithEvents lblCompatibilityEmpty As System.Windows.Forms.Label
     Friend WithEvents colCompatName As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatDetected As System.Windows.Forms.ColumnHeader
     Friend WithEvents colCompatPlatform As System.Windows.Forms.ColumnHeader
@@ -3060,6 +3218,24 @@ Partial Class MainForm
     Friend WithEvents toolDetectedLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolProgressBar As System.Windows.Forms.ToolStripProgressBar
     Friend WithEvents toolCancelButton As System.Windows.Forms.ToolStripButton
+    Friend WithEvents mainMenuStrip As System.Windows.Forms.MenuStrip
+    Friend WithEvents menuFile As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuFileOpenSettings As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuFileExit As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuTools As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuToolsScan As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuToolsAddGame As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuToolsRefresh As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuToolsBulk As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuToolsDiagnostics As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuHelp As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuHelpDocs As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuHelpWiki As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuHelpCheckUpdates As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuHelpAbout As System.Windows.Forms.ToolStripMenuItem
+    Friend WithEvents menuFileSeparator As System.Windows.Forms.ToolStripSeparator
+    Friend WithEvents menuToolsSeparator As System.Windows.Forms.ToolStripSeparator
+    Friend WithEvents menuHelpSeparator As System.Windows.Forms.ToolStripSeparator
     Friend WithEvents toolTip As System.Windows.Forms.ToolTip
     Friend WithEvents compatContextMenu As System.Windows.Forms.ContextMenuStrip
     Friend WithEvents mnuCompatUseDetected As System.Windows.Forms.ToolStripMenuItem

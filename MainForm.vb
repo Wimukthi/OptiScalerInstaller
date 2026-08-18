@@ -937,6 +937,62 @@ Public Class MainForm
         End Try
     End Function
 
+    ' --- Empty state ---------------------------------------------------------------
+    ' An empty grid looks identical whether the scan failed, the games are not supported,
+    ' or a filter is hiding everything. Saying which one it is, and what to do about it,
+    ' costs one label.
+
+    Private Sub UpdateCompatibilityEmptyState()
+        If lblCompatibilityEmpty Is Nothing OrElse lvCompatibility Is Nothing Then
+            Return
+        End If
+
+        If lvCompatibility.Items.Count > 0 Then
+            lblCompatibilityEmpty.Visible = False
+            Return
+        End If
+
+        Dim message As String
+        If allCompatibilityEntries Is Nothing OrElse allCompatibilityEntries.Count = 0 Then
+            message = "The compatibility list has not loaded yet." & Environment.NewLine &
+                      "Use Tools -> Refresh lists, or check the log below for the reason."
+        ElseIf txtGameSearch IsNot Nothing AndAlso txtGameSearch.Text.Trim().Length > 0 Then
+            message = "No games match """ & txtGameSearch.Text.Trim() & """." & Environment.NewLine &
+                      "Clear the search box to see the full list."
+        ElseIf chkHideNonDetected IsNot Nothing AndAlso chkHideNonDetected.Checked Then
+            message = "No supported games were detected on this machine." & Environment.NewLine &
+                      "Run Scan installed games, add one manually, or untick Hide non-detected to see the full list."
+        Else
+            message = "Nothing to show." & Environment.NewLine &
+                      "Use Tools -> Refresh lists to reload the compatibility list."
+        End If
+
+        lblCompatibilityEmpty.Text = message
+        lblCompatibilityEmpty.ForeColor = ThemeManager.MutedTextColor(ThemeSettings.GetPreferredColorMode())
+        PositionCompatibilityEmptyState()
+        lblCompatibilityEmpty.Visible = True
+        lblCompatibilityEmpty.BringToFront()
+    End Sub
+
+    Private Sub PositionCompatibilityEmptyState()
+        If lblCompatibilityEmpty Is Nothing OrElse lvCompatibility Is Nothing Then
+            Return
+        End If
+
+        Dim bounds As Rectangle = lvCompatibility.Bounds
+        Dim width As Integer = Math.Max(240, Math.Min(680, bounds.Width - 40))
+        Dim height As Integer = 80
+        lblCompatibilityEmpty.Size = New Size(width, height)
+        lblCompatibilityEmpty.Location = New Point(bounds.Left + ((bounds.Width - width) \ 2),
+                                                   bounds.Top + ((bounds.Height - height) \ 2))
+    End Sub
+
+    Private Sub lvCompatibility_SizeChanged(sender As Object, e As EventArgs) Handles lvCompatibility.SizeChanged
+        If lblCompatibilityEmpty IsNot Nothing AndAlso lblCompatibilityEmpty.Visible Then
+            PositionCompatibilityEmptyState()
+        End If
+    End Sub
+
     Private Sub ApplyCompatibilityFilter()
         Dim filter As String = txtGameSearch.Text.Trim()
         Dim hideNonDetected As Boolean = chkHideNonDetected IsNot Nothing AndAlso chkHideNonDetected.Checked
@@ -996,6 +1052,7 @@ Public Class MainForm
         Next
 
         lvCompatibility.EndUpdate()
+        UpdateCompatibilityEmptyState()
         UpdateUseDetectedState()
     End Sub
 
@@ -6392,6 +6449,92 @@ Public Class MainForm
     ' Non-modal confirmation for actions whose outcome the user can already see.
     ' Reserving dialogs for things that modify a game folder keeps them meaningful.
     Private transientStatusTimer As Timer
+
+    ' --- Menu and keyboard ---------------------------------------------------------
+    ' Everything here is reachable from a tab button too. The menu exists so there is a
+    ' second, predictable place to look: About, updates, and diagnostics used to live
+    ' only in the bottom-right corner of the Settings tab.
+
+    Private Sub menuFileOpenSettings_Click(sender As Object, e As EventArgs) Handles menuFileOpenSettings.Click
+        btnOpenSettingsFile_Click(sender, e)
+    End Sub
+
+    Private Sub menuFileExit_Click(sender As Object, e As EventArgs) Handles menuFileExit.Click
+        Close()
+    End Sub
+
+    Private Sub menuToolsScan_Click(sender As Object, e As EventArgs) Handles menuToolsScan.Click
+        If btnScanDetected.Enabled Then
+            btnScanDetected.PerformClick()
+        End If
+    End Sub
+
+    Private Sub menuToolsAddGame_Click(sender As Object, e As EventArgs) Handles menuToolsAddGame.Click
+        If btnDeepScanDrives.Enabled Then
+            btnDeepScanDrives.PerformClick()
+        End If
+    End Sub
+
+    Private Sub menuToolsRefresh_Click(sender As Object, e As EventArgs) Handles menuToolsRefresh.Click
+        If btnRefreshCompatibility.Enabled Then
+            btnRefreshCompatibility.PerformClick()
+        End If
+    End Sub
+
+    Private Sub menuToolsBulk_Click(sender As Object, e As EventArgs) Handles menuToolsBulk.Click
+        If btnBulkActions.Enabled Then
+            btnBulkActions.PerformClick()
+        Else
+            SetTransientStatus("Bulk actions need at least one detected game. Run a scan first.")
+        End If
+    End Sub
+
+    Private Sub menuToolsDiagnostics_Click(sender As Object, e As EventArgs) Handles menuToolsDiagnostics.Click
+        btnExportDiagnostics.PerformClick()
+    End Sub
+
+    Private Sub menuHelpDocs_Click(sender As Object, e As EventArgs) Handles menuHelpDocs.Click
+        OpenExternalUrl("https://github.com/Wimukthi/OptiScalerInstaller#documentation")
+    End Sub
+
+    Private Sub menuHelpWiki_Click(sender As Object, e As EventArgs) Handles menuHelpWiki.Click
+        OpenExternalUrl("https://github.com/optiscaler/OptiScaler/wiki")
+    End Sub
+
+    Private Sub menuHelpCheckUpdates_Click(sender As Object, e As EventArgs) Handles menuHelpCheckUpdates.Click
+        btnCheckForUpdates.PerformClick()
+    End Sub
+
+    Private Sub menuHelpAbout_Click(sender As Object, e As EventArgs) Handles menuHelpAbout.Click
+        btnAbout.PerformClick()
+    End Sub
+
+    Private Sub OpenExternalUrl(url As String)
+        Try
+            Process.Start(New ProcessStartInfo(url) With {.UseShellExecute = True})
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.OpenExternalUrl")
+            SetTransientStatus("Could not open the link: " & ex.Message)
+        End Try
+    End Sub
+
+    ' Shortcuts that are not menu accelerators. Ctrl+F is handled here rather than as a
+    ' menu item because focusing a search box does not belong in a menu.
+    Protected Overrides Function ProcessCmdKey(ByRef msg As Message, keyData As Keys) As Boolean
+        Select Case keyData
+            Case Keys.Control Or Keys.F
+                tabMain.SelectedTab = tabCompatibility
+                txtGameSearch.Focus()
+                Return True
+            Case Keys.Escape
+                If cancellableOperation IsNot Nothing AndAlso Not cancellableOperation.IsCancellationRequested Then
+                    toolCancelButton_Click(Me, EventArgs.Empty)
+                    Return True
+                End If
+        End Select
+
+        Return MyBase.ProcessCmdKey(msg, keyData)
+    End Function
 
     Private Sub SetTransientStatus(message As String)
         If statusStrip.InvokeRequired Then
