@@ -1891,7 +1891,7 @@ Public Class MainForm
                 Return
             End If
 
-            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress, BeginCancellableOperation("install"))
             Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
             If manifest IsNot Nothing Then
                 manifest.VerificationTimeUtc = DateTime.UtcNow
@@ -1931,6 +1931,8 @@ Public Class MainForm
             MessageBox.Show(Me, ex.Message, "Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             ErrorLogger.Log(ex, "MainForm.Install")
         Finally
+            EndCancellableOperation()
+            toolCancelButton.Enabled = True
             installOperationInProgress = False
             UpdateProgress(0)
             UpdateInstallStatus()
@@ -2762,6 +2764,8 @@ Public Class MainForm
                             MessageBoxButtons.OK,
                             If(failedCount > 0, MessageBoxIcon.Warning, MessageBoxIcon.Information))
         Finally
+            EndCancellableOperation()
+            toolCancelButton.Enabled = True
             installOperationInProgress = False
             UpdateProgress(0)
             UpdateInstallStatus()
@@ -2801,7 +2805,7 @@ Public Class MainForm
         End If
 
         LogBulkInstallWarnings(config, plan)
-        Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+        Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress, BeginCancellableOperation("install"))
         Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
         If manifest IsNot Nothing Then
             manifest.VerificationTimeUtc = DateTime.UtcNow
@@ -3081,12 +3085,17 @@ Public Class MainForm
                 AppendLog("Quick install detected existing OptiScaler install. Proceeding with update.")
             End If
 
+            If ShouldConfirmQuickInstall() AndAlso Not ConfirmInstallSummary(action, config, False, Nothing, Nothing) Then
+                AppendLog("Quick install canceled at summary confirmation.")
+                Return
+            End If
+
             If Not RunInstallPreflight(config) Then
                 AppendLog("Quick install aborted (preflight).")
                 Return
             End If
 
-            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress)
+            Dim manifest As InstallManifest = Await InstallerService.InstallAsync(config, AddressOf AppendLog, AddressOf UpdateProgress, BeginCancellableOperation("install"))
             Dim verification As InstallVerificationReport = Await Task.Run(Function() InstallerService.VerifyInstall(config, manifest))
             If manifest IsNot Nothing Then
                 manifest.VerificationTimeUtc = DateTime.UtcNow
@@ -3117,6 +3126,8 @@ Public Class MainForm
             MessageBox.Show(Me, ex.Message, "Quick Install Failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             ErrorLogger.Log(ex, "MainForm.QuickInstall")
         Finally
+            EndCancellableOperation()
+            toolCancelButton.Enabled = True
             installOperationInProgress = False
             UpdateProgress(0)
             UpdateInstallStatus()
@@ -4823,6 +4834,10 @@ Public Class MainForm
         summary.AppendLine("Keep existing OptiScaler.ini: " & If(config.PreserveExistingIni, "Yes", "No"))
         summary.AppendLine("Install OptiPatcher: " & patcherLine)
         summary.AppendLine()
+        summary.AppendLine("Target folder: " & config.GameFolder)
+        summary.AppendLine("Will write: " & config.HookName & ", OptiScaler.ini, and the installer manifest")
+        summary.AppendLine("On existing files: " & DescribeConflictMode(config.ConflictMode))
+        summary.AppendLine()
         summary.AppendLine("Proceed?")
 
         Return MessageBox.Show(Me,
@@ -4830,6 +4845,29 @@ Public Class MainForm
                                "Confirm install",
                                MessageBoxButtons.YesNo,
                                MessageBoxIcon.Question) = DialogResult.Yes
+    End Function
+
+    ' Quick install writes into a game folder from a single click, so it goes through the
+    ' same review step as the Install tab. Power users who want the old one-click behaviour
+    ' can set ConfirmQuickInstall to false in OptiScalerInstaller.settings.json.
+    Private Function ShouldConfirmQuickInstall() As Boolean
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        If settings Is Nothing OrElse Not settings.ConfirmQuickInstall.HasValue Then
+            Return True
+        End If
+
+        Return settings.ConfirmQuickInstall.Value
+    End Function
+
+    Private Shared Function DescribeConflictMode(mode As ConflictMode) As String
+        Select Case mode
+            Case ConflictMode.Overwrite
+                Return "Overwrite without a backup"
+            Case ConflictMode.Skip
+                Return "Keep the existing file and skip"
+            Case Else
+                Return "Back up with a .bak_<timestamp> suffix, then overwrite"
+        End Select
     End Function
 
     Private Sub UpdateExperimentalStatus()
@@ -6700,6 +6738,41 @@ Public Class MainForm
         Return New Rectangle(x, y, bounds.Width, bounds.Height)
     End Function
 
+    ' --- Cancellation --------------------------------------------------------------
+    ' A drive scan can run for minutes. Without a way out, the only exit was killing the
+    ' process, which also threw away everything the scan had already found. Cancellation
+    ' is cooperative: the scan stops at the next folder boundary and keeps its results.
+
+    Private cancellableOperation As System.Threading.CancellationTokenSource
+
+    Private Function BeginCancellableOperation(description As String) As System.Threading.CancellationToken
+        EndCancellableOperation()
+        cancellableOperation = New System.Threading.CancellationTokenSource()
+        toolCancelButton.Text = "Cancel " & description
+        toolCancelButton.Visible = True
+        Return cancellableOperation.Token
+    End Function
+
+    Private Sub EndCancellableOperation()
+        toolCancelButton.Visible = False
+        If cancellableOperation IsNot Nothing Then
+            cancellableOperation.Dispose()
+            cancellableOperation = Nothing
+        End If
+    End Sub
+
+    Private Sub toolCancelButton_Click(sender As Object, e As EventArgs) Handles toolCancelButton.Click
+        If cancellableOperation Is Nothing OrElse cancellableOperation.IsCancellationRequested Then
+            Return
+        End If
+
+        cancellableOperation.Cancel()
+        toolCancelButton.Enabled = False
+        toolCancelButton.Text = "Stopping..."
+        SetStatus("Stopping after the current step...")
+        AppendLog("Cancellation requested by the user.", LogSeverity.Warning)
+    End Sub
+
     Private Async Function RunDetectionAsync(isAuto As Boolean,
                                              Optional selectedDriveRoots As IEnumerable(Of String) = Nothing,
                                              Optional isInitialDeepScan As Boolean = False) As Task
@@ -6723,6 +6796,7 @@ Public Class MainForm
         Dim lastStatusMessage As String = ""
 
         Try
+            Dim scanToken As System.Threading.CancellationToken = BeginCancellableOperation("scan")
             btnScanDetected.Enabled = False
             btnDeepScanDrives.Enabled = False
             btnBulkActions.Enabled = False
@@ -6813,7 +6887,8 @@ Public Class MainForm
                     Await Task.Run(Function() DetectionService.DetectSupportedGamesByDriveScan(allCompatibilityEntries,
                                                                                                 manualDriveRoots,
                                                                                                 AddressOf AppendLog,
-                                                                                                progressCallback))
+                                                                                                progressCallback,
+                                                                                                scanToken))
 
                 If deepScanResults IsNot Nothing AndAlso deepScanResults.Count > 0 Then
                     persistedDeepScanGames = MergeDetectedGames(persistedDeepScanGames, deepScanResults)
@@ -6879,6 +6954,8 @@ Public Class MainForm
             UpdateExperimentalDetectedGamesList()
             ErrorLogger.Log(ex, "MainForm.DetectGames")
         Finally
+            EndCancellableOperation()
+            toolCancelButton.Enabled = True
             btnScanDetected.Enabled = True
             btnDeepScanDrives.Enabled = True
             If isDeepScan Then

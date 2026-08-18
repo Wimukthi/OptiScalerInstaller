@@ -56,7 +56,7 @@ Public Class InstallerService
         Return version >= New Version(0, 9, 0, 0)
     End Function
 
-    Public Shared Async Function InstallAsync(config As InstallerConfig, log As Action(Of String), progress As Action(Of Integer)) As Task(Of InstallManifest)
+    Public Shared Async Function InstallAsync(config As InstallerConfig, log As Action(Of String), progress As Action(Of Integer), Optional token As System.Threading.CancellationToken = Nothing) As Task(Of InstallManifest)
         ValidateConfig(config)
 
         ' Stage downloads and extraction in a temp folder to avoid partial installs.
@@ -76,7 +76,7 @@ Public Class InstallerService
 
         Try
             progress?.Invoke(0)
-            Dim archiveResult As ArchiveResult = Await ResolveArchiveAsync(config, tempRoot, log, progress)
+            Dim archiveResult As ArchiveResult = Await ResolveArchiveAsync(config, tempRoot, log, progress, token)
             archivePath = archiveResult.ArchivePath
             manifest.OptiScalerSource = config.Source.ToString()
             If archiveResult.Release IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(archiveResult.Release.TagName) Then
@@ -366,7 +366,7 @@ Public Class InstallerService
         Return version.ToString()
     End Function
 
-    Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer)) As Task(Of ArchiveResult)
+    Private Shared Async Function ResolveArchiveAsync(config As InstallerConfig, tempRoot As String, log As Action(Of String), progress As Action(Of Integer), token As System.Threading.CancellationToken) As Task(Of ArchiveResult)
         ' Resolves release metadata/local archive selection into a concrete archive path.
         If config.Source = ReleaseSource.LocalArchive Then
             log?.Invoke("Using local archive: " & config.LocalArchivePath)
@@ -404,7 +404,7 @@ Public Class InstallerService
         log?.Invoke("Cached package not found or out-of-date. Downloading latest archive.")
         Dim destination As String = Path.Combine(tempRoot, Guid.NewGuid().ToString("N") & "_" & safeName)
         log?.Invoke("Downloading " & release.TagName & "...")
-        Await DownloadFileAsync(release.DownloadUrl, destination, log, progress)
+        Await DownloadFileAsync(release.DownloadUrl, destination, log, progress, token)
         ValidateArchiveFile(destination, release.Size, log)
 
         Dim finalArchivePath As String = destination
@@ -635,7 +635,7 @@ Public Class InstallerService
         Next
     End Sub
 
-    Private Shared Async Function DownloadFileAsync(url As String, destination As String, log As Action(Of String), progress As Action(Of Integer)) As Task
+    Private Shared Async Function DownloadFileAsync(url As String, destination As String, log As Action(Of String), progress As Action(Of Integer), token As System.Threading.CancellationToken) As Task
         ' Streamed download with bounded retries for transient HTTP/network errors.
         Dim delay As TimeSpan = TimeSpan.FromMilliseconds(500)
 
@@ -644,7 +644,7 @@ Public Class InstallerService
             Try
                 Using client As New HttpClient() With {.Timeout = DownloadTimeout}
                     client.DefaultRequestHeaders.UserAgent.ParseAdd("OptiScalerInstaller")
-                    Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
+                    Using response As HttpResponseMessage = Await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token)
                         response.EnsureSuccessStatusCode()
 
                         Dim total As Nullable(Of Long) = response.Content.Headers.ContentLength
@@ -655,12 +655,13 @@ Public Class InstallerService
                                 Dim totalRead As Long = 0
 
                                 Do
-                                    read = Await input.ReadAsync(buffer, 0, buffer.Length)
+                                    token.ThrowIfCancellationRequested()
+                                    read = Await input.ReadAsync(buffer, 0, buffer.Length, token)
                                     If read = 0 Then
                                         Exit Do
                                     End If
 
-                                    Await output.WriteAsync(buffer, 0, read)
+                                    Await output.WriteAsync(buffer, 0, read, token)
                                     totalRead += read
 
                                     If total.HasValue AndAlso total.Value > 0 Then

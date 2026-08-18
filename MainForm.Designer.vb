@@ -237,6 +237,7 @@ Partial Class MainForm
         toolStatusLabel = New ToolStripStatusLabel()
         toolDetectedLabel = New ToolStripStatusLabel()
         toolProgressBar = New ToolStripProgressBar()
+        toolCancelButton = New ToolStripButton()
         toolTip = New ToolTip(components)
         compatContextMenu = New ContextMenuStrip(components)
         mnuCompatUseDetected = New ToolStripMenuItem()
@@ -2727,7 +2728,7 @@ Partial Class MainForm
         ' 
         ' statusStrip
         ' 
-        statusStrip.Items.AddRange(New ToolStripItem() {toolDetectedLabel, toolProgressBar, toolStatusLabel})
+        statusStrip.Items.AddRange(New ToolStripItem() {toolDetectedLabel, toolProgressBar, toolCancelButton, toolStatusLabel})
         statusStrip.Location = New Point(0, 875)
         statusStrip.Name = "statusStrip"
         statusStrip.Size = New Size(1270, 22)
@@ -2751,6 +2752,16 @@ Partial Class MainForm
         ' 
         toolProgressBar.Name = "toolProgressBar"
         toolProgressBar.Size = New Size(200, 16)
+        ' 
+        ' toolCancelButton
+        ' 
+        toolCancelButton.AccessibleName = "Cancel the running operation"
+        toolCancelButton.DisplayStyle = ToolStripItemDisplayStyle.Text
+        toolCancelButton.Name = "toolCancelButton"
+        toolCancelButton.Size = New Size(52, 20)
+        toolCancelButton.Text = "Cancel"
+        toolCancelButton.ToolTipText = "Stop the running scan or download. Work already completed is kept."
+        toolCancelButton.Visible = False
         ' 
         ' MainForm
         ' 
@@ -3048,6 +3059,7 @@ Partial Class MainForm
     Friend WithEvents toolStatusLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolDetectedLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolProgressBar As System.Windows.Forms.ToolStripProgressBar
+    Friend WithEvents toolCancelButton As System.Windows.Forms.ToolStripButton
     Friend WithEvents toolTip As System.Windows.Forms.ToolTip
     Friend WithEvents compatContextMenu As System.Windows.Forms.ContextMenuStrip
     Friend WithEvents mnuCompatUseDetected As System.Windows.Forms.ToolStripMenuItem

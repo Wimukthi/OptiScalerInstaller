@@ -720,7 +720,8 @@ Public Class DetectionService
     Public Shared Function DetectSupportedGamesByDriveScan(entries As IEnumerable(Of CompatibilityEntry),
                                                            driveRoots As IEnumerable(Of String),
                                                            log As Action(Of String),
-                                                           Optional progress As Action(Of DeepScanProgressInfo) = Nothing) As List(Of DetectedGame)
+                                                           Optional progress As Action(Of DeepScanProgressInfo) = Nothing,
+                                                           Optional token As CancellationToken = Nothing) As List(Of DetectedGame)
         Dim results As New List(Of DetectedGame)()
         If entries Is Nothing OrElse driveRoots Is Nothing Then
             Return results
@@ -755,13 +756,18 @@ Public Class DetectionService
 
         Parallel.ForEach(roots, options, Sub(root)
                                              Try
+                                                 If token.IsCancellationRequested Then
+                                                     Return
+                                                 End If
+
                                                  ScanDriveRoot(matcher,
                                                               root,
                                                               candidates,
                                                               log,
                                                               totalRoots,
                                                               Function() Volatile.Read(completedRoots),
-                                                              progress)
+                                                              progress,
+                                                              token)
                                              Catch ex As Exception
                                                  ErrorLogger.Log(ex, "DetectionService.DetectSupportedGamesByDriveScan.ScanRoot")
                                                  If log IsNot Nothing Then
@@ -771,6 +777,10 @@ Public Class DetectionService
                                                  Interlocked.Increment(completedRoots)
                                              End Try
                                          End Sub)
+
+        If token.IsCancellationRequested AndAlso log IsNot Nothing Then
+            log("Deep scan canceled. Keeping the games found before cancellation.")
+        End If
 
         For Each candidate As DeepScanCandidate In candidates.Values.OrderBy(Function(item) item.DisplayName, StringComparer.OrdinalIgnoreCase)
             AddIfSupported(matcher, results, seenPaths, candidate.DisplayName, candidate.InstallDir, candidate.Platform)
@@ -786,7 +796,8 @@ Public Class DetectionService
                                      log As Action(Of String),
                                      totalRoots As Integer,
                                      completedRootsProvider As Func(Of Integer),
-                                     progress As Action(Of DeepScanProgressInfo))
+                                     progress As Action(Of DeepScanProgressInfo),
+                                     token As CancellationToken)
         Const maxDepth As Integer = 9
         Const progressUpdateInterval As Integer = 200
         Dim queue As New Queue(Of ScanNode)()
@@ -802,6 +813,10 @@ Public Class DetectionService
         ReportDeepScanProgress(progress, root, root, scannedFolders, totalRoots, completedRootsProvider, False)
 
         While queue.Count > 0 AndAlso scannedFolders < ScanRootFolderBudget
+            If token.IsCancellationRequested Then
+                Exit While
+            End If
+
             Dim node As ScanNode = queue.Dequeue()
             Dim normalized As String = NormalizeInstallPath(node.FolderPath)
             If String.IsNullOrWhiteSpace(normalized) OrElse visited.Contains(normalized) Then

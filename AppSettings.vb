@@ -126,6 +126,7 @@ Friend Class AppSettingsModel
     Public Property DefaultIniMode As String
     Public Property DefaultIniPath As String
     Public Property PreserveExistingIniOnUpdate As Boolean?
+    Public Property ConfirmQuickInstall As Boolean?
     Public Property ExperimentalFsr4PackageFolder As String
     Public Property ExperimentalFsr4EnableUpdate As Boolean?
     Public Property ExperimentalFsr4EnableAgility As Boolean?
