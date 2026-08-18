@@ -72,7 +72,10 @@ The script:
 4. Stages the payload — the executable, its dependencies, `Data/`, `runtimes/`, `LICENSE`, and `README.md` —
    into `artifacts/staging/`, failing loudly if anything required is missing.
 5. Strips volatile runtime files (`*.settings.json`, logs) that a local run may have left behind.
-6. Writes `Release/OptiScalerInstaller-v<version>-win-x64.zip`.
+6. Writes `Release/OptiScalerInstaller-v<version>-win-x64.zip` and a matching `.sha256` file beside it.
+
+The executable is not code-signed, so publish the `.sha256` alongside the zip on the release page. It is the
+only way a user can confirm the download is the file that was built here.
 
 Useful switches: `-SkipCompatibilityValidation` skips the parser gate, `-SkipBuild` packages whatever is
 already in `bin/`, `-SkipClean` keeps the existing output.

@@ -144,4 +144,14 @@ Friend Module ThemeManager
             }
         End Function
     End Structure
+    ' Log severity colours. Kept beside the palette so both themes stay legible:
+    ' the dark variants are lightened so they read on the dark field colour, and the
+    ' light variants are darkened so they clear contrast on white.
+    Public Function LogWarningColor(mode As SystemColorMode) As Color
+        Return If(mode = SystemColorMode.Dark, Color.FromArgb(227, 169, 63), Color.FromArgb(138, 90, 8))
+    End Function
+
+    Public Function LogFailureColor(mode As SystemColorMode) As Color
+        Return If(mode = SystemColorMode.Dark, Color.FromArgb(255, 128, 105), Color.FromArgb(179, 45, 28))
+    End Function
 End Module

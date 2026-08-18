@@ -143,6 +143,51 @@ Friend Class ThemedRichTextBox
         _richTextBox.ScrollToCaret()
     End Sub
 
+    Public Sub ScrollToEnd()
+        _richTextBox.SelectionStart = _richTextBox.TextLength
+        _richTextBox.SelectionLength = 0
+        _richTextBox.ScrollToCaret()
+    End Sub
+
+    ' Appends a run in a specific colour without disturbing the caller's selection colour.
+    Public Sub AppendText(value As String, runColor As Color)
+        Dim previous As Color = _richTextBox.SelectionColor
+        _richTextBox.SelectionStart = _richTextBox.TextLength
+        _richTextBox.SelectionLength = 0
+        _richTextBox.SelectionColor = runColor
+        _richTextBox.AppendText(value)
+        _richTextBox.SelectionColor = previous
+    End Sub
+
+    <Browsable(False)>
+    Public ReadOnly Property LineCount As Integer
+        Get
+            Return _richTextBox.Lines.Length
+        End Get
+    End Property
+
+    ' Suspends redraw while the caller rewrites the whole buffer, so bulk refills
+    ' (a filter change, for example) do not flicker.
+    Public Sub BeginBulkUpdate()
+        NativeMethods.SendMessage(_richTextBox.Handle, NativeMethods.WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero)
+    End Sub
+
+    Public Sub EndBulkUpdate()
+        NativeMethods.SendMessage(_richTextBox.Handle, NativeMethods.WM_SETREDRAW, New IntPtr(1), IntPtr.Zero)
+        _richTextBox.Invalidate()
+    End Sub
+
+    Private NotInheritable Class NativeMethods
+        Public Const WM_SETREDRAW As Integer = &HB
+
+        <Runtime.InteropServices.DllImport("user32.dll", CharSet:=Runtime.InteropServices.CharSet.Auto)>
+        Public Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As IntPtr, lParam As IntPtr) As IntPtr
+        End Function
+
+        Private Sub New()
+        End Sub
+    End Class
+
     Protected Overrides Sub OnBackColorChanged(e As EventArgs)
         MyBase.OnBackColorChanged(e)
         If _richTextBox Is Nothing Then

@@ -157,7 +157,15 @@ if (Test-Path $packagePath) {
 Write-Host "Creating archive: $packagePath"
 Compress-Archive -Path (Join-Path $packageStagingDir "*") -DestinationPath $packagePath -CompressionLevel Optimal
 
+# Publish a checksum next to the package. The executable is unsigned, so this is how
+# someone verifies the download is the file that was actually built here.
+$checksumPath = "$packagePath.sha256"
+$hash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+"$hash *$([System.IO.Path]::GetFileName($packagePath))" | Set-Content -LiteralPath $checksumPath -Encoding ascii
+
 Write-Host "Release package created successfully."
-Write-Host "Package: $packagePath"
+Write-Host "Package:  $packagePath"
+Write-Host "SHA-256:  $hash"
+Write-Host "Checksum: $checksumPath"
 Write-Host "Contents:"
 Get-ChildItem -Path $packageStagingDir -Force | ForEach-Object { Write-Host " - $($_.Name)" }

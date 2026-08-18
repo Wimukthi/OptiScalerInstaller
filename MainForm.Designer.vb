@@ -224,7 +224,15 @@ Partial Class MainForm
         lblSettingsPath = New Label()
         DarkThemeCheckBox = New CheckBox()
         grpLog = New ThemedGroupBox()
-        txtLog = New ThemedTextBox()
+        txtLog = New ThemedRichTextBox()
+        logHeaderPanel = New FlowLayoutPanel()
+        lblLogFilter = New Label()
+        txtLogFilter = New ThemedTextBox()
+        lblLogSeverity = New Label()
+        cmbLogSeverity = New ComboBox()
+        btnLogCopy = New Button()
+        btnLogSave = New Button()
+        btnLogClear = New Button()
         statusStrip = New StatusStrip()
         toolStatusLabel = New ToolStripStatusLabel()
         toolDetectedLabel = New ToolStripStatusLabel()
@@ -278,6 +286,7 @@ Partial Class MainForm
         flpSettingsToggles.SuspendLayout()
         grpDefaultInstall.SuspendLayout()
         grpLog.SuspendLayout()
+        logHeaderPanel.SuspendLayout()
         statusStrip.SuspendLayout()
         SuspendLayout()
         ' 
@@ -2593,6 +2602,7 @@ Partial Class MainForm
         ' grpLog
         ' 
         grpLog.Controls.Add(txtLog)
+        grpLog.Controls.Add(logHeaderPanel)
         grpLog.Dock = DockStyle.Fill
         grpLog.Location = New Point(8, 715)
         grpLog.Margin = New Padding(0, 8, 0, 0)
@@ -2603,20 +2613,117 @@ Partial Class MainForm
         grpLog.TabStop = False
         grpLog.Text = "Log Output"
         ' 
+        ' logHeaderPanel
+        ' 
+        logHeaderPanel.Controls.Add(lblLogFilter)
+        logHeaderPanel.Controls.Add(txtLogFilter)
+        logHeaderPanel.Controls.Add(lblLogSeverity)
+        logHeaderPanel.Controls.Add(cmbLogSeverity)
+        logHeaderPanel.Controls.Add(btnLogCopy)
+        logHeaderPanel.Controls.Add(btnLogSave)
+        logHeaderPanel.Controls.Add(btnLogClear)
+        logHeaderPanel.Dock = DockStyle.Top
+        logHeaderPanel.FlowDirection = FlowDirection.LeftToRight
+        logHeaderPanel.Location = New Point(8, 24)
+        logHeaderPanel.Margin = New Padding(0)
+        logHeaderPanel.Name = "logHeaderPanel"
+        logHeaderPanel.Padding = New Padding(0, 0, 0, 6)
+        logHeaderPanel.Size = New Size(1238, 34)
+        logHeaderPanel.TabIndex = 0
+        logHeaderPanel.WrapContents = False
+        ' 
+        ' lblLogFilter
+        ' 
+        lblLogFilter.AccessibleName = "Log filter label"
+        lblLogFilter.AutoSize = True
+        lblLogFilter.Margin = New Padding(0, 7, 6, 0)
+        lblLogFilter.Name = "lblLogFilter"
+        lblLogFilter.Size = New Size(36, 15)
+        lblLogFilter.TabIndex = 0
+        lblLogFilter.Text = "Filter"
+        ' 
+        ' txtLogFilter
+        ' 
+        txtLogFilter.AccessibleName = "Filter log messages"
+        txtLogFilter.AccessibleDescription = "Show only log lines containing this text."
+        txtLogFilter.Margin = New Padding(0, 2, 14, 0)
+        txtLogFilter.MinimumSize = New Size(0, 24)
+        txtLogFilter.Name = "txtLogFilter"
+        txtLogFilter.Padding = New Padding(6, 3, 6, 3)
+        txtLogFilter.Size = New Size(240, 24)
+        txtLogFilter.TabIndex = 1
+        ' 
+        ' lblLogSeverity
+        ' 
+        lblLogSeverity.AccessibleName = "Log level label"
+        lblLogSeverity.AutoSize = True
+        lblLogSeverity.Margin = New Padding(0, 7, 6, 0)
+        lblLogSeverity.Name = "lblLogSeverity"
+        lblLogSeverity.Size = New Size(36, 15)
+        lblLogSeverity.TabIndex = 2
+        lblLogSeverity.Text = "Level"
+        ' 
+        ' cmbLogSeverity
+        ' 
+        cmbLogSeverity.AccessibleName = "Minimum log level"
+        cmbLogSeverity.AccessibleDescription = "Hide log lines below the selected severity."
+        cmbLogSeverity.DropDownStyle = ComboBoxStyle.DropDownList
+        cmbLogSeverity.FormattingEnabled = True
+        cmbLogSeverity.Items.AddRange(New Object() {"All", "Warnings and errors", "Errors only"})
+        cmbLogSeverity.Margin = New Padding(0, 2, 14, 0)
+        cmbLogSeverity.Name = "cmbLogSeverity"
+        cmbLogSeverity.Size = New Size(170, 23)
+        cmbLogSeverity.TabIndex = 3
+        ' 
+        ' btnLogCopy
+        ' 
+        btnLogCopy.AccessibleName = "Copy log"
+        btnLogCopy.AccessibleDescription = "Copy the visible log lines to the clipboard."
+        btnLogCopy.Margin = New Padding(0, 1, 6, 0)
+        btnLogCopy.Name = "btnLogCopy"
+        btnLogCopy.Size = New Size(70, 26)
+        btnLogCopy.TabIndex = 4
+        btnLogCopy.Text = "Copy"
+        btnLogCopy.UseVisualStyleBackColor = True
+        ' 
+        ' btnLogSave
+        ' 
+        btnLogSave.AccessibleName = "Save log"
+        btnLogSave.AccessibleDescription = "Save the visible log lines to a text file."
+        btnLogSave.Margin = New Padding(0, 1, 6, 0)
+        btnLogSave.Name = "btnLogSave"
+        btnLogSave.Size = New Size(70, 26)
+        btnLogSave.TabIndex = 5
+        btnLogSave.Text = "Save"
+        btnLogSave.UseVisualStyleBackColor = True
+        ' 
+        ' btnLogClear
+        ' 
+        btnLogClear.AccessibleName = "Clear log"
+        btnLogClear.AccessibleDescription = "Remove all log lines from this session's view."
+        btnLogClear.Margin = New Padding(0, 1, 6, 0)
+        btnLogClear.Name = "btnLogClear"
+        btnLogClear.Size = New Size(70, 26)
+        btnLogClear.TabIndex = 6
+        btnLogClear.Text = "Clear"
+        btnLogClear.UseVisualStyleBackColor = True
+        ' 
         ' txtLog
         ' 
+        txtLog.AccessibleName = "Log output"
+        txtLog.AccessibleDescription = "Running record of everything the installer has done this session."
         txtLog.BackColor = SystemColors.Window
         txtLog.Dock = DockStyle.Fill
         txtLog.ForeColor = SystemColors.WindowText
-        txtLog.Location = New Point(8, 40)
+        txtLog.Location = New Point(8, 58)
         txtLog.MinimumSize = New Size(0, 24)
-        txtLog.Multiline = True
         txtLog.Name = "txtLog"
         txtLog.Padding = New Padding(6, 3, 6, 3)
         txtLog.ReadOnly = True
-        txtLog.ScrollBars = ScrollBars.Vertical
-        txtLog.Size = New Size(1238, 104)
-        txtLog.TabIndex = 0
+        txtLog.ScrollBars = RichTextBoxScrollBars.Vertical
+        txtLog.Size = New Size(1238, 86)
+        txtLog.TabIndex = 1
+        txtLog.WordWrap = False
         ' 
         ' statusStrip
         ' 
@@ -2715,6 +2822,8 @@ Partial Class MainForm
         grpDefaultInstall.ResumeLayout(False)
         grpDefaultInstall.PerformLayout()
         grpLog.ResumeLayout(False)
+        logHeaderPanel.ResumeLayout(False)
+        logHeaderPanel.PerformLayout()
         statusStrip.ResumeLayout(False)
         statusStrip.PerformLayout()
         ResumeLayout(False)
@@ -2926,7 +3035,15 @@ Partial Class MainForm
     Friend WithEvents btnCompatInstallPatcher As System.Windows.Forms.Button
     Friend WithEvents btnCompatRemovePatcher As System.Windows.Forms.Button
     Friend WithEvents btnCompatCopyInfo As System.Windows.Forms.Button
-    Friend WithEvents txtLog As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents txtLog As OptiScalerInstaller.ThemedRichTextBox
+    Friend WithEvents logHeaderPanel As System.Windows.Forms.FlowLayoutPanel
+    Friend WithEvents lblLogFilter As System.Windows.Forms.Label
+    Friend WithEvents txtLogFilter As OptiScalerInstaller.ThemedTextBox
+    Friend WithEvents lblLogSeverity As System.Windows.Forms.Label
+    Friend WithEvents cmbLogSeverity As System.Windows.Forms.ComboBox
+    Friend WithEvents btnLogCopy As System.Windows.Forms.Button
+    Friend WithEvents btnLogSave As System.Windows.Forms.Button
+    Friend WithEvents btnLogClear As System.Windows.Forms.Button
     Friend WithEvents statusStrip As System.Windows.Forms.StatusStrip
     Friend WithEvents toolStatusLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolDetectedLabel As System.Windows.Forms.ToolStripStatusLabel

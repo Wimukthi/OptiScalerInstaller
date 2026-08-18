@@ -27,8 +27,9 @@ and keeps track of what it put where so uninstalling is clean.
 ## Requirements
 
 - Windows 10 or Windows 11 (x64)
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — the release build is
-  framework-dependent
+- **.NET 10 Desktop Runtime** — the release build is framework-dependent, so this must be installed first.
+  Download the **x64 Desktop Runtime** installer, not the SDK and not the ASP.NET runtime:
+  [dotnet.microsoft.com/download/dotnet/10.0/runtime](https://dotnet.microsoft.com/download/dotnet/10.0/runtime?cid=getdotnetcore&os=windows&arch=x64)
 
 ## Install
 
@@ -39,6 +40,19 @@ and keeps track of what it put where so uninstalling is clean.
 
 Settings, logs, and caches are written next to the executable, so extract to a location you can write to —
 not `C:\Program Files`.
+
+### "Windows protected your PC"
+
+The executable is not code-signed, so SmartScreen will warn on first launch. Choose **More info → Run
+anyway**. If you would rather verify the download first, every release ships a `.sha256` file next to the
+zip:
+
+```powershell
+Get-FileHash .\OptiScalerInstaller-vX.Y.Z.W-win-x64.zip -Algorithm SHA256
+```
+
+Compare the result against the published checksum. If it does not match, do not run it — download it again
+from the Releases page, and only from there.
 
 ## Documentation
 

@@ -101,6 +101,7 @@ Public Class MainForm
         _settingThemeState = False
         ThemeManager.ApplyTheme(Me, preferredMode)
         ApplyCompatibilityContextMenuTheme(preferredMode)
+        cmbLogSeverity.SelectedIndex = 0
         InitializeToolTips()
         LoadSettingsUi()
         PositionSettingsControls()
@@ -5658,14 +5659,222 @@ Public Class MainForm
         End Select
     End Function
 
+    ' --- Log pane ----------------------------------------------------------------
+    ' Entries are kept as data rather than as accumulated text. That is what lets the
+    ' pane be filtered and re-rendered, lets warnings and errors be coloured instead of
+    ' vanishing into undifferentiated scrollback, and lets the buffer be capped without
+    ' permanently losing lines that a later filter would have matched.
+
+    Friend Enum LogSeverity
+        Info = 0
+        Warning = 1
+        Failure = 2
+    End Enum
+
+    Private NotInheritable Class LogEntry
+        Public Property Timestamp As DateTime
+        Public Property Severity As LogSeverity
+        Public Property Message As String
+    End Class
+
+    Private ReadOnly logEntries As New List(Of LogEntry)()
+    Private Const MaxLogEntries As Integer = 4000
+    Private Const LogTrimBatch As Integer = 400
+
     Private Sub AppendLog(message As String)
+        AppendLog(message, InferLogSeverity(message))
+    End Sub
+
+    Private Sub AppendLog(message As String, severity As LogSeverity)
         If txtLog.InvokeRequired Then
-            txtLog.BeginInvoke(New Action(Of String)(AddressOf AppendLog), message)
+            txtLog.BeginInvoke(New Action(Of String, LogSeverity)(AddressOf AppendLog), message, severity)
             Return
         End If
 
-        txtLog.AppendText("[" & DateTime.Now.ToString("HH:mm:ss") & "] " & message & Environment.NewLine)
+        Dim entry As New LogEntry With {
+            .Timestamp = DateTime.Now,
+            .Severity = severity,
+            .Message = message
+        }
+        logEntries.Add(entry)
+
+        If logEntries.Count > MaxLogEntries Then
+            ' Trim in batches so capping is not a per-line cost during a long scan.
+            logEntries.RemoveRange(0, LogTrimBatch)
+            RenderLog()
+            Return
+        End If
+
+        If PassesLogFilter(entry) Then
+            WriteLogEntry(entry)
+            txtLog.ScrollToEnd()
+        End If
+    End Sub
+
+    ' Existing call sites pass a bare message, so severity is inferred from wording.
+    ' New code that knows the outcome should call the two-argument overload instead.
+    Private Shared Function InferLogSeverity(message As String) As LogSeverity
+        If String.IsNullOrWhiteSpace(message) Then
+            Return LogSeverity.Info
+        End If
+
+        Dim lower As String = message.ToLowerInvariant()
+
+        ' "0 errors" and "verification passed" are success reports, not problems.
+        Dim describesClean As Boolean = lower.Contains("0 error") OrElse lower.Contains("no error") OrElse
+                                        lower.Contains("verification passed") OrElse lower.Contains("up to date")
+
+        If Not describesClean Then
+            If lower.Contains("failed") OrElse lower.Contains("error") OrElse lower.Contains("aborted") OrElse
+               lower.Contains("unable to") OrElse lower.Contains("could not") Then
+                Return LogSeverity.Failure
+            End If
+        End If
+
+        If lower.Contains("warning") AndAlso Not lower.Contains("0 warning") AndAlso Not lower.Contains("no warning") Then
+            Return LogSeverity.Warning
+        End If
+
+        If lower.Contains("skipping") OrElse lower.Contains("canceled") OrElse lower.Contains("cancelled") Then
+            Return LogSeverity.Warning
+        End If
+
+        Return LogSeverity.Info
+    End Function
+
+    Private Function GetMinimumLogSeverity() As LogSeverity
+        If cmbLogSeverity Is Nothing Then
+            Return LogSeverity.Info
+        End If
+
+        Select Case cmbLogSeverity.SelectedIndex
+            Case 1
+                Return LogSeverity.Warning
+            Case 2
+                Return LogSeverity.Failure
+            Case Else
+                Return LogSeverity.Info
+        End Select
+    End Function
+
+    Private Function PassesLogFilter(entry As LogEntry) As Boolean
+        If entry Is Nothing Then
+            Return False
+        End If
+
+        If entry.Severity < GetMinimumLogSeverity() Then
+            Return False
+        End If
+
+        Dim needle As String = If(txtLogFilter Is Nothing, "", txtLogFilter.Text.Trim())
+        If needle.Length = 0 Then
+            Return True
+        End If
+
+        Return entry.Message IsNot Nothing AndAlso
+               entry.Message.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0
+    End Function
+
+    Private Function FormatLogEntry(entry As LogEntry) As String
+        Return "[" & entry.Timestamp.ToString("HH:mm:ss") & "] " & entry.Message & Environment.NewLine
+    End Function
+
+    Private Sub WriteLogEntry(entry As LogEntry)
+        Dim mode As SystemColorMode = ThemeSettings.GetPreferredColorMode()
+        Select Case entry.Severity
+            Case LogSeverity.Failure
+                txtLog.AppendText(FormatLogEntry(entry), ThemeManager.LogFailureColor(mode))
+            Case LogSeverity.Warning
+                txtLog.AppendText(FormatLogEntry(entry), ThemeManager.LogWarningColor(mode))
+            Case Else
+                txtLog.AppendText(FormatLogEntry(entry))
+        End Select
+    End Sub
+
+    Private Sub RenderLog()
+        If txtLog Is Nothing Then
+            Return
+        End If
+
+        txtLog.BeginBulkUpdate()
+        Try
+            txtLog.Clear()
+            For Each entry As LogEntry In logEntries
+                If PassesLogFilter(entry) Then
+                    WriteLogEntry(entry)
+                End If
+            Next
+        Finally
+            txtLog.EndBulkUpdate()
+        End Try
+
         txtLog.ScrollToEnd()
+    End Sub
+
+    Private Function BuildVisibleLogText() As String
+        Dim sb As New StringBuilder()
+        For Each entry As LogEntry In logEntries
+            If PassesLogFilter(entry) Then
+                sb.Append(FormatLogEntry(entry))
+            End If
+        Next
+        Return sb.ToString()
+    End Function
+
+    Private Sub txtLogFilter_TextChanged(sender As Object, e As EventArgs) Handles txtLogFilter.TextChanged
+        RenderLog()
+    End Sub
+
+    Private Sub cmbLogSeverity_SelectedIndexChanged(sender As Object, e As EventArgs) Handles cmbLogSeverity.SelectedIndexChanged
+        RenderLog()
+    End Sub
+
+    Private Sub btnLogCopy_Click(sender As Object, e As EventArgs) Handles btnLogCopy.Click
+        Dim logText As String = BuildVisibleLogText()
+        If logText.Length = 0 Then
+            SetTransientStatus("Nothing to copy: no log lines match the current filter.")
+            Return
+        End If
+
+        Try
+            Clipboard.SetText(logText)
+            SetTransientStatus("Log copied to the clipboard.")
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "MainForm.btnLogCopy_Click")
+            SetTransientStatus("Could not copy the log: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub btnLogSave_Click(sender As Object, e As EventArgs) Handles btnLogSave.Click
+        Dim logText As String = BuildVisibleLogText()
+        If logText.Length = 0 Then
+            SetTransientStatus("Nothing to save: no log lines match the current filter.")
+            Return
+        End If
+
+        Using dialog As New SaveFileDialog() With {
+            .Filter = "Text file (*.txt)|*.txt|All files (*.*)|*.*",
+            .Title = "Save log",
+            .FileName = "OptiScalerInstaller-log-" & DateTime.Now.ToString("yyyyMMdd-HHmmss") & ".txt"
+        }
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then
+                Return
+            End If
+
+            Try
+                File.WriteAllText(dialog.FileName, logText)
+                SetTransientStatus("Log saved to " & Path.GetFileName(dialog.FileName) & ".")
+            Catch ex As Exception
+                ErrorLogger.Log(ex, "MainForm.btnLogSave_Click")
+                SetTransientStatus("Could not save the log: " & ex.Message)
+            End Try
+        End Using
+    End Sub
+
+    Private Sub btnLogClear_Click(sender As Object, e As EventArgs) Handles btnLogClear.Click
+        logEntries.Clear()
+        txtLog.Clear()
+        SetTransientStatus("Log cleared.")
     End Sub
 
     Private Sub ApplyCompatibilityContextMenuTheme(mode As SystemColorMode)
@@ -6141,6 +6350,32 @@ Public Class MainForm
 
         Return "..." & normalized.Substring(normalized.Length - (maxLength - 3))
     End Function
+
+    ' Non-modal confirmation for actions whose outcome the user can already see.
+    ' Reserving dialogs for things that modify a game folder keeps them meaningful.
+    Private transientStatusTimer As Timer
+
+    Private Sub SetTransientStatus(message As String)
+        If statusStrip.InvokeRequired Then
+            statusStrip.BeginInvoke(New Action(Of String)(AddressOf SetTransientStatus), message)
+            Return
+        End If
+
+        SetStatus(message)
+
+        If transientStatusTimer Is Nothing Then
+            transientStatusTimer = New Timer() With {.Interval = 6000}
+            AddHandler transientStatusTimer.Tick, AddressOf HandleTransientStatusExpired
+        End If
+
+        transientStatusTimer.Stop()
+        transientStatusTimer.Start()
+    End Sub
+
+    Private Sub HandleTransientStatusExpired(sender As Object, e As EventArgs)
+        transientStatusTimer.Stop()
+        SetStatus("Ready.")
+    End Sub
 
     Private Sub SetStatus(message As String)
         If statusStrip.InvokeRequired Then

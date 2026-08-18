@@ -96,12 +96,56 @@ Public Module UpdateService
         Return NormalizeVersionForCompare(latestVersion).CompareTo(NormalizeVersionForCompare(currentVersion)) > 0
     End Function
 
+    ' Identifies the packaging flavour a release asset represents so the updater never
+    ' moves a user between build variants (for example a self-contained "standalone"
+    ' zip and the regular framework-dependent one).
+    Private Function GetAssetFlavour(assetName As String) As String
+        If String.IsNullOrWhiteSpace(assetName) Then
+            Return "standard"
+        End If
+
+        Dim lower As String = assetName.ToLowerInvariant()
+        If lower.Contains("standalone") OrElse lower.Contains("self-contained") OrElse lower.Contains("selfcontained") Then
+            Return "standalone"
+        End If
+
+        Return "standard"
+    End Function
+
+    ' Reports the flavour of the running build. A framework-dependent build ships its
+    ' deps.json next to the executable; a self-contained single-file build does not.
+    Private Function GetRunningFlavour() As String
+        Try
+            Dim depsPath As String = Path.Combine(AppContext.BaseDirectory, "OptiScalerInstaller.deps.json")
+            Return If(File.Exists(depsPath), "standard", "standalone")
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "UpdateService.GetRunningFlavour")
+            Return "standard"
+        End Try
+    End Function
+
+    ' Deterministic ordering for equally scored assets: shortest name wins, then ordinal
+    ' comparison, so repeated checks against the same release always resolve identically
+    ' instead of depending on the order the API returned the assets in.
+    Private Function IsPreferredTieBreak(candidateName As String, current As UpdateAssetInfo) As Boolean
+        If current Is Nothing OrElse String.IsNullOrWhiteSpace(current.Name) Then
+            Return True
+        End If
+
+        If candidateName.Length <> current.Name.Length Then
+            Return candidateName.Length < current.Name.Length
+        End If
+
+        Return String.CompareOrdinal(candidateName, current.Name) < 0
+    End Function
+
     Public Function SelectBestAsset(release As UpdateReleaseInfo) As UpdateAssetInfo
         If release Is Nothing OrElse release.Assets Is Nothing OrElse release.Assets.Count = 0 Then
             Return Nothing
         End If
 
         Dim archToken As String = If(Environment.Is64BitProcess, "x64", "x86")
+        Dim runningFlavour As String = GetRunningFlavour()
         Dim best As UpdateAssetInfo = Nothing
         Dim bestScore As Integer = -1
 
@@ -125,7 +169,14 @@ Public Module UpdateService
                 score += 2
             End If
 
-            If score > bestScore Then
+            ' Keep the user on the flavour they already run. Without this, two
+            ' same-architecture zips score identically and the winner is whichever
+            ' one the release API happened to list first.
+            If GetAssetFlavour(name) = runningFlavour Then
+                score += 4
+            End If
+
+            If score > bestScore OrElse (score = bestScore AndAlso IsPreferredTieBreak(name, best)) Then
                 bestScore = score
                 best = asset
             End If
