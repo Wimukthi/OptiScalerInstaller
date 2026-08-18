@@ -239,7 +239,7 @@ Partial Class MainForm
         toolDetectedLabel = New ToolStripStatusLabel()
         toolProgressBar = New ToolStripProgressBar()
         toolCancelButton = New ToolStripButton()
-        mainMenuStrip = New MenuStrip()
+        appMenuStrip = New MenuStrip()
         menuFile = New ToolStripMenuItem()
         menuFileOpenSettings = New ToolStripMenuItem()
         menuFileExit = New ToolStripMenuItem()
@@ -305,7 +305,7 @@ Partial Class MainForm
         grpSettings.SuspendLayout()
         flpSettingsToggles.SuspendLayout()
         grpDefaultInstall.SuspendLayout()
-        mainMenuStrip.SuspendLayout()
+        appMenuStrip.SuspendLayout()
         grpLog.SuspendLayout()
         logHeaderPanel.SuspendLayout()
         statusStrip.SuspendLayout()
@@ -2802,13 +2802,13 @@ Partial Class MainForm
         toolCancelButton.ToolTipText = "Stop the running scan or download. Work already completed is kept."
         toolCancelButton.Visible = False
         '
-        ' mainMenuStrip
+        ' appMenuStrip
         '
-        mainMenuStrip.Items.AddRange(New ToolStripItem() {menuFile, menuTools, menuHelp})
-        mainMenuStrip.Location = New Point(0, 0)
-        mainMenuStrip.Name = "mainMenuStrip"
-        mainMenuStrip.Size = New Size(1270, 24)
-        mainMenuStrip.TabIndex = 2
+        appMenuStrip.Items.AddRange(New ToolStripItem() {menuFile, menuTools, menuHelp})
+        appMenuStrip.Location = New Point(0, 0)
+        appMenuStrip.Name = "appMenuStrip"
+        appMenuStrip.Size = New Size(1270, 24)
+        appMenuStrip.TabIndex = 2
         '
         ' menuFile
         '
@@ -2923,8 +2923,8 @@ Partial Class MainForm
         ClientSize = New Size(1270, 897)
         Controls.Add(mainLayout)
         Controls.Add(statusStrip)
-        Controls.Add(mainMenuStrip)
-        MainMenuStrip = mainMenuStrip
+        Controls.Add(appMenuStrip)
+        MainMenuStrip = appMenuStrip
         Icon = CType(resources.GetObject("$this.Icon"), Icon)
         MinimumSize = New Size(1100, 700)
         Name = "MainForm"
@@ -2987,8 +2987,8 @@ Partial Class MainForm
         flpSettingsToggles.PerformLayout()
         grpDefaultInstall.ResumeLayout(False)
         grpDefaultInstall.PerformLayout()
-        mainMenuStrip.ResumeLayout(False)
-        mainMenuStrip.PerformLayout()
+        appMenuStrip.ResumeLayout(False)
+        appMenuStrip.PerformLayout()
         grpLog.ResumeLayout(False)
         logHeaderPanel.ResumeLayout(False)
         logHeaderPanel.PerformLayout()
@@ -3218,7 +3218,7 @@ Partial Class MainForm
     Friend WithEvents toolDetectedLabel As System.Windows.Forms.ToolStripStatusLabel
     Friend WithEvents toolProgressBar As System.Windows.Forms.ToolStripProgressBar
     Friend WithEvents toolCancelButton As System.Windows.Forms.ToolStripButton
-    Friend WithEvents mainMenuStrip As System.Windows.Forms.MenuStrip
+    Friend WithEvents appMenuStrip As System.Windows.Forms.MenuStrip
     Friend WithEvents menuFile As System.Windows.Forms.ToolStripMenuItem
     Friend WithEvents menuFileOpenSettings As System.Windows.Forms.ToolStripMenuItem
     Friend WithEvents menuFileExit As System.Windows.Forms.ToolStripMenuItem

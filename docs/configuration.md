@@ -77,6 +77,7 @@ These seed the Install tab. They are what **Quick install** and bulk operations 
 | `DefaultIniMode` | `Off` | `Off`, `Merge`, or `Replace` — how a global INI template is applied at install time. |
 | `DefaultIniPath` | *(empty)* | Path to that template. |
 | `PreserveExistingIniOnUpdate` | `true` | Keep the game's existing `OptiScaler.ini` on update or reinstall. |
+| `ConfirmQuickInstall` | `true` | Show the install review dialog before a quick or bulk install writes anything. Set to `false` for one-click behaviour. No UI field; set it here. |
 
 ### FSR4 INT8
 

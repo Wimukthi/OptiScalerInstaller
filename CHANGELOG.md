@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 from the build counter rather than semantic versioning — see
 [docs/building.md](docs/building.md#versioning).
 
+## [Unreleased]
+
+### Added
+
+- Menu bar (File / Tools / Help), so About, Check for updates, and Export diagnostics are reachable from
+  somewhere other than the bottom-right corner of the Settings tab.
+- Keyboard shortcuts: <kbd>F5</kbd> refresh, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> scan,
+  <kbd>Ctrl</kbd>+<kbd>F</kbd> focus game search, <kbd>Esc</kbd> cancel.
+- Cancellation for drive scans and install downloads, with a Cancel button in the status bar. A cancelled
+  scan keeps the games it already found; a cancelled download cannot leave a half-written game folder.
+- Log filtering by text and by severity, with Copy, Save, and Clear. Warnings and errors are coloured, and
+  the buffer is capped at 4000 entries.
+- Empty-state message on the game list explaining why it is empty and what to do about it.
+- `.sha256` checksum published alongside each release package, and README guidance on the SmartScreen
+  prompt the unsigned executable produces.
+- `ConfirmQuickInstall` setting, for restoring one-click quick installs.
+
+### Changed
+
+- Quick install and bulk operations now show the same review dialog as the Install tab before writing
+  anything. The dialog also names the target folder, the files that will be written, and what happens to
+  files already there.
+- Minimum window size reduced from 1286x936 to 1100x700. The old floor could not be displayed on a
+  1366x768 laptop, and at 125% DPI scaling it needed more vertical space than a 1080p screen has. Tab
+  content now scrolls instead of compressing.
+
+### Fixed
+
+- Installer self-update could pick the wrong release asset. Two same-architecture zips scored identically
+  and the winner was whichever the release API happened to return first.
+
 ## [1.1.7.1] - 2026-08-03
 
 ### Fixed

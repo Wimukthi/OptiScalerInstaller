@@ -1,11 +1,13 @@
 # Usage
 
-The window is five tabs plus a shared log pane at the bottom. Everything the app does is written to that
-log, and the status bar shows the detected-game count and the current background operation.
+A menu bar, five tabs, and a shared log pane at the bottom. Everything the app does is written to that log,
+and the status bar shows the detected-game count, the current background operation, and a **Cancel** button
+while one is running.
 
 The title bar shows the installer version and, once GPU detection finishes, the active adapter — for example
 `OptiScaler Installer v1.1.7.0 [AMD Radeon RX 9070 XT]`.
 
+- [Menu and keyboard](#menu-and-keyboard)
 - [Game Detection](#game-detection)
 - [Install](#install)
 - [Add-ons](#add-ons)
@@ -13,6 +15,32 @@ The title bar shows the installer version and, once GPU detection finishes, the 
 - [Settings](#settings)
 - [INI editor](#ini-editor)
 - [Bulk operations](#bulk-operations)
+- [The log pane](#the-log-pane)
+
+## Menu and keyboard
+
+Everything in the menu is also a button somewhere; the menu exists so there is a predictable second place to
+look.
+
+| Menu | Contains |
+| --- | --- |
+| File | Open settings file, Exit |
+| Tools | Scan installed games, Add game manually, Refresh lists, Bulk actions, Export diagnostics |
+| Help | Documentation, OptiScaler wiki, Check for updates, About |
+
+| Shortcut | Action |
+| --- | --- |
+| <kbd>F5</kbd> | Refresh the compatibility and release lists |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Scan installed games |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Jump to Game Detection and focus the search box |
+| <kbd>Esc</kbd> | Cancel the running scan or download |
+
+### Cancelling
+
+Scans and downloads can be stopped from the **Cancel** button in the status bar or with <kbd>Esc</kbd>.
+Cancellation is cooperative: a scan stops at the next folder and **keeps everything it has already found**,
+and a cancelled download leaves no partial install, because extraction and copying only begin once the
+archive is complete.
 
 ## Game Detection
 
@@ -59,7 +87,8 @@ have one.
 Select a row, then use the button strip or the right-click menu:
 
 - **Use selected** — prefills the Install tab with the game's paths and its per-game profile.
-- **Quick install** / **Quick update** — installs or updates OptiScaler in place using your default options.
+- **Quick install** / **Quick update** — installs or updates OptiScaler in place using your default options,
+  after showing the same review dialog the Install tab uses.
 - **Uninstall OptiScaler** — removes the install using its manifest.
 - **Install OptiPatcher** / **Remove OptiPatcher** — same, for the plugin. Only enabled for games on the
   OptiPatcher support list.
@@ -211,6 +240,19 @@ what would happen to each game. Games with anti-cheat signatures are excluded un
 **Include anti-cheat warnings**. **Stop on first error** halts the run instead of continuing past a failure.
 
 Operations run sequentially, one game at a time, with per-game results reported to the log.
+
+## The log pane
+
+Every action, warning, and failure is written here with a timestamp. Warnings appear amber and failures red,
+so the line that matters does not disappear into the scrollback.
+
+- **Filter** narrows to lines containing the text you type.
+- **Level** hides anything below the chosen severity — useful for finding what went wrong in a long scan.
+- **Copy** and **Save** take the lines currently visible, so a filter narrows what you hand to a bug report.
+- **Clear** empties the view for this session.
+
+The buffer holds the most recent 4000 entries. For a full support bundle including system information and a
+detected-games snapshot, use **Tools → Export diagnostics** instead.
 
 ## Anti-cheat
 

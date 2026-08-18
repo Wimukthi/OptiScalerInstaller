@@ -1314,7 +1314,7 @@ Public Class MainForm
             Dim manifest As ExperimentalFsr4Manifest = Await Task.Run(Function() ExperimentalFsr4Service.Apply(options, AddressOf AppendLog))
             Dim versionText As String = If(manifest Is Nothing OrElse String.IsNullOrWhiteSpace(manifest.PackageVersion), "unknown", manifest.PackageVersion)
             AppendLog("Experimental FSR4 package applied. Version: " & versionText)
-            MessageBox.Show(Me, "Experimental FSR4 package applied successfully.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetTransientStatus("FSR4 INT8 package applied.")
         Catch ex As Exception
             AppendLog("Experimental FSR4 apply failed: " & ex.Message)
             MessageBox.Show(Me, ex.Message, "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1364,7 +1364,7 @@ Public Class MainForm
             Dim removed As Boolean = Await Task.Run(Function() ExperimentalFsr4Service.Remove(txtGameFolder.Text, AddressOf AppendLog))
             If removed Then
                 AppendLog("Experimental FSR4 package removed.")
-                MessageBox.Show(Me, "Experimental FSR4 package removed.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                SetTransientStatus("FSR4 INT8 package removed.")
             Else
                 AppendLog("Experimental remove skipped (no managed manifest found).")
                 MessageBox.Show(Me, "No managed experimental package was found for this folder.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -2027,7 +2027,7 @@ Public Class MainForm
         Dim removed As Boolean = Await InstallerService.UninstallAsync(gameFolder, AddressOf AppendLog, preserveExistingIni)
         If showDialogs Then
             If removed Then
-                MessageBox.Show(Me, "OptiScaler removed from this folder.", "Uninstall Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                SetTransientStatus("OptiScaler removed from this folder.")
             Else
                 MessageBox.Show(Me, "No manifest found for this folder.", "Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information)
             End If
@@ -6059,7 +6059,7 @@ Public Class MainForm
         AppSettings.Save(settings)
         lblSettingsPath.Text = "Settings file: " & AppSettings.GetSettingsPath()
         AppendLog("Settings saved.")
-        MessageBox.Show(Me, "Settings saved.", "Settings", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        SetTransientStatus("Settings saved.")
     End Sub
 
     Private Sub btnReloadSettings_Click(sender As Object, e As EventArgs) Handles btnReloadSettings.Click
@@ -6341,7 +6341,7 @@ Public Class MainForm
 
             ZipFile.CreateFromDirectory(tempRoot, dialog.FileName, CompressionLevel.Optimal, False)
             AppendLog("Diagnostics exported: " & dialog.FileName)
-            MessageBox.Show(Me, "Diagnostics package saved.", "Diagnostics", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetTransientStatus("Diagnostics package saved.")
         Catch ex As Exception
             AppendLog("Diagnostics export failed: " & ex.Message)
             ErrorLogger.Log(ex, "MainForm.ExportDiagnostics")
