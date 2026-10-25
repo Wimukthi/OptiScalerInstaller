@@ -12,6 +12,12 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Bundled compatibility list parses", TestBundledListAsync),
     ("Manual-add surfaces ambiguous game candidates", TestManualMatchCandidatesAsync)
 };
+tests.AddRange(FsrPackageTests.GetTests());
+tests.AddRange(FrameGenerationTests.GetTests());
+tests.AddRange(FsrSupportTests.GetTests());
+tests.AddRange(DocumentationTests.GetTests());
+tests.Add(("Help About opens with Settings hidden and no network", HelpMenuTests.RunAsync));
+tests.Add(("Manual update checks reject duplicate invocation", HelpMenuTests.TestUpdateReentrancyGuard));
 
 if (runLive)
 {

@@ -76,6 +76,10 @@ That is OptiScaler's domain rather than the installer's, but the usual first che
   exceptions.
 - On AMD/Intel with DLSS inputs still missing, add [Fakenvapi](https://github.com/optiscaler/OptiScaler/wiki/Fakenvapi)
   from the Add-ons tab.
+- For AMD FSR behavior, first separate driver FSR upscaling from OptiScaler's SDK path and the game's FG
+  integration. Check the [FSR 4 Support guide](amd-fsr-support.md), the exact OptiScaler release notes, and
+  AMD's current driver notes. A driver-supported GPU does not guarantee that an older OptiScaler build supports
+  its driver or SDK path.
 - Check the game's entry on the [OptiScaler wiki](https://github.com/optiscaler/OptiScaler/wiki) —
   **Open wiki page** goes straight there.
 

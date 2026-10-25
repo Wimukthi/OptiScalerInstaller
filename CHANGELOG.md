@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 from the build counter rather than semantic versioning — see
 [docs/building.md](docs/building.md#versioning).
 
+## [1.1.8.1] - 2026-10-25
+
+### Added
+
+- Offline documentation viewer with topic selection for Usage, AMD FSR, Configuration, and Troubleshooting;
+  Help also links to AMD FSR support.
+- AMD FSR support guide covering driver hardware support and OptiScaler version differences.
+
+### Changed
+
+- Updated AMD FSR 4 guidance for Adrenalin 26.10.1 and made the legacy package workflow an expert opt-in.
+- Made legacy package controls respect the target OptiScaler INI schema, added Vulkan support detection, and
+  documented modern INI keys in the editor.
+- Apply and verify frame-generation choices using the installed INI's `FGInput`/`FGOutput` schema; Auto
+  preserves existing settings and older `FGType` configurations remain supported.
+
+### Fixed
+
+- Help About and Check for updates work while Settings is hidden; About opens immediately offline.
+- Added F1 documentation access and used the configured OptiScaler wiki URL.
+
 ## [1.1.8.0] - 2026-08-18
 
 ### Added
@@ -24,7 +45,6 @@ from the build counter rather than semantic versioning — see
 - `ConfirmQuickInstall` setting, for restoring one-click quick installs.
 
 ### Changed
-
 - Quick install and bulk operations now show the same review dialog as the Install tab before writing
   anything. The dialog also names the target folder, the files that will be written, and what happens to
   files already there.

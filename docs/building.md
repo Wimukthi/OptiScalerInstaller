@@ -23,9 +23,9 @@ Use `-c Debug` and `bin/Debug/net10.0-windows/` for a debug build.
 
 ## Tests
 
-`tests/CompatibilityParser.Tests` is a console runner that exercises the compatibility-list parser against
-fixtures — Markdown tables with linked and plain rows, parenthesised wiki slugs, the JSON catalog format, the
-bundled list, and ambiguous manual-add matching.
+`tests/CompatibilityParser.Tests` is a console runner covering compatibility parsing and game matching,
+FSR package preflight/apply/remove, frame-generation INI mappings, GPU guidance, bundled documentation,
+and Help menu regressions. The release gate runs 36 checks including the live compatibility-list canary.
 
 ```bash
 powershell -ExecutionPolicy Bypass -File ./scripts/TestCompatibilityParser.ps1
@@ -69,7 +69,7 @@ The script:
 1. Runs the compatibility parser tests including the live canary, and refuses to continue if they fail.
 2. Cleans and rebuilds in Release.
 3. Reads the version from the built executable.
-4. Stages the payload — the executable, its dependencies, `Data/`, `runtimes/`, `LICENSE`, and `README.md` —
+4. Stages the payload — the executable, its dependencies, `Data/`, `docs/`, `runtimes/`, `LICENSE`, and `README.md` —
    into `artifacts/staging/`, failing loudly if anything required is missing.
 5. Strips volatile runtime files (`*.settings.json`, logs) that a local run may have left behind.
 6. Writes `Release/OptiScalerInstaller-v<version>-win-x64.zip` and a matching `.sha256` file beside it.

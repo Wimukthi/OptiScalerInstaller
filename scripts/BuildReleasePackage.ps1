@@ -94,6 +94,7 @@ $optionalFiles = @(
 
 $requiredDirectories = @(
     "Data",
+    "docs",
     "runtimes"
 )
 

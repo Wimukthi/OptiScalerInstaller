@@ -1039,16 +1039,11 @@ Public Class InstallerService
 
         updates.Add(New IniUpdate With {.Section = "Spoofing", .Key = "Dxgi", .Value = dxgiValue})
 
-        Dim fgValue As String = "auto"
-        Select Case config.FgType
-            Case FgTypeSelection.None
-                fgValue = "nofg"
-            Case FgTypeSelection.OptiFg
-                fgValue = "optifg"
-            Case FgTypeSelection.Nukem
-                fgValue = "nukems"
-        End Select
-        updates.Add(New IniUpdate With {.Section = "FrameGen", .Key = "FGType", .Value = fgValue})
+        Dim fgPlan As FrameGenerationConfigPlan = FrameGenerationConfigService.CreatePlan(IniDocument.Load(iniPath), config.FgType)
+        updates.AddRange(fgPlan.Updates)
+        For Each warning As String In fgPlan.Warnings
+            log?.Invoke("Frame-generation setting: " & warning)
+        Next
 
         updates.Add(New IniUpdate With {.Section = "Plugins", .Key = "LoadAsiPlugins", .Value = ToIniBool(config.LoadAsiPlugins)})
         updates.Add(New IniUpdate With {.Section = "Plugins", .Key = "LoadReshade", .Value = ToIniBool(config.EnableReshade)})
@@ -1058,7 +1053,13 @@ Public Class InstallerService
             updates.Add(New IniUpdate With {.Section = "Plugins", .Key = "Path", .Value = config.PluginsPath})
         End If
 
-        IniFile.SetValues(iniPath, updates)
+        ' The document writer recognizes whitespace around '=' in shipped and user-edited INIs.
+        ' The old line-prefix writer could append a second key instead of updating the existing one.
+        Dim document As IniDocument = IniDocument.Load(iniPath)
+        For Each update As IniUpdate In updates
+            document.SetValue(update.Section, update.Key, update.Value)
+        Next
+        File.WriteAllText(iniPath, document.ToText())
         log?.Invoke("Updated OptiScaler.ini settings.")
     End Sub
 
@@ -1326,7 +1327,13 @@ Public Class InstallerService
 
         If File.Exists(iniPath) Then
             Dim iniValues As Dictionary(Of String, String) = ReadIniMap(iniPath)
-            ValidateIniExpectation(iniValues, "FrameGen", "FGType", ExpectedFgType(config), report)
+            Dim fgPlan As FrameGenerationConfigPlan = FrameGenerationConfigService.CreatePlan(IniDocument.Load(iniPath), config.FgType)
+            For Each warning As String In fgPlan.Warnings
+                report.Warnings.Add("Frame-generation setting: " & warning)
+            Next
+            For Each expectedValue As IniUpdate In fgPlan.ExpectedValues
+                ValidateIniExpectation(iniValues, expectedValue.Section, expectedValue.Key, expectedValue.Value, report)
+            Next
 
             Dim expectedDxgi As String = "auto"
             If config.GpuVendor = GpuVendor.AmdIntel Then
@@ -1413,19 +1420,6 @@ Public Class InstallerService
             report.Warnings.Add($"INI [{section}] {key} expected '{expected}' but found '{actual}'.")
         End If
     End Sub
-
-    Private Shared Function ExpectedFgType(config As InstallerConfig) As String
-        Select Case config.FgType
-            Case FgTypeSelection.None
-                Return "nofg"
-            Case FgTypeSelection.OptiFg
-                Return "optifg"
-            Case FgTypeSelection.Nukem
-                Return "nukems"
-            Case Else
-                Return "auto"
-        End Select
-    End Function
 
     Private Shared Sub ValidateArchiveFile(filePath As String, expectedSize As Long, log As Action(Of String))
         If String.IsNullOrWhiteSpace(filePath) OrElse Not File.Exists(filePath) Then

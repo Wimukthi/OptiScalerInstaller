@@ -20,6 +20,8 @@ and keeps track of what it put where so uninstalling is clean.
 - **Add-ons** — Fakenvapi, Nukem frame generation, `nvngx_dlss.dll`, ReShade, Special K, and ASI plugins.
 - **INI editor** — grouped form view over `OptiScaler.ini` with descriptions and validation, plus a raw text
   view, backups, and revert.
+- **AMD FSR 4 guidance** — separates AMD driver support from OptiScaler version-specific SDK options and
+  the optional legacy package workflow.
 - **Bulk operations** — install or update OptiScaler and OptiPatcher across many detected games at once.
 - **Clean uninstall** — every install writes a manifest, so removal restores what was there before.
 - **Self-updating** — checks for new installer releases and shows the release notes in-app.
@@ -60,6 +62,7 @@ from the Releases page, and only from there.
 | --- | --- |
 | [Usage](docs/usage.md) | Every tab and dialog, and the workflows that run through them |
 | [Configuration](docs/configuration.md) | `OptiScalerInstaller.settings.json` reference and the files the app writes |
+| [AMD FSR 4 support](docs/amd-fsr-support.md) | Driver hardware support, OptiScaler version differences, and legacy package guidance |
 | [Building](docs/building.md) | Building from source, the versioning scheme, and release packaging |
 | [Troubleshooting](docs/troubleshooting.md) | Detection problems, install failures, and diagnostics |
 | [Changelog](CHANGELOG.md) | Release history |

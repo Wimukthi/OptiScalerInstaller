@@ -20,7 +20,7 @@ Public Enum GpuVendor
 End Enum
 
 Public Enum AmdRdnaGeneration
-    ' AMD RDNA generation, used to tailor the FSR4 INT8 experimental workflow.
+    ' AMD RDNA generation, used for FSR support guidance (not a driver capability check).
     ' None = not an AMD RDNA adapter; Unknown = AMD RDNA but generation not resolved.
     None
     Rdna1

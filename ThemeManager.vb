@@ -63,8 +63,6 @@ Friend Module ThemeManager
                 button.UseVisualStyleBackColor = True
                 button.ForeColor = palette.Text
             End If
-        ElseIf TypeOf control Is Label Then
-            control.ForeColor = If(control.Enabled, palette.Text, palette.MutedText)
         ElseIf TypeOf control Is LinkLabel Then
             Dim link As LinkLabel = DirectCast(control, LinkLabel)
             link.ForeColor = If(link.Enabled, palette.Text, palette.MutedText)
@@ -77,6 +75,8 @@ Friend Module ThemeManager
                 link.ActiveLinkColor = Color.MediumBlue
                 link.VisitedLinkColor = Color.Purple
             End If
+        ElseIf TypeOf control Is Label Then
+            control.ForeColor = If(control.Enabled, palette.Text, palette.MutedText)
         ElseIf TypeOf control Is CheckBox OrElse TypeOf control Is RadioButton Then
             control.ForeColor = If(control.Enabled, palette.Text, palette.MutedText)
         ElseIf TypeOf control Is TabPage Then

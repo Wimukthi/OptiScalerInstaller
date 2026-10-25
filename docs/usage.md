@@ -11,7 +11,7 @@ The title bar shows the installer version and, once GPU detection finishes, the 
 - [Game Detection](#game-detection)
 - [Install](#install)
 - [Add-ons](#add-ons)
-- [FSR4 INT8 (Manual)](#fsr4-int8-manual)
+- [FSR 4 Support](amd-fsr-support.md)
 - [Settings](#settings)
 - [INI editor](#ini-editor)
 - [Bulk operations](#bulk-operations)
@@ -19,17 +19,18 @@ The title bar shows the installer version and, once GPU detection finishes, the 
 
 ## Menu and keyboard
 
-Everything in the menu is also a button somewhere; the menu exists so there is a predictable second place to
-look.
+The menu provides common actions from any tab. Documentation is bundled for offline reading; **Open online**
+opens the full guide with screenshots in your browser.
 
 | Menu | Contains |
 | --- | --- |
 | File | Open settings file, Exit |
 | Tools | Scan installed games, Add game manually, Refresh lists, Bulk actions, Export diagnostics |
-| Help | Documentation, OptiScaler wiki, Check for updates, About |
+| Help | Offline documentation (Usage, AMD FSR, Configuration, Troubleshooting), AMD FSR support, OptiScaler wiki, Check for updates, About |
 
 | Shortcut | Action |
 | --- | --- |
+| <kbd>F1</kbd> | Open the bundled documentation |
 | <kbd>F5</kbd> | Refresh the compatibility and release lists |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Scan installed games |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> | Jump to Game Detection and focus the search box |
@@ -175,25 +176,16 @@ The **OptiPatcher** panel holds the advanced source options — rolling, stable,
 OptiScaler 0.9 and newer bundle some of these components. The app recognises that and adjusts what it copies
 rather than overwriting a newer bundled file with an older standalone one.
 
-## FSR4 INT8 (Manual)
+## FSR 4 Support
 
-![FSR4 INT8](screenshots/fsr4-int8.png)
+![FSR 4 Support](screenshots/fsr4-int8.png)
 
-Since OptiScaler 0.9.4, FSR 4.1.1 INT8 is bundled and auto-enabled on RDNA3 desktop cards
-(`Fsr4Update=auto`), and RDNA4 uses native FSR4. This tab exists for the cases that are not covered
-automatically:
-
-- **RDNA2**, where the recommended FSR 4.0.2c INT8 model is not bundled.
-- **Unofficial RDNA3/3.5 APUs.**
-
-Point **Package folder** at a local folder containing the INT8 files (for example `amdxcffx64.dll`), pick a
-target game — from the detected list, or by browsing to an executable — and **Apply package**. The INI
-toggles (`Fsr4Update`, `FsrAgilitySDKUpgrade`, `Fsr4ForceEnableInt8`) are applied and restored by the
-installer, so **Remove package** puts the INI back the way it was.
-
-The tab warns before applying a redundant package on RDNA3 desktop or RDNA4, and when the target's
-`OptiScaler.ini` already enables FSR4. It is hidden on unsupported GPUs unless you turn on **Force-show FSR4
-tab** in Settings.
+The **FSR 4 Support** tab explains driver support for RX 6000/7000/9000 and selected Ryzen AI products.
+Enable **Show legacy/manual package tools** on that tab only when applying a particular custom or older
+package. Requested legacy controls must exist in the target INI's `[FSR]` section; incompatible or duplicate
+settings stop the operation before files are copied. A manual package is optional. See
+[AMD FSR support](amd-fsr-support.md) for hardware coverage and OptiScaler version differences. If the tab is
+hidden, **Force-show FSR4 tab** in Settings makes it visible.
 
 ## Settings
 

@@ -1794,7 +1794,7 @@ Partial Class MainForm
         tabExperimental.Padding = New Padding(8)
         tabExperimental.Size = New Size(1246, 679)
         tabExperimental.TabIndex = 3
-        tabExperimental.Text = "FSR4 INT8 (Manual)"
+        tabExperimental.Text = "FSR 4 Support"
         tabExperimental.UseVisualStyleBackColor = True
         ' 
         ' experimentalLayout
@@ -1827,7 +1827,7 @@ Partial Class MainForm
         grpFsr4Package.Size = New Size(1230, 116)
         grpFsr4Package.TabIndex = 0
         grpFsr4Package.TabStop = False
-        grpFsr4Package.Text = "Manual FSR4 INT8 Package (RDNA2 / APUs)"
+        grpFsr4Package.Text = "Legacy/manual FSR package (optional)"
         ' 
         ' lblFsr4PackageFolder
         ' 
@@ -1867,7 +1867,7 @@ Partial Class MainForm
         lblFsr4PackageHint.Name = "lblFsr4PackageHint"
         lblFsr4PackageHint.Size = New Size(622, 15)
         lblFsr4PackageHint.TabIndex = 3
-        lblFsr4PackageHint.Text = "Select a local folder that contains FSR4 INT8 files (for example amdxcffx64.dll). Files are copied with the selected install conflict behavior."
+        lblFsr4PackageHint.Text = "For a specific legacy/custom package only. Match the files to your OptiScaler build and graphics API before copying them."
         ' 
         ' grpFsr4Options
         ' 
@@ -1911,7 +1911,7 @@ Partial Class MainForm
         chkFsr4ForceInt8.Name = "chkFsr4ForceInt8"
         chkFsr4ForceInt8.Size = New Size(336, 19)
         chkFsr4ForceInt8.TabIndex = 2
-        chkFsr4ForceInt8.Text = "Set Fsr4ForceEnableInt8=true (force INT8 on RDNA2/APUs)"
+        chkFsr4ForceInt8.Text = "Set Fsr4ForceEnableInt8=true (legacy SDK INT8 only)"
         chkFsr4ForceInt8.UseVisualStyleBackColor = True
         '
         ' lblFsr4OptionsHint
@@ -1923,7 +1923,7 @@ Partial Class MainForm
         lblFsr4OptionsHint.Name = "lblFsr4OptionsHint"
         lblFsr4OptionsHint.Size = New Size(398, 15)
         lblFsr4OptionsHint.TabIndex = 3
-        lblFsr4OptionsHint.Text = "Keys are restored on remove when this feature was applied by the installer."
+        lblFsr4OptionsHint.Text = "Only keys supported by the target [FSR] section can be changed. Installer changes are restored on remove."
         ' 
         ' grpFsr4Actions
         ' 
@@ -2016,7 +2016,7 @@ Partial Class MainForm
         lblFsr4Status.Name = "lblFsr4Status"
         lblFsr4Status.Size = New Size(180, 15)
         lblFsr4Status.TabIndex = 6
-        lblFsr4Status.Text = "Experimental package: not installed"
+        lblFsr4Status.Text = "Manual package: not installed"
         ' 
         ' lblFsr4ActionHint
         ' 
@@ -2092,7 +2092,7 @@ Partial Class MainForm
         '
         ' colFsr4Installed
         '
-        colFsr4Installed.Text = "INT8"
+        colFsr4Installed.Text = "Manual package"
         colFsr4Installed.Width = 160
         '
         ' colFsr4DetectedPath

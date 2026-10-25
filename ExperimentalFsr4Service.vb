@@ -45,6 +45,8 @@ Public Class ExperimentalIniKeyState
     ' Captures an INI key state before we edit it so remove can restore it.
     Public Property Existed As Boolean
     Public Property Value As String
+    ' Older manifests omit this field; restore those using the legacy flat-key behavior.
+    Public Property SectionName As String
 End Class
 
 Public Module ExperimentalFsr4Service
@@ -54,6 +56,7 @@ Public Module ExperimentalFsr4Service
     Private ReadOnly KnownMarkerFiles As String() = {
         "amdxcffx64.dll",
         "amdxc64.dll",
+        "amdvkffx64.dll",
         "amd_fidelityfx_dx12.dll",
         "amd_fidelityfx_framegeneration_dx12.dll",
         "amd_fidelityfx_upscaler_dx12.dll",
@@ -112,11 +115,17 @@ Public Module ExperimentalFsr4Service
         Return status
     End Function
 
-    ' True when the target OptiScaler.ini already has FSR4 INT8 explicitly enabled
-    ' (Fsr4Update=true or Fsr4ForceEnableInt8=true), which makes a manual package redundant.
-    ' Note: the OptiScaler 0.9.4 default is "auto", which is not treated as explicitly enabled.
+    ' True when OptiScaler.ini has an explicit legacy or modern FSR4 selection.
+    ' Automatic/no-override values are not treated as proof of a configured path.
     Public Function IsFsr4AlreadyEnabled(gameFolder As String) As Boolean
-        Return IsIniKeyEnabled(gameFolder, "Fsr4Update") OrElse IsIniKeyEnabled(gameFolder, "Fsr4ForceEnableInt8")
+        If IsIniKeyEnabled(gameFolder, "Fsr4Update") OrElse IsIniKeyEnabled(gameFolder, "Fsr4ForceEnableInt8") Then
+            Return True
+        End If
+
+        ' Current OptiScaler builds use explicit model/GPU selections instead of the
+        ' older Fsr4Update/Fsr4ForceEnableInt8 toggles. GPU support zero means no
+        ' override; model zero is the concrete FP8 selection checked below.
+        Return IsExplicitModernFsr4Selection(gameFolder)
     End Function
 
     Public Function Apply(options As ExperimentalFsr4ApplyOptions, log As Action(Of String)) As ExperimentalFsr4Manifest
@@ -129,6 +138,12 @@ Public Module ExperimentalFsr4Service
         If filesToCopy.Count = 0 Then
             Throw New InvalidOperationException("No copyable files were found in the selected package folder.")
         End If
+
+        ' Check the installed configuration before package files can replace it.
+        ' Older packages expose the legacy controls; modern schemas do not.
+        Dim iniPath As String = Path.Combine(normalizedGameFolder, "OptiScaler.ini")
+        Dim preApplyIniStates As Dictionary(Of String, ExperimentalIniKeyState) = ValidateAndCaptureRequestedIniOptions(iniPath, options)
+        ValidatePackageIniOverwrite(resolvedPackageFolder, iniPath, options.ConflictMode, preApplyIniStates.Keys)
 
         Dim manifest As New ExperimentalFsr4Manifest With {
             .InstallerVersion = GetInstallerVersion(),
@@ -157,24 +172,32 @@ Public Module ExperimentalFsr4Service
             End If
         Next
 
-        Dim iniPath As String = Path.Combine(normalizedGameFolder, "OptiScaler.ini")
         If File.Exists(iniPath) Then
             If options.EnableFsr4Update Then
-                UpdateManagedIniKey(iniPath, "Fsr4Update", "true", manifest)
-                manifest.EnableFsr4Update = True
-                log?.Invoke("Set Fsr4Update=true in OptiScaler.ini.")
+                If UpdateManagedIniKey(iniPath, "Fsr4Update", "true", preApplyIniStates("Fsr4Update"), manifest) Then
+                    manifest.EnableFsr4Update = True
+                    log?.Invoke("Set Fsr4Update=true in OptiScaler.ini.")
+                Else
+                    log?.Invoke("Package OptiScaler.ini does not expose the legacy Fsr4Update key; it was not injected.")
+                End If
             End If
 
             If options.EnableAgilityUpgrade Then
-                UpdateManagedIniKey(iniPath, "FsrAgilitySDKUpgrade", "true", manifest)
-                manifest.EnableAgilityUpgrade = True
-                log?.Invoke("Set FsrAgilitySDKUpgrade=true in OptiScaler.ini.")
+                If UpdateManagedIniKey(iniPath, "FsrAgilitySDKUpgrade", "true", preApplyIniStates("FsrAgilitySDKUpgrade"), manifest) Then
+                    manifest.EnableAgilityUpgrade = True
+                    log?.Invoke("Set FsrAgilitySDKUpgrade=true in OptiScaler.ini.")
+                Else
+                    log?.Invoke("Package OptiScaler.ini does not expose the legacy FsrAgilitySDKUpgrade key; it was not injected.")
+                End If
             End If
 
             If options.EnableForceInt8 Then
-                UpdateManagedIniKey(iniPath, "Fsr4ForceEnableInt8", "true", manifest)
-                manifest.EnableForceInt8 = True
-                log?.Invoke("Set Fsr4ForceEnableInt8=true in OptiScaler.ini.")
+                If UpdateManagedIniKey(iniPath, "Fsr4ForceEnableInt8", "true", preApplyIniStates("Fsr4ForceEnableInt8"), manifest) Then
+                    manifest.EnableForceInt8 = True
+                    log?.Invoke("Set Fsr4ForceEnableInt8=true in OptiScaler.ini.")
+                Else
+                    log?.Invoke("Package OptiScaler.ini does not expose the legacy Fsr4ForceEnableInt8 key; it was not injected.")
+                End If
             End If
         Else
             log?.Invoke("OptiScaler.ini not found. INI options were skipped.")
@@ -286,6 +309,62 @@ Public Module ExperimentalFsr4Service
 
         Return removedAny
     End Function
+
+    Private Function ValidateAndCaptureRequestedIniOptions(iniPath As String,
+                                                            options As ExperimentalFsr4ApplyOptions) As Dictionary(Of String, ExperimentalIniKeyState)
+        Dim requested As New List(Of String)()
+        If options.EnableFsr4Update Then requested.Add("Fsr4Update")
+        If options.EnableAgilityUpgrade Then requested.Add("FsrAgilitySDKUpgrade")
+        If options.EnableForceInt8 Then requested.Add("Fsr4ForceEnableInt8")
+
+        Dim states As New Dictionary(Of String, ExperimentalIniKeyState)(StringComparer.OrdinalIgnoreCase)
+        If requested.Count = 0 Then Return states
+
+        Dim document As IniDocument = IniDocument.Load(iniPath)
+        Dim unsupported As List(Of String) = requested.
+            Where(Function(keyName) Not document.ContainsKey("FSR", keyName)).
+            ToList()
+        If unsupported.Count > 0 Then
+            Throw New InvalidOperationException(
+                "The selected legacy FSR controls are not supported by this OptiScaler.ini schema: " &
+                String.Join(", ", unsupported) & ". Use an OptiScaler build with matching legacy FSR settings or uncheck these options.")
+        End If
+
+        Dim duplicated As List(Of String) = requested.
+            Where(Function(keyName) CountIniKeyInSection(iniPath, "FSR", keyName) > 1).
+            ToList()
+        If duplicated.Count > 0 Then
+            Throw New InvalidOperationException(
+                "The selected legacy FSR controls have duplicate entries in the [FSR] section: " &
+                String.Join(", ", duplicated) & ". Resolve the duplicates in OptiScaler.ini before applying the package.")
+        End If
+
+        For Each keyName As String In requested
+            states(keyName) = CaptureIniKeyState(iniPath, keyName)
+        Next
+        Return states
+    End Function
+
+    Private Sub ValidatePackageIniOverwrite(packageRoot As String,
+                                            targetIniPath As String,
+                                            conflictMode As ConflictMode,
+                                            requestedKeys As IEnumerable(Of String))
+        Dim packageIniPath As String = Path.Combine(packageRoot, "OptiScaler.ini")
+        If Not File.Exists(packageIniPath) OrElse requestedKeys Is Nothing OrElse Not requestedKeys.Any() Then Return
+
+        ' Skip mode leaves an existing target INI in place, so the package schema
+        ' cannot affect the subsequent legacy-key edits in that case.
+        If conflictMode = ConflictMode.Skip AndAlso File.Exists(targetIniPath) Then Return
+
+        Dim duplicated As List(Of String) = requestedKeys.
+            Where(Function(keyName) CountIniKeyInSection(packageIniPath, "FSR", keyName) > 1).
+            ToList()
+        If duplicated.Count > 0 Then
+            Throw New InvalidOperationException(
+                "The package OptiScaler.ini has duplicate entries in the [FSR] section for requested legacy controls: " &
+                String.Join(", ", duplicated) & ". Resolve the duplicates before applying the package.")
+        End If
+    End Sub
 
     Private Sub ValidateApplyOptions(options As ExperimentalFsr4ApplyOptions)
         If options Is Nothing Then
@@ -529,6 +608,7 @@ Public Module ExperimentalFsr4Service
         Dim candidates As String() = {
             Path.Combine(folderPath, "amdxcffx64.dll"),
             Path.Combine(folderPath, "amdxc64.dll"),
+            Path.Combine(folderPath, "amdvkffx64.dll"),
             Path.Combine(folderPath, "amd_fidelityfx_upscaler_dx12.dll")
         }
 
@@ -616,29 +696,28 @@ Public Module ExperimentalFsr4Service
         Return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
     End Function
 
-    Private Sub UpdateManagedIniKey(path As String, keyName As String, newValue As String, manifest As ExperimentalFsr4Manifest)
+    Private Function UpdateManagedIniKey(path As String,
+                                         keyName As String,
+                                         newValue As String,
+                                         originalState As ExperimentalIniKeyState,
+                                         manifest As ExperimentalFsr4Manifest) As Boolean
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then
-            Return
+            Return False
         End If
 
-        Dim state As ExperimentalIniKeyState = CaptureIniKeyState(path, keyName)
+        Dim document As IniDocument = IniDocument.Load(path)
+        ' A package may carry a newer OptiScaler.ini. Do not inject obsolete
+        ' legacy controls into it after preflight against the installed schema.
+        If Not document.ContainsKey("FSR", keyName) Then Return False
+
         If manifest.IniKeys Is Nothing Then
             manifest.IniKeys = New Dictionary(Of String, ExperimentalIniKeyState)(StringComparer.OrdinalIgnoreCase)
         End If
-        manifest.IniKeys(keyName) = state
-
-        Dim lines As List(Of String) = File.ReadAllLines(path).ToList()
-        Dim index As Integer = FindIniKeyLineIndex(lines, keyName)
-        Dim normalizedLine As String = keyName & "=" & newValue
-
-        If index >= 0 Then
-            lines(index) = normalizedLine
-        Else
-            lines.Add(normalizedLine)
-        End If
-
-        File.WriteAllLines(path, lines)
-    End Sub
+        manifest.IniKeys(keyName) = originalState
+        document.SetValue("FSR", keyName, newValue)
+        File.WriteAllText(path, document.ToText())
+        Return True
+    End Function
 
     Private Sub RestoreManagedIniKey(path As String, keyName As String, state As ExperimentalIniKeyState)
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) OrElse state Is Nothing Then
@@ -646,19 +725,23 @@ Public Module ExperimentalFsr4Service
         End If
 
         Dim lines As List(Of String) = File.ReadAllLines(path).ToList()
-        Dim index As Integer = FindIniKeyLineIndex(lines, keyName)
-
+        Dim sectionName As String = If(String.IsNullOrWhiteSpace(state.SectionName), "", state.SectionName)
+        Dim index As Integer = If(sectionName.Length = 0,
+                                  FindIniKeyLineIndexAnySection(lines, keyName),
+                                  FindIniKeyLineIndex(lines, sectionName, keyName))
         If state.Existed Then
             Dim restored As String = keyName & "=" & state.Value
             If index >= 0 Then
                 lines(index) = restored
-            Else
+            ElseIf sectionName.Length = 0 Then
+                ' Legacy manifests did not record a section. Preserve their old
+                ' EOF-append behavior if the key disappeared after installation.
                 lines.Add(restored)
+            Else
+                InsertIniKeyIntoSection(lines, sectionName, restored)
             End If
-        Else
-            If index >= 0 Then
-                lines.RemoveAt(index)
-            End If
+        ElseIf index >= 0 Then
+            lines.RemoveAt(index)
         End If
 
         File.WriteAllLines(path, lines)
@@ -667,7 +750,8 @@ Public Module ExperimentalFsr4Service
     Private Function CaptureIniKeyState(path As String, keyName As String) As ExperimentalIniKeyState
         Dim state As New ExperimentalIniKeyState With {
             .Existed = False,
-            .Value = ""
+            .Value = "",
+            .SectionName = "FSR"
         }
 
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) OrElse String.IsNullOrWhiteSpace(keyName) Then
@@ -675,7 +759,7 @@ Public Module ExperimentalFsr4Service
         End If
 
         Dim lines As List(Of String) = File.ReadAllLines(path).ToList()
-        Dim index As Integer = FindIniKeyLineIndex(lines, keyName)
+        Dim index As Integer = FindIniKeyLineIndex(lines, "FSR", keyName)
         If index < 0 Then
             Return state
         End If
@@ -700,12 +784,9 @@ Public Module ExperimentalFsr4Service
         End If
 
         Try
-            For Each line As String In File.ReadAllLines(iniPath)
-                Dim value As String = ""
-                If TryParseIniLine(line, keyName, value) Then
-                    Return ParseIniBool(value)
-                End If
-            Next
+            Dim document As IniDocument = IniDocument.Load(iniPath)
+            Dim value As String = ""
+            Return document.TryGetValue("FSR", keyName, value) AndAlso ParseIniBool(value)
         Catch ex As Exception
             ErrorLogger.Log(ex, "ExperimentalFsr4Service.IsIniKeyEnabled")
         End Try
@@ -713,12 +794,47 @@ Public Module ExperimentalFsr4Service
         Return False
     End Function
 
-    Private Function FindIniKeyLineIndex(lines As List(Of String), keyName As String) As Integer
-        If lines Is Nothing OrElse String.IsNullOrWhiteSpace(keyName) Then
+    Private Function IsExplicitModernFsr4Selection(gameFolder As String) As Boolean
+        If String.IsNullOrWhiteSpace(gameFolder) Then Return False
+        Dim iniPath As String = Path.Combine(gameFolder, "OptiScaler.ini")
+        If Not File.Exists(iniPath) Then Return False
+
+        Try
+            Dim document As IniDocument = IniDocument.Load(iniPath)
+            Dim value As String = ""
+            If document.TryGetValue("FSR", "Fsr4GpuSupport", value) AndAlso IsExplicitNonDefaultSelection(value) Then Return True
+            If document.TryGetValue("FSR", "Fsr4Model", value) AndAlso IsExplicitFsr4Model(value) Then Return True
+        Catch ex As Exception
+            ErrorLogger.Log(ex, "ExperimentalFsr4Service.IsExplicitModernFsr4Selection")
+        End Try
+        Return False
+    End Function
+
+    Private Function IsExplicitNonDefaultSelection(value As String) As Boolean
+        Dim selected As Integer
+        Return Integer.TryParse(If(value, "").Trim(), selected) AndAlso selected >= 1 AndAlso selected <= 4
+    End Function
+
+    Private Function IsExplicitFsr4Model(value As String) As Boolean
+        ' Model zero is a concrete FP8 model choice (unlike GPU support zero,
+        ' which means no support override). "auto" and unknown values are not proof.
+        Dim selected As Integer
+        Return Integer.TryParse(If(value, "").Trim(), selected) AndAlso selected >= 0 AndAlso selected <= 3
+    End Function
+
+    Private Function FindIniKeyLineIndex(lines As List(Of String), sectionName As String, keyName As String) As Integer
+        If lines Is Nothing OrElse String.IsNullOrWhiteSpace(sectionName) OrElse String.IsNullOrWhiteSpace(keyName) Then
             Return -1
         End If
 
+        Dim currentSection As String = ""
         For i As Integer = 0 To lines.Count - 1
+            Dim trimmed As String = lines(i).Trim()
+            If trimmed.StartsWith("[") AndAlso trimmed.EndsWith("]") Then
+                currentSection = trimmed.Substring(1, trimmed.Length - 2).Trim()
+                Continue For
+            End If
+            If Not currentSection.Equals(sectionName, StringComparison.OrdinalIgnoreCase) Then Continue For
             Dim ignored As String = ""
             If TryParseIniLine(lines(i), keyName, ignored) Then
                 Return i
@@ -727,6 +843,57 @@ Public Module ExperimentalFsr4Service
 
         Return -1
     End Function
+
+    Private Function FindIniKeyLineIndexAnySection(lines As List(Of String), keyName As String) As Integer
+        If lines Is Nothing OrElse String.IsNullOrWhiteSpace(keyName) Then Return -1
+        For i As Integer = 0 To lines.Count - 1
+            Dim ignored As String = ""
+            If TryParseIniLine(lines(i), keyName, ignored) Then Return i
+        Next
+        Return -1
+    End Function
+
+    Private Function CountIniKeyInSection(path As String, sectionName As String, keyName As String) As Integer
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return 0
+        Dim count As Integer = 0
+        Dim currentSection As String = ""
+        For Each line As String In File.ReadAllLines(path)
+            Dim trimmed As String = line.Trim()
+            If trimmed.StartsWith("[") AndAlso trimmed.EndsWith("]") Then
+                currentSection = trimmed.Substring(1, trimmed.Length - 2).Trim()
+                Continue For
+            End If
+            If Not currentSection.Equals(sectionName, StringComparison.OrdinalIgnoreCase) Then Continue For
+            Dim ignored As String = ""
+            If TryParseIniLine(line, keyName, ignored) Then count += 1
+        Next
+        Return count
+    End Function
+
+    Private Sub InsertIniKeyIntoSection(lines As List(Of String), sectionName As String, keyLine As String)
+        Dim sectionIndex As Integer = -1
+        Dim insertIndex As Integer = lines.Count
+        For i As Integer = 0 To lines.Count - 1
+            Dim trimmed As String = lines(i).Trim()
+            If trimmed.Equals("[" & sectionName & "]", StringComparison.OrdinalIgnoreCase) Then
+                sectionIndex = i
+                insertIndex = lines.Count
+                Continue For
+            End If
+            If sectionIndex >= 0 AndAlso trimmed.StartsWith("[") AndAlso trimmed.EndsWith("]") Then
+                insertIndex = i
+                Exit For
+            End If
+        Next
+
+        If sectionIndex < 0 Then
+            If lines.Count > 0 AndAlso lines(lines.Count - 1).Trim().Length > 0 Then lines.Add("")
+            lines.Add("[" & sectionName & "]")
+            lines.Add(keyLine)
+        Else
+            lines.Insert(insertIndex, keyLine)
+        End If
+    End Sub
 
     Private Function TryParseIniLine(line As String, expectedKey As String, ByRef value As String) As Boolean
         value = ""

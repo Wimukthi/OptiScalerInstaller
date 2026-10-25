@@ -40,6 +40,7 @@ Public Class MainForm
     Private lastInstallStatusKey As String
     Private lastExperimentalStatusKey As String
     Private latestUpdateRelease As UpdateReleaseInfo
+    Private manualUpdateCheckInProgress As Boolean
     Private loadingSettingsUi As Boolean
     Private gpuDetectionInitialized As Boolean
     Private gpuDetectionVendor As GpuVendor = GpuVendor.Unknown
@@ -84,6 +85,8 @@ Public Class MainForm
     Private Sub MainForm_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         UpdateWindowTitle()
         InitializeDefaults()
+        InitializeFsrSupportUi()
+        InitializeDocumentationMenu()
         If lblCompatibilityNote IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(lblCompatibilityNote.Text) Then
             compatibilityBaseNoteText = lblCompatibilityNote.Text
         End If
@@ -680,17 +683,17 @@ Public Class MainForm
             End If
         End If
 
-        If lblFsr4Status IsNot Nothing Then
-            lblFsr4Status.Text = BuildFsr4StatusText(generation, showOnUnsupported)
+        If fsrSupportGuidance IsNot Nothing Then
+            fsrSupportGuidance.Text = AmdFsrSupportService.BuildGuidance(gpuDetectionCandidates)
         End If
 
         If logAction Then
             If hasAmdRdna Then
-                AppendLog("FSR4 INT8 tab enabled (" & DescribeRdnaGeneration(generation) & " detected).")
+                AppendLog("FSR 4 Support tab enabled (" & DescribeRdnaGeneration(generation) & " detected).")
             ElseIf showOnUnsupported Then
-                AppendLog("FSR4 INT8 tab shown by settings override (AMD RDNA GPU not detected).")
+                AppendLog("FSR 4 Support tab shown by settings override (AMD RDNA GPU not detected).")
             Else
-                AppendLog("FSR4 INT8 tab disabled (no AMD RDNA GPU detected).")
+                AppendLog("FSR 4 Support tab hidden (no AMD RDNA GPU detected).")
             End If
         End If
     End Sub
@@ -710,30 +713,6 @@ Public Class MainForm
                 Return "AMD RDNA GPU"
             Case Else
                 Return "No AMD RDNA GPU"
-        End Select
-    End Function
-
-    ' Generation-aware guidance for the experimental FSR4 INT8 tab. Since OptiScaler 0.9.4 bundles
-    ' FSR 4.1.1 INT8 and auto-enables it on RDNA3 desktop / uses native FSR4 on RDNA4, the manual
-    ' package is now mainly for RDNA2 and unofficial APU cases.
-    Private Shared Function BuildFsr4StatusText(generation As AmdRdnaGeneration, showOnUnsupported As Boolean) As String
-        Select Case generation
-            Case AmdRdnaGeneration.Rdna4
-                Return "RDNA4 detected: OptiScaler 0.9.4 uses native FSR4 (Fsr4Update=auto). Manual INT8 package is not needed."
-            Case AmdRdnaGeneration.Rdna3
-                Return "RDNA3 detected: OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 (Fsr4Update=auto) on desktop cards. Manual package is usually unnecessary - use it only for unsupported APUs."
-            Case AmdRdnaGeneration.Rdna2
-                Return "RDNA2 detected: FSR4 INT8 (for example 4.0.2c) is not bundled by OptiScaler. Use this tab to apply a manual INT8 package and enable Fsr4ForceEnableInt8."
-            Case AmdRdnaGeneration.Rdna1
-                Return "RDNA1 detected: FSR4 INT8 is not supported on RDNA1 hardware."
-            Case AmdRdnaGeneration.Unknown
-                Return "AMD RDNA GPU detected: use this manual INT8 workflow for unsupported/legacy cases (RDNA2, APUs)."
-            Case Else
-                If showOnUnsupported Then
-                    Return "Experimental package: unsupported GPU (tab manually enabled)."
-                Else
-                    Return "Experimental package: unavailable (AMD RDNA GPU not detected)."
-                End If
         End Select
     End Function
 
@@ -781,124 +760,8 @@ Public Class MainForm
         Return ClassifyAmdRdnaAdapter(adapterName) <> AmdRdnaGeneration.None
     End Function
 
-    ' Classifies an AMD adapter name into an RDNA generation using model families, then RX ranges,
-    ' then a generic RDNA fallback. Deliberately conservative: unresolved AMD RDNA parts return
-    ' Unknown (still eligible for the manual INT8 workflow) rather than a guessed generation.
     Private Function ClassifyAmdRdnaAdapter(adapterName As String) As AmdRdnaGeneration
-        If String.IsNullOrWhiteSpace(adapterName) Then
-            Return AmdRdnaGeneration.None
-        End If
-
-        Dim upper As String = adapterName.ToUpperInvariant()
-        If Not upper.Contains("AMD") AndAlso Not upper.Contains("RADEON") Then
-            Return AmdRdnaGeneration.None
-        End If
-
-        Dim rdna4Tokens As String() = {"9070", "9080"}
-        Dim rdna3Tokens As String() = {"7600", "7700", "7800", "7900", "740M", "760M", "780M", "880M", "890M", "RADEON PRO W7"}
-        Dim rdna2Tokens As String() = {"6400", "6500", "6600", "6650", "6700", "6800", "6900", "6950"}
-        Dim rdna1Tokens As String() = {"5300", "5500", "5600", "5700"}
-        Dim rdnaGenericTokens As String() = {"RADEON PRO W8", "RADEON PRO W9"}
-
-        If ContainsAnyToken(upper, rdna4Tokens) Then
-            Return AmdRdnaGeneration.Rdna4
-        End If
-        If ContainsAnyToken(upper, rdna3Tokens) Then
-            Return AmdRdnaGeneration.Rdna3
-        End If
-        If ContainsAnyToken(upper, rdna2Tokens) Then
-            Return AmdRdnaGeneration.Rdna2
-        End If
-        If ContainsAnyToken(upper, rdna1Tokens) Then
-            Return AmdRdnaGeneration.Rdna1
-        End If
-
-        Dim rxModel As Integer = FindRxModelNumber(upper)
-        If rxModel >= 9000 Then
-            Return AmdRdnaGeneration.Rdna4
-        ElseIf rxModel >= 7000 Then
-            Return AmdRdnaGeneration.Rdna3
-        ElseIf rxModel >= 6000 Then
-            Return AmdRdnaGeneration.Rdna2
-        ElseIf rxModel >= 5000 Then
-            Return AmdRdnaGeneration.Rdna1
-        End If
-
-        If ContainsAnyToken(upper, rdnaGenericTokens) OrElse upper.Contains("RDNA") Then
-            Return AmdRdnaGeneration.Unknown
-        End If
-
-        Return AmdRdnaGeneration.None
-    End Function
-
-    Private Shared Function ContainsAnyToken(upper As String, tokens As String()) As Boolean
-        If String.IsNullOrEmpty(upper) OrElse tokens Is Nothing Then
-            Return False
-        End If
-
-        For Each token As String In tokens
-            If upper.Contains(token, StringComparison.OrdinalIgnoreCase) Then
-                Return True
-            End If
-        Next
-
-        Return False
-    End Function
-
-    Private Function FindRxModelNumber(upper As String) As Integer
-        If String.IsNullOrEmpty(upper) Then
-            Return -1
-        End If
-
-        Dim searchIndex As Integer = 0
-        While searchIndex < upper.Length
-            Dim rxIndex As Integer = upper.IndexOf("RX", searchIndex, StringComparison.Ordinal)
-            If rxIndex < 0 Then
-                Exit While
-            End If
-
-            If rxIndex = 0 OrElse Not Char.IsLetterOrDigit(upper(rxIndex - 1)) Then
-                Dim modelNumber As Integer = ParseRxModelNumber(upper, rxIndex + 2)
-                If modelNumber >= 5000 Then
-                    Return modelNumber
-                End If
-            End If
-
-            searchIndex = rxIndex + 2
-        End While
-
-        Return -1
-    End Function
-
-    Private Function ParseRxModelNumber(text As String, startIndex As Integer) As Integer
-        If String.IsNullOrWhiteSpace(text) OrElse startIndex >= text.Length Then
-            Return -1
-        End If
-
-        Dim index As Integer = startIndex
-        While index < text.Length AndAlso (text(index) = " "c OrElse text(index) = "-"c OrElse text(index) = "_"c)
-            index += 1
-        End While
-
-        Dim digits As New StringBuilder()
-        While index < text.Length AndAlso Char.IsDigit(text(index))
-            digits.Append(text(index))
-            index += 1
-            If digits.Length >= 5 Then
-                Exit While
-            End If
-        End While
-
-        If digits.Length < 4 Then
-            Return -1
-        End If
-
-        Dim model As Integer = 0
-        If Integer.TryParse(digits.ToString(), model) Then
-            Return model
-        End If
-
-        Return -1
+        Return AmdFsrSupportService.ClassifyAdapter(adapterName)
     End Function
 
     Private Sub LoadCompatibility()
@@ -1264,6 +1127,7 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnFsr4Apply_Click(sender As Object, e As EventArgs) Handles btnFsr4Apply.Click
+        If showLegacyFsrTools Is Nothing OrElse Not showLegacyFsrTools.Checked Then Return
         If String.IsNullOrWhiteSpace(txtGameFolder.Text) OrElse Not Directory.Exists(txtGameFolder.Text) Then
             MessageBox.Show(Me, "Select a valid game folder on the Install tab first.", "Experimental FSR4", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
@@ -1274,16 +1138,13 @@ Public Class MainForm
             Return
         End If
 
-        ' OptiScaler 0.9.4 auto-enables FSR4 on RDNA3 desktop / uses native FSR4 on RDNA4, and the
-        ' target INI may already have it enabled. Warn before applying a redundant manual package.
+        ' Driver support and a manually copied SDK/driver package are separate paths.
         Dim generation As AmdRdnaGeneration = DetectAmdRdnaGeneration()
         Dim redundancyReason As String = ""
-        If generation = AmdRdnaGeneration.Rdna4 Then
-            redundancyReason = "An RDNA4 GPU was detected. OptiScaler 0.9.4 uses native FSR4, so a manual INT8 package is normally unnecessary."
-        ElseIf generation = AmdRdnaGeneration.Rdna3 Then
-            redundancyReason = "An RDNA3 GPU was detected. OptiScaler 0.9.4 auto-enables FSR 4.1.1 INT8 on RDNA3 desktop cards, so a manual INT8 package is normally unnecessary."
+        If generation = AmdRdnaGeneration.Rdna2 OrElse generation = AmdRdnaGeneration.Rdna3 OrElse generation = AmdRdnaGeneration.Rdna4 Then
+            redundancyReason = "AMD driver FSR Upscaling 4.1 now supports RX 6000/7000/9000 cards and selected Ryzen AI products. A manual package is optional; verify your exact GPU, driver, graphics API and OptiScaler build."
         ElseIf ExperimentalFsr4Service.IsFsr4AlreadyEnabled(txtGameFolder.Text) Then
-            redundancyReason = "The target OptiScaler.ini already has FSR4 INT8 enabled (Fsr4Update or Fsr4ForceEnableInt8)."
+            redundancyReason = "The target [FSR] section already has an explicit FSR 4 setting. This does not confirm which upscaler is rendering in game."
         End If
 
         If Not String.IsNullOrEmpty(redundancyReason) Then
@@ -1442,7 +1303,9 @@ Public Class MainForm
     End Sub
 
     Private Sub SetExperimentalActionButtonsEnabled(enabled As Boolean)
-        btnFsr4Apply.Enabled = enabled
+        fsrPackageOperationInProgress = Not enabled
+        If showLegacyFsrTools IsNot Nothing Then showLegacyFsrTools.Enabled = enabled
+        btnFsr4Apply.Enabled = enabled AndAlso showLegacyFsrTools IsNot Nothing AndAlso showLegacyFsrTools.Checked
         btnFsr4Remove.Enabled = enabled
         btnFsr4RefreshStatus.Enabled = enabled
         btnFsr4ScanDetectedGames.Enabled = enabled
@@ -4943,7 +4806,7 @@ Public Class MainForm
 
         Dim targetGameFolder As String = txtGameFolder.Text.Trim()
         If String.IsNullOrWhiteSpace(targetGameFolder) Then
-            lblFsr4Status.Text = "Experimental package: pick a target game first."
+            lblFsr4Status.Text = "Manual package: pick a target game first."
             lastExperimentalStatusKey = "no-game"
             Return
         End If
@@ -4961,13 +4824,13 @@ Public Class MainForm
 
     Private Function BuildExperimentalStatusText(status As ExperimentalFsr4Status) As String
         If status Is Nothing OrElse Not status.IsInstalled Then
-            Return "Experimental package: not installed"
+            Return "Manual package: not installed"
         End If
 
         Dim versionText As String = If(String.IsNullOrWhiteSpace(status.Version), "unknown", status.Version)
         Dim sourceText As String = If(String.IsNullOrWhiteSpace(status.Source), "unknown", status.Source)
         Dim managedText As String = If(status.IsManaged, "managed", "unmanaged")
-        Return $"Experimental package: installed ({versionText}, {sourceText}, {managedText})"
+        Return $"Manual package: installed ({versionText}, {sourceText}, {managedText})"
     End Function
 
     Private Function GetExperimentalListStatusText(status As ExperimentalFsr4Status) As String
@@ -6090,30 +5953,11 @@ Public Class MainForm
     End Sub
 
     Private Async Sub btnCheckForUpdates_Click(sender As Object, e As EventArgs) Handles btnCheckForUpdates.Click
-        Await CheckForUpdatesAsync(True)
+        Await RunManualUpdateCheckAsync()
     End Sub
 
     Private Async Sub btnAbout_Click(sender As Object, e As EventArgs) Handles btnAbout.Click
-        Dim release As UpdateReleaseInfo = latestUpdateRelease
-        If release Is Nothing Then
-            Try
-                release = Await UpdateService.GetLatestReleaseAsync()
-                latestUpdateRelease = release
-            Catch ex As Exception
-                AppendLog("About info refresh failed: " & ex.Message)
-                ErrorLogger.Log(ex, "MainForm.btnAbout_Click")
-            End Try
-        End If
-
-        Dim currentVersion As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
-        If currentVersion Is Nothing Then
-            currentVersion = New Version(0, 0)
-        End If
-
-        Dim repositoryUrl As String = ResolveInstallerRepositoryUrl(release)
-        Using dlg As New frmAbout(currentVersion, release, repositoryUrl, "Wimukthi")
-            dlg.ShowDialog(Me)
-        End Using
+        Await ShowAboutAsync()
     End Sub
 
     Private Async Sub btnExportDiagnostics_Click(sender As Object, e As EventArgs) Handles btnExportDiagnostics.Click
@@ -6494,20 +6338,58 @@ Public Class MainForm
     End Sub
 
     Private Sub menuHelpDocs_Click(sender As Object, e As EventArgs) Handles menuHelpDocs.Click
-        OpenExternalUrl("https://github.com/Wimukthi/OptiScalerInstaller#documentation")
+        DocumentationService.Show(Me, InstallerDocumentation.Usage)
+    End Sub
+
+    Private Sub InitializeDocumentationMenu()
+        If menuHelp.DropDownItems.OfType(Of ToolStripMenuItem)().Any(Function(existingItem) existingItem.Name = "menuHelpAmdFsrSupport") Then Return
+        Dim item As New ToolStripMenuItem("AMD FSR support") With {.Name = "menuHelpAmdFsrSupport"}
+        AddHandler item.Click, Sub(sender, args) DocumentationService.Show(Me, InstallerDocumentation.AmdFsrSupport)
+        Dim insertIndex As Integer = Math.Max(0, menuHelp.DropDownItems.IndexOf(menuHelpWiki) + 1)
+        menuHelp.DropDownItems.Insert(insertIndex, item)
     End Sub
 
     Private Sub menuHelpWiki_Click(sender As Object, e As EventArgs) Handles menuHelpWiki.Click
-        OpenExternalUrl("https://github.com/optiscaler/OptiScaler/wiki")
+        Dim settings As AppSettingsModel = AppSettings.Load()
+        Dim wikiUrl As String = If(settings Is Nothing, Nothing, settings.WikiBaseUrl)
+        If String.IsNullOrWhiteSpace(wikiUrl) Then
+            wikiUrl = "https://github.com/optiscaler/OptiScaler/wiki"
+        End If
+        OpenExternalUrl(wikiUrl)
     End Sub
 
-    Private Sub menuHelpCheckUpdates_Click(sender As Object, e As EventArgs) Handles menuHelpCheckUpdates.Click
-        btnCheckForUpdates.PerformClick()
+    Private Async Sub menuHelpCheckUpdates_Click(sender As Object, e As EventArgs) Handles menuHelpCheckUpdates.Click
+        Await RunManualUpdateCheckAsync()
     End Sub
 
-    Private Sub menuHelpAbout_Click(sender As Object, e As EventArgs) Handles menuHelpAbout.Click
-        btnAbout.PerformClick()
+    Private Async Sub menuHelpAbout_Click(sender As Object, e As EventArgs) Handles menuHelpAbout.Click
+        Await ShowAboutAsync()
     End Sub
+
+    Private Async Function RunManualUpdateCheckAsync() As Task
+        If manualUpdateCheckInProgress Then Return
+        manualUpdateCheckInProgress = True
+        menuHelpCheckUpdates.Enabled = False
+        Try
+            Await CheckForUpdatesAsync(True)
+        Finally
+            manualUpdateCheckInProgress = False
+            menuHelpCheckUpdates.Enabled = True
+        End Try
+    End Function
+
+    Private Function ShowAboutAsync() As Task
+        Dim currentVersion As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+        If currentVersion Is Nothing Then currentVersion = New Version(0, 0)
+
+        ' The About dialog is useful offline; use cached release data and never delay opening it for HTTP.
+        Dim release As UpdateReleaseInfo = latestUpdateRelease
+        Dim repositoryUrl As String = ResolveInstallerRepositoryUrl(release)
+        Using dlg As New frmAbout(currentVersion, release, repositoryUrl, "Wimukthi")
+            dlg.ShowDialog(Me)
+        End Using
+        Return Task.CompletedTask
+    End Function
 
     Private Sub OpenExternalUrl(url As String)
         Try
@@ -6522,6 +6404,9 @@ Public Class MainForm
     ' menu item because focusing a search box does not belong in a menu.
     Protected Overrides Function ProcessCmdKey(ByRef msg As Message, keyData As Keys) As Boolean
         Select Case keyData
+            Case Keys.F1
+                menuHelpDocs_Click(Me, EventArgs.Empty)
+                Return True
             Case Keys.Control Or Keys.F
                 tabMain.SelectedTab = tabCompatibility
                 txtGameSearch.Focus()
@@ -6583,7 +6468,7 @@ Public Class MainForm
         toolTip.ShowAlways = True
 
         toolTip.SetToolTip(DarkThemeCheckBox, "Switch between dark and light UI colors. This only changes appearance, not install behavior. Restart when prompted so all controls redraw correctly.")
-        toolTip.SetToolTip(tabMain, "Main pages of the installer. Typical flow: Game Detection -> Install -> Add-ons -> optional FSR4 INT8 -> Settings.")
+        toolTip.SetToolTip(tabMain, "Main pages of the installer. Typical flow: Game Detection -> Install -> Add-ons -> FSR 4 Support -> Settings.")
 
         toolTip.SetToolTip(txtGameSearch, "Type part of a game name to filter the compatibility table instantly. Search is case-insensitive and does not modify any files.")
         toolTip.SetToolTip(btnScanDetected, "Runs the full scan pipeline: launcher/registry detection first, then drive-scan augmentation. You will be prompted to choose drives each run.")
@@ -6662,11 +6547,11 @@ Public Class MainForm
         toolTip.SetToolTip(btnFsr4ScanDetectedGames, "Run the unified detection pipeline for this tab and choose which drives to include in deep-scan augmentation.")
         toolTip.SetToolTip(btnFsr4UseSelectedGame, "Use selected row from detected games list as FSR4 INT8 target folder.")
         toolTip.SetToolTip(btnFsr4BrowseGameExe, "Manual fallback: choose a game executable directly if automatic detection misses it.")
-        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for FSR4 INT8 targeting. INT8 column shows per-game package status. Select one and use it, or double-click.")
+        toolTip.SetToolTip(lvFsr4DetectedGames, "Detected supported games available for manual package targeting. Manual package column shows installer package status. Select one and use it, or double-click.")
         toolTip.SetToolTip(lblFsr4DetectedGames, "Shows detected-game count for the experimental tab picker.")
         toolTip.SetToolTip(chkFsr4EnableUpdate, "When checked, installer sets Fsr4Update=true in OptiScaler.ini during apply.")
         toolTip.SetToolTip(chkFsr4EnableAgility, "When checked, installer sets FsrAgilitySDKUpgrade=true to help selected Windows 10 titles.")
-        toolTip.SetToolTip(chkFsr4ForceInt8, "When checked, installer sets Fsr4ForceEnableInt8=true (OptiScaler 0.9.4+) to force the INT8 model on GPUs OptiScaler does not auto-enable, such as RDNA2 and unofficial APUs.")
+        toolTip.SetToolTip(chkFsr4ForceInt8, "Legacy OptiScaler 0.9.4 SDK setting only. Does not force the AMD driver model. Requires Fsr4ForceEnableInt8 in the target [FSR] section; newer builds use different controls.")
         toolTip.SetToolTip(btnFsr4Apply, "Copy experimental package files into target game folder, write selected INI keys, and create installer manifest metadata.")
         toolTip.SetToolTip(btnFsr4Remove, "Remove installer-managed experimental files and restore backed-up files/INI keys where available.")
         toolTip.SetToolTip(btnFsr4RefreshStatus, "Re-check whether experimental package appears installed and whether it is installer-managed.")
@@ -6684,7 +6569,7 @@ Public Class MainForm
         toolTip.SetToolTip(chkAutoRefreshCompatibilityOnStartup, "If enabled, compatibility list is refreshed automatically on app start.")
         toolTip.SetToolTip(chkAutoRefreshGameProfilesOnStartup, "If enabled and profile catalog URL is set, game profiles are refreshed on app start.")
         toolTip.SetToolTip(chkAutoCheckInstallerUpdates, "If enabled, installer checks for updates at startup. When a newer build is found, it shows a Yes/No update prompt and an in-app update notice.")
-        toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Force-show FSR4 INT8 experimental tab even when AMD RDNA GPU is not detected.")
+        toolTip.SetToolTip(chkShowExperimentalTabOnUnsupportedGpu, "Show FSR 4 Support even when an AMD RDNA adapter is not recognized.")
         toolTip.SetToolTip(txtDefaultIniPath, "Optional OptiScaler.ini template file to apply automatically on future installs.")
         toolTip.SetToolTip(btnBrowseDefaultIni, "Browse for default OptiScaler.ini template file.")
         toolTip.SetToolTip(cmbDefaultIniMode, "Select how installer should apply default INI template: disabled, merge, or replace behavior based on selected mode.")

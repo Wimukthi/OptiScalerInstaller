@@ -57,7 +57,7 @@ preserved; missing keys fall back to the bundled defaults.
 | `AutoCheckInstallerUpdates` | `true` | Check for a newer installer on launch and show a non-intrusive notice. |
 | `HasCompletedInitialDeepScan` | `false` | Set to `true` after the one-time first-run scan prompt. |
 | `HideNonDetectedGames` | `false` | Remembers the Game Detection filter. |
-| `ShowExperimentalTabOnUnsupportedGpu` | `false` | Force-show the FSR4 INT8 tab on GPUs where it would be hidden. |
+| `ShowExperimentalTabOnUnsupportedGpu` | `false` | Show legacy/manual package tools on GPUs where they would otherwise be hidden. |
 | `HighlightCompatibilityChanges` | `true` | Highlight rows that changed on the last list refresh. |
 | `EnableGameTemplates` | `true` | Auto-apply per-game workaround templates when a detected game is selected. |
 | `WindowX`, `WindowY`, `WindowWidth`, `WindowHeight`, `WindowState` | *(unset)* | Window geometry, saved on exit. |
@@ -79,14 +79,14 @@ These seed the Install tab. They are what **Quick install** and bulk operations 
 | `PreserveExistingIniOnUpdate` | `true` | Keep the game's existing `OptiScaler.ini` on update or reinstall. |
 | `ConfirmQuickInstall` | `true` | Show the install review dialog before a quick or bulk install writes anything. Set to `false` for one-click behaviour. No UI field; set it here. |
 
-### FSR4 INT8
+### Legacy FSR 4 package
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `ExperimentalFsr4PackageFolder` | *(empty)* | Folder holding the manual INT8 package. |
-| `ExperimentalFsr4EnableUpdate` | `true` | Set `Fsr4Update=true` when applying. |
-| `ExperimentalFsr4EnableAgility` | `false` | Set `FsrAgilitySDKUpgrade=true` — helps some Windows 10 titles. |
-| `ExperimentalFsr4ForceInt8` | *(unset)* | Set `Fsr4ForceEnableInt8=true` to force INT8 on RDNA2 and APUs. |
+| `ExperimentalFsr4PackageFolder` | *(empty)* | Folder holding a manually selected legacy FSR 4 package. Optional expert workflow; see [FSR 4 Support](amd-fsr-support.md). |
+| `ExperimentalFsr4EnableUpdate` | `true` | In the legacy workflow, set `Fsr4Update=true`. Meaning depends on the matching OptiScaler version and package. |
+| `ExperimentalFsr4EnableAgility` | `false` | In the legacy workflow, set `FsrAgilitySDKUpgrade=true`; check the matching OptiScaler documentation first. |
+| `ExperimentalFsr4ForceInt8` | *(unset)* | In OptiScaler 0.9.4, set `Fsr4ForceEnableInt8=true` for its SDK INT8 path. This is not a generic driver-FSR switch. |
 
 ## Resetting
 
